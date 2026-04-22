@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth != null",
+      ".indexOn": ["xp", "totalXP", "level"],
+      
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid",
+        
+        "workouts": {
+          ".indexOn": ["date", "timestamp"]
+        },
+        ".indexOn": ["totalXP", "level"]
+      }
+    }
+  }
+}
