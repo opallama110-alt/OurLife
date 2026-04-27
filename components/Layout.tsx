@@ -4,7 +4,7 @@ import { LayoutDashboard, Dumbbell, CheckSquare, Download, LogOut, User as UserI
 import { storageService } from '../services/storageService';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { useAuth } from '../context/AuthContext';
-import { DungeonTimer } from './DungeonTimer';
+import { SystemChat } from './SystemChat';
 
 export const Layout: React.FC = () => {
   const { user, logout } = useAuth();
@@ -168,8 +168,10 @@ export const Layout: React.FC = () => {
         <div className="max-w-5xl mx-auto">
           <Outlet />
         </div>
-        <DungeonTimer />
       </main>
+
+      {/* ═══ Phase 25: The System — global FAB + chat sheet ═══ */}
+      <SystemChat />
 
       {/* Mobile Bottom Nav — Dashboard, Gym, Habits, then Settings at far right */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 glass-dark flex justify-around p-1.5 z-50">

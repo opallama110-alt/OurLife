@@ -1,16 +1,24 @@
 import React, { useState } from 'react';
-import { UserState, ExperienceLevel, IdealDuration, FocusArea, MuscleGroup } from '../types';
+import { UserState, ExperienceLevel, IdealDuration, FocusArea, MuscleGroup, Environment } from '../types';
 import { storageService } from '../services/storageService';
+import { doc, setDoc } from 'firebase/firestore';
+import { db, auth } from '../firebase-config';
 import {
     ArrowRight, User, Ruler, Weight, Sparkles,
     Sprout, Flame, Crown,
     Timer, Hourglass, Clock,
     Dumbbell, Footprints, Activity, Layers,
+    Home, Building2, Check,
 } from 'lucide-react';
 import { GymSchedule } from '../types';
 import { calcBMI, bmiSliderStyle } from '../utils/bmi';
 import AnatomyViewer from './Anatomy/AnatomyViewer';
 import { getTrainedMuscleIds } from '../constants/muscleMapping';
+
+const EQUIPMENT_OPTIONS = [
+    'Barbell', 'Dumbbell', 'Cable', 'Machine',
+    'Kettlebell', 'Bands', 'Smith Machine', 'Bodyweight',
+] as const;
 
 // ── Phase 10: Activity → schedule auto-fill ────────────────────────────
 const ACTIVITY_SCHEDULES: Record<NonNullable<UserState['activityLevel']>, GymSchedule> = {
@@ -46,7 +54,7 @@ interface OnboardingProps {
     onComplete: () => void;
 }
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     const [step, setStep] = useState(1);
@@ -61,6 +69,8 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         experienceLevel: 'Pemula',
         idealDuration: '45 Menit',
         focusArea: 'Seluruh Tubuh',
+        environment: 'Gym',
+        userEquipment: ['Dumbbell', 'Bodyweight'],
     });
     const [schedule, setSchedule] = useState<GymSchedule>({
         monday: 'Push',
@@ -104,7 +114,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         }
     };
 
-    const handleFinish = () => {
+    const handleFinish = async () => {
         const currentState = storageService.getUserState();
         const newState: UserState = {
             ...currentState,
@@ -113,7 +123,32 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         };
         storageService.saveUserState(newState);
         storageService.saveGymSchedule(schedule);
+
+        // Mirror equipment + environment into Firestore `users/{uid}.preferences`
+        // so GymTracker (which reads from that collection) sees them immediately.
+        const fbUser = auth.currentUser;
+        if (fbUser && (newState.environment || newState.userEquipment)) {
+            try {
+                await setDoc(doc(db, 'users', fbUser.uid), {
+                    preferences: {
+                        environment: newState.environment || 'Gym',
+                        equipment: newState.userEquipment || [],
+                    },
+                }, { merge: true });
+            } catch (e) {
+                console.warn('[Onboarding] Failed to mirror preferences to Firestore:', e);
+            }
+        }
+
         onComplete();
+    };
+
+    const toggleEquipment = (item: string) => {
+        const current = formData.userEquipment || [];
+        const next = current.includes(item)
+            ? current.filter(e => e !== item)
+            : [...current, item];
+        updateField('userEquipment', next);
     };
 
     const updateField = (field: keyof UserState, value: any) => {
@@ -480,8 +515,88 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         );
     };
 
-    // ════════════ STEP 5 — Jadwal Mingguan ════════════
-    const renderStep5 = () => (
+    // ════════════ STEP 5 — Lingkungan & Peralatan ════════════
+    const renderStep5 = () => {
+        const ENV_OPTIONS: { value: Environment; label: string; sub: string; Icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
+            { value: 'Home', label: 'Rumah', sub: 'Latihan di rumah', Icon: Home },
+            { value: 'Gym',  label: 'Gym',   sub: 'Akses gym lengkap', Icon: Building2 },
+        ];
+
+        const selectedEquipment = formData.userEquipment || [];
+
+        return (
+            <div className="space-y-6 animate-slide-up">
+                <div className="text-center">
+                    <h2 className="text-2xl font-bold text-white mb-2">Lingkungan & Peralatan</h2>
+                    <p className="text-slate-400 text-sm">Pilih alat yang kamu punya — kami hanya menampilkan latihan yang bisa kamu lakukan.</p>
+                </div>
+
+                {/* Environment */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Lingkungan Latihan</label>
+                    <div className="grid grid-cols-2 gap-2">
+                        {ENV_OPTIONS.map(({ value, label, sub, Icon }) => {
+                            const active = formData.environment === value;
+                            return (
+                                <button
+                                    key={value}
+                                    onClick={() => updateField('environment', value)}
+                                    className={`p-4 rounded-xl border transition-all flex flex-col items-center justify-center text-center ${active
+                                        ? 'bg-cyan-500/15 border-cyan-500 shadow-[0_0_20px_rgba(6,182,212,0.25)]'
+                                        : 'bg-slate-800 border-slate-700 hover:bg-slate-750'
+                                        }`}
+                                >
+                                    <Icon size={24} className={`${active ? 'text-cyan-400' : 'text-slate-500'} mb-1.5`} />
+                                    <span className={`text-sm font-bold ${active ? 'text-white' : 'text-slate-300'}`}>{label}</span>
+                                    <span className="text-[10px] text-slate-500 font-mono mt-0.5">{sub}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Equipment Multi-select */}
+                <div>
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-slate-300">Peralatan Tersedia</label>
+                        <span className="text-[10px] font-mono text-slate-500">
+                            {selectedEquipment.length} dipilih
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        {EQUIPMENT_OPTIONS.map(item => {
+                            const active = selectedEquipment.includes(item);
+                            return (
+                                <button
+                                    key={item}
+                                    onClick={() => toggleEquipment(item)}
+                                    className={`p-3 rounded-xl border transition-all flex items-center justify-between text-left ${active
+                                        ? 'bg-cyan-500/15 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
+                                        : 'bg-slate-800 border-slate-700 hover:bg-slate-750'
+                                        }`}
+                                >
+                                    <span className={`text-xs font-bold ${active ? 'text-white' : 'text-slate-300'}`}>{item}</span>
+                                    {active && (
+                                        <div className="w-5 h-5 rounded-full bg-cyan-500 flex items-center justify-center shrink-0">
+                                            <Check size={12} strokeWidth={3} className="text-slate-900" />
+                                        </div>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {selectedEquipment.length === 0 && (
+                        <p className="text-[10px] text-amber-400 font-mono mt-2">
+                            ⚠ Pilih minimal satu — tanpa ini semua latihan akan disembunyikan.
+                        </p>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    // ════════════ STEP 6 — Jadwal Mingguan ════════════
+    const renderStep6 = () => (
         <div className="space-y-6 animate-slide-up">
             <div className="text-center">
                 <h2 className="text-2xl font-bold text-white mb-2">Jadwal Mingguan</h2>
@@ -539,6 +654,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                 {step === 3 && renderStep3()}
                 {step === 4 && renderStep4()}
                 {step === 5 && renderStep5()}
+                {step === 6 && renderStep6()}
 
                 <div className="mt-8 pt-6 border-t border-slate-800 flex justify-between items-center">
                     {step > 1 ? (
@@ -552,15 +668,21 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                         <div />
                     )}
 
-                    <button
-                        onClick={handleNext}
-                        disabled={!formData.name}
-                        className={`flex items-center space-x-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-2.5 rounded-xl font-bold transition-all hover:shadow-lg hover:shadow-cyan-500/20 ${!formData.name ? 'opacity-50 cursor-not-allowed' : ''
-                            }`}
-                    >
-                        <span>{step === TOTAL_STEPS ? 'Mulai Sekarang' : 'Lanjut'}</span>
-                        <ArrowRight size={18} />
-                    </button>
+                    {(() => {
+                        const equipmentInvalid = step === 5 && (formData.userEquipment || []).length === 0;
+                        const nameInvalid = !formData.name;
+                        const disabled = nameInvalid || equipmentInvalid;
+                        return (
+                            <button
+                                onClick={handleNext}
+                                disabled={disabled}
+                                className={`flex items-center space-x-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-2.5 rounded-xl font-bold transition-all hover:shadow-lg hover:shadow-cyan-500/20 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                                <span>{step === TOTAL_STEPS ? 'Mulai Sekarang' : 'Lanjut'}</span>
+                                <ArrowRight size={18} />
+                            </button>
+                        );
+                    })()}
                 </div>
             </div>
         </div>

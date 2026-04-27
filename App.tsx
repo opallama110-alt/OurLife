@@ -2,18 +2,19 @@ import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Onboarding } from './components/Onboarding';
-import { Dashboard } from './components/Dashboard';
-import { GymTracker } from './components/GymTracker';
-import { HabitTracker } from './components/HabitTracker';
+import { Dashboard } from './pages/Dashboard';
+import { GymTracker } from './pages/GymTracker';
+import { HabitTracker } from './pages/HabitTracker';
 import { Login } from './components/Login';
 import { Settings } from './components/Settings';
+import { VerifyEmailGate } from './components/VerifyEmailGate';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { storageService } from './services/storageService';
 
 // --- Protected Route Wrapper ---
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, hasProfile } = useAuth();
-  
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }
@@ -27,7 +28,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 const AppRoutes: React.FC = () => {
-  const { user, hasProfile } = useAuth();
+  const { user, hasProfile, emailVerified } = useAuth();
 
   useEffect(() => {
     if (user && hasProfile) {
@@ -35,18 +36,24 @@ const AppRoutes: React.FC = () => {
     }
   }, [user, hasProfile]);
 
+  // Hard gate — any signed-in user with an unverified email is held at VerifyEmailGate
+  // until they confirm. Google sign-ins are auto-verified so they sail through.
+  if (user && !emailVerified) {
+    return <VerifyEmailGate />;
+  }
+
   return (
     <Router>
       <Routes>
         {/* Unprotected Auth Route */}
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
-        
+
         {/* Semi-Protected Onboarding Route */}
         <Route path="/onboarding" element={
             (!user) ? <Navigate to="/login" replace /> :
             (hasProfile) ? <Navigate to="/" replace /> : <Onboarding onComplete={() => window.location.href = '/'} />
         } />
-        
+
         {/* Protected Application Shell utilizing pure React Router matching to prevent Component Stacking */}
         <Route path="/*" element={
             <ProtectedRoute>

@@ -7,7 +7,11 @@ import {
     signOut,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
+    sendEmailVerification,
+    sendPasswordResetEmail,
     deleteUser,
+    updateProfile,
+    reload,
 } from 'firebase/auth';
 import { ref, remove } from 'firebase/database';
 import { deleteDoc, doc } from 'firebase/firestore';
@@ -18,7 +22,13 @@ interface AuthContextType {
     user: User | null;
     loading: boolean;
     hasProfile: boolean;
+    emailVerified: boolean;
     signInWithGoogle: () => Promise<void>;
+    signInWithEmail: (email: string, password: string) => Promise<void>;
+    signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
+    sendVerificationEmail: () => Promise<void>;
+    refreshEmailVerification: () => Promise<boolean>;
+    sendPasswordReset: (email: string) => Promise<void>;
     logout: () => Promise<void>;
     deleteAccount: () => Promise<void>;
 }
@@ -29,6 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [hasProfile, setHasProfile] = useState(false);
+    const [emailVerified, setEmailVerified] = useState(false);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -37,14 +48,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const userData = await storageService.getUserDetails(currentUser.uid);
 
                 // Set explicitly based on RTDB presence.
-                // We completely removed the legacy Firestore `setDoc` initialization here,
-                // passing the responsibility to explicitly trigger `<Onboarding>` through Routes via false.
                 setHasProfile(!!userData);
+                // Google sign-ins are auto-verified; email/password requires the link click.
+                setEmailVerified(currentUser.emailVerified || currentUser.providerData.some(p => p.providerId === 'google.com'));
             } else {
                 setHasProfile(false);
+                setEmailVerified(false);
             }
 
-            // Set user AFTER remote data has been evaluated to avoid premature layout mounting
             setUser(currentUser);
             setLoading(false);
         });
@@ -62,6 +73,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    const signInWithEmail = async (email: string, password: string) => {
+        const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+        setEmailVerified(cred.user.emailVerified);
+    };
+
+    const signUpWithEmail = async (email: string, password: string, displayName?: string) => {
+        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        if (displayName && displayName.trim()) {
+            try { await updateProfile(cred.user, { displayName: displayName.trim() }); } catch { /* non-fatal */ }
+        }
+        await sendEmailVerification(cred.user);
+        setEmailVerified(false);
+    };
+
+    const sendVerificationEmail = async () => {
+        const current = auth.currentUser;
+        if (!current) throw new Error('No authenticated user.');
+        await sendEmailVerification(current);
+    };
+
+    // Forces a metadata refresh from Firebase so a freshly-clicked verification
+    // link is reflected without making the user sign out and back in.
+    const refreshEmailVerification = async (): Promise<boolean> => {
+        const current = auth.currentUser;
+        if (!current) return false;
+        await reload(current);
+        setEmailVerified(current.emailVerified);
+        return current.emailVerified;
+    };
+
+    const sendPasswordReset = async (email: string) => {
+        await sendPasswordResetEmail(auth, email.trim());
+    };
+
     const logout = async () => {
         try {
             await signOut(auth);
@@ -71,14 +116,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
-    // Hard delete: wipes RTDB node + Firestore user doc, then deletes the Firebase Auth account.
-    // Firebase may reject with `auth/requires-recent-login` — caller should handle re-auth.
     const deleteAccount = async () => {
         const current = auth.currentUser;
         if (!current) throw new Error('No authenticated user.');
         const uid = current.uid;
 
-        // Remove backend data first so an auth-delete failure doesn't leave orphaned docs.
         await Promise.allSettled([
             remove(ref(rtdb, `users/${uid}`)),
             deleteDoc(doc(db, 'users', uid)),
@@ -89,7 +131,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ user, loading, hasProfile, signInWithGoogle, logout, deleteAccount }}>
+        <AuthContext.Provider value={{
+            user,
+            loading,
+            hasProfile,
+            emailVerified,
+            signInWithGoogle,
+            signInWithEmail,
+            signUpWithEmail,
+            sendVerificationEmail,
+            refreshEmailVerification,
+            sendPasswordReset,
+            logout,
+            deleteAccount,
+        }}>
             {!loading && children}
         </AuthContext.Provider>
     );
