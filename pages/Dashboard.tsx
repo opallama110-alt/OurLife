@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { storageService } from '../services/storageService';
 import { WorkoutLog, Habit, MuscleGroup, GymSchedule, MUSCLE_RECOVERY_HOURS, getRecoveryHours, GymProfile, ExerciseDefinition } from '../types';
-import { Activity, CheckCircle2, Flame, Zap, Calendar, Edit3, Save, X, Plus, UserCircle, Play, Repeat, Sparkles } from 'lucide-react';
+import { Activity, CheckCircle2, Flame, Zap, Calendar, Edit3, Save, X, Plus, UserCircle, Play, Repeat, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { View } from '../types';
 import AnatomyViewer from '../components/Anatomy/AnatomyViewer';
 import { getTrainedMuscleIds } from '../constants/muscleMapping';
 import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 import { UserState } from '../types';
 import { getRankForLevel, calculateStreak } from '../services/gamificationService';
+import { computeFatigue } from '../services/fatigueService';
+import { StatusWindow } from '../components/StatusWindow';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -153,6 +155,7 @@ export const Dashboard: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [newHabitName, setNewHabitName] = useState('');
   const [systemMessage, setSystemMessage] = useState<string>(storageService.getLastSystemMessage());
+  const [statusOpenMobile, setStatusOpenMobile] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 1000); // Update every second for recovery timer
@@ -307,6 +310,9 @@ export const Dashboard: React.FC = () => {
   const recoveringMuscles = recoveringData.map(r => r.muscle);
   const readyMuscles = getReadyMuscles(workouts, currentTime, new Set(recoveringMuscles));
 
+  // Project Chimera Phase 2 — fatigue/recovery signal for the Status Window
+  const fatigue = computeFatigue(workouts, currentTime, userState?.gender);
+
   // Schedule editing
   const startEditSchedule = () => {
     setEditSchedule({ ...schedule });
@@ -319,7 +325,37 @@ export const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-8 xl:items-start">
+      {/* ── LEFT COLUMN — main dashboard surface ───────────────────────── */}
+      <div className="space-y-8">
+      {/* ── Mobile / tablet Status Window (slide-up sheet) ──────────────── */}
+      {profile && (
+        <div className="xl:hidden animate-slide-up">
+          <button
+            onClick={() => setStatusOpenMobile(o => !o)}
+            className="w-full flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-900/60 border border-cyan-500/25 rounded-2xl px-4 py-3 shadow-lg shadow-cyan-500/5"
+          >
+            <div className="flex items-center space-x-2">
+              <Sparkles size={14} className="text-cyan-400" />
+              <span className="text-[11px] font-mono uppercase tracking-widest text-cyan-300 font-bold">
+                {statusOpenMobile ? 'Hide Status Window' : 'Open Status Window'}
+              </span>
+            </div>
+            {statusOpenMobile ? <ChevronUp size={16} className="text-cyan-400" /> : <ChevronDown size={16} className="text-cyan-400" />}
+          </button>
+          {statusOpenMobile && (
+            <div className="mt-3 animate-slide-up">
+              <StatusWindow
+                gymProfile={profile}
+                workouts={workouts}
+                fatigue={fatigue}
+                displayName={userState?.name || ''}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Greeting Header */}
       <div className="animate-slide-up">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
@@ -583,8 +619,14 @@ export const Dashboard: React.FC = () => {
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">Muscle Recovery Status</h3>
           </div>
           <div className="flex items-center space-x-3 text-[10px]">
-            <span className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-red-500 mr-1.5" />Recovering</span>
-            <span className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-gray-600 mr-1.5" />Ready</span>
+            <span className="flex items-center">
+              <span className="w-2.5 h-2.5 rounded-full bg-transparent border-2 border-red-500 mr-1.5 shadow-[0_0_4px_rgba(239,68,68,0.7)]" />
+              Exhausted
+            </span>
+            <span className="flex items-center">
+              <span className="w-2.5 h-2.5 rounded-full bg-transparent border-2 border-slate-400 mr-1.5" />
+              Rested
+            </span>
           </div>
         </div>
 
@@ -766,6 +808,18 @@ export const Dashboard: React.FC = () => {
           </div>
         )
       }
+      </div>
+      {/* ── RIGHT COLUMN — persistent Status Window (desktop only) ─────── */}
+      {profile && (
+        <div className="hidden xl:block sticky top-8 animate-slide-up">
+          <StatusWindow
+            gymProfile={profile}
+            workouts={workouts}
+            fatigue={fatigue}
+            displayName={userState?.name || ''}
+          />
+        </div>
+      )}
     </div>
   );
 };

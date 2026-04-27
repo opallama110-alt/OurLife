@@ -299,35 +299,43 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
         object-fit: contain;
       }
 
-      /* ── DEFAULT (REST) STATE ─────────────────────────────────────── */
+      /* ── DEFAULT (UNTOUCHED) STATE ────────────────────────────────────
+         Project Chimera Phase 2: Solid colored fills are GONE. Every muscle
+         renders as a dark base body; status (rested vs exhausted) is conveyed
+         purely through colored OUTLINES + AI System notifications. ───────── */
       ${scope} svg path,
       ${scope} svg polygon,
       ${scope} svg circle,
       ${scope} svg ellipse {
-        fill: #1a202c !important;
-        stroke: #2d3748 !important;
+        fill: #0f172a !important;
+        stroke: #1e293b !important;
         stroke-width: 0.4;
-        opacity: 0.9;
-        transition: fill 0.6s ease, opacity 0.6s ease, stroke 0.6s ease;
+        opacity: 0.95;
+        transition: stroke 0.6s ease, stroke-width 0.4s ease, opacity 0.6s ease;
       }
 
       ${readySelectors ? `
-      /* ── READY (RECOVERED) STATE — Phase 9 green neon ─────────────── */
+      /* ── RESTED / READY ─────────────────────────────────────────────
+         Grey neutral outline. Communicates "fully recovered & available". */
       ${readySelectors} {
-        fill: #10b981 !important;
-        stroke: #34d399 !important;
-        stroke-width: 0.55 !important;
-        opacity: 0.95 !important;
+        fill: #0f172a !important;
+        stroke: #94a3b8 !important;
+        stroke-width: 1.2 !important;
+        opacity: 1 !important;
+        filter: drop-shadow(0 0 2px rgba(148, 163, 184, 0.45));
       }
       ` : ''}
 
       ${trainedSelectors ? `
-      /* ── TRAINED (ACTIVE) STATE — flat red, no heavy GPU effects ──── */
+      /* ── EXHAUSTED / RECOVERING ─────────────────────────────────────
+         Neon-red outline only — no fill flood. Reads at a glance without
+         hiding underlying anatomy. */
       ${trainedSelectors} {
-        fill: #ef4444 !important;
-        stroke: #f87171 !important;
-        stroke-width: 0.6 !important;
+        fill: #0f172a !important;
+        stroke: #ef4444 !important;
+        stroke-width: 1.4 !important;
         opacity: 1 !important;
+        filter: drop-shadow(0 0 3px rgba(239, 68, 68, 0.7));
       }
       ` : ''}
 
