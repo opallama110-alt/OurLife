@@ -522,18 +522,19 @@ const AchievementsGrid: React.FC<{ workouts: WorkoutLog[]; gymProfile: GymProfil
 // Phase 6 — Compare UI (Monthly XP + Workouts vs another user)
 // ═══════════════════════════════════════════════════════════════════
 const CompareSection: React.FC<{ gymProfile: GymProfile; displayName: string }> = ({ gymProfile, displayName }) => {
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [users, setUsers] = useState<CompareUser[]>([]);
     const [selectedId, setSelectedId] = useState<string>('');
     const [loaded, setLoaded] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const selected = users.find(u => u.id === selectedId);
 
     const loadUsers = async () => {
         setLoading(true);
+        setError(null);
         try {
             const all = await storageService.getAllUsers();
-            // Exclude self (best-effort match via name) + filter to users with any monthly activity
             const candidates: CompareUser[] = all
                 .filter(u => u.name !== displayName)
                 .map(u => ({
@@ -547,20 +548,32 @@ const CompareSection: React.FC<{ gymProfile: GymProfile; displayName: string }> 
                     photoURL: u.photoURL,
                 }));
             setUsers(candidates);
-            if (candidates.length > 0 && !selectedId) setSelectedId(candidates[0].id);
+            if (candidates.length > 0) setSelectedId(prev => prev || candidates[0].id);
             setLoaded(true);
-        } catch (e) {
+        } catch (e: any) {
             console.error('[CompareSection] load users failed', e);
+            setError(e?.message || 'Failed to load rivals.');
         } finally {
             setLoading(false);
         }
     };
 
+    // Project Chimera Phase 4 — auto-load rivals on mount so the Compare card
+    // is populated without an extra tap.
+    useEffect(() => {
+        loadUsers();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const myMonthlyXP = gymProfile.monthlyXP ?? 0;
     const myMonthlyWorkouts = gymProfile.monthlyWorkouts ?? 0;
+    const myStreak = gymProfile.currentStreak ?? 0;
 
     const maxXP = Math.max(myMonthlyXP, selected?.monthlyXP ?? 0, 1);
     const maxWorkouts = Math.max(myMonthlyWorkouts, selected?.monthlyWorkouts ?? 0, 1);
+
+    // Streak Leading/Behind delta (positive = you're ahead).
+    const streakDelta = selected ? myStreak - selected.currentStreak : 0;
 
     return (
         <div className="jarvis-card p-5 rounded-2xl">
@@ -574,21 +587,26 @@ const CompareSection: React.FC<{ gymProfile: GymProfile; displayName: string }> 
                         </p>
                     </div>
                 </div>
-                {!loaded && (
-                    <button
-                        onClick={loadUsers}
-                        disabled={loading}
-                        className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold hover:bg-purple-500/20 transition-all disabled:opacity-50"
-                    >
-                        {loading ? <Loader2 size={12} className="animate-spin" /> : <UsersIcon size={12} />}
-                        <span>{loading ? 'Loading' : 'Load Rivals'}</span>
-                    </button>
-                )}
+                <button
+                    onClick={loadUsers}
+                    disabled={loading}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold hover:bg-purple-500/20 transition-all disabled:opacity-50"
+                >
+                    {loading ? <Loader2 size={12} className="animate-spin" /> : <UsersIcon size={12} />}
+                    <span>{loading ? 'Loading' : 'Refresh'}</span>
+                </button>
             </div>
 
-            {!loaded ? (
-                <div className="text-center py-6 text-xs text-slate-500 font-mono">
-                    Tap <span className="text-purple-400">Load Rivals</span> to pull leaderboard data.
+            {error && (
+                <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-3 py-2 rounded-lg text-xs mb-3">
+                    {error}
+                </div>
+            )}
+
+            {loading && !loaded ? (
+                <div className="text-center py-6 text-xs text-slate-500 font-mono flex items-center justify-center gap-2">
+                    <Loader2 size={12} className="animate-spin text-purple-400" />
+                    Pulling rivals from the leaderboard…
                 </div>
             ) : users.length === 0 ? (
                 <div className="text-center py-6 text-xs text-slate-500 font-mono">
@@ -637,19 +655,34 @@ const CompareSection: React.FC<{ gymProfile: GymProfile; displayName: string }> 
                                 format={(v) => String(v)}
                             />
 
-                            {/* Streak mini row */}
-                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800">
-                                <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-3 text-center">
-                                    <div className="text-[9px] font-mono uppercase text-cyan-300/70">Your Streak</div>
-                                    <div className="text-xl font-bold text-cyan-300 font-mono flex items-center justify-center gap-1">
-                                        <Flame size={14} /> {gymProfile.currentStreak ?? 0}
+                            {/* Streak mini row + Leading/Behind indicator */}
+                            <div className="pt-2 border-t border-slate-800 space-y-2">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-3 text-center">
+                                        <div className="text-[9px] font-mono uppercase text-cyan-300/70">Your Streak</div>
+                                        <div className="text-xl font-bold text-cyan-300 font-mono flex items-center justify-center gap-1">
+                                            <Flame size={14} /> {myStreak}
+                                        </div>
+                                    </div>
+                                    <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-3 text-center">
+                                        <div className="text-[9px] font-mono uppercase text-purple-300/70">Rival's Streak</div>
+                                        <div className="text-xl font-bold text-purple-300 font-mono flex items-center justify-center gap-1">
+                                            <Flame size={14} /> {selected.currentStreak}
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-3 text-center">
-                                    <div className="text-[9px] font-mono uppercase text-purple-300/70">Rival's Streak</div>
-                                    <div className="text-xl font-bold text-purple-300 font-mono flex items-center justify-center gap-1">
-                                        <Flame size={14} /> {selected.currentStreak}
-                                    </div>
+                                <div className={`text-center text-[11px] font-mono font-bold uppercase tracking-widest py-1.5 rounded-lg border ${
+                                    streakDelta > 0
+                                        ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                                        : streakDelta < 0
+                                            ? 'text-rose-400 bg-rose-500/10 border-rose-500/30'
+                                            : 'text-slate-400 bg-slate-800/50 border-slate-700'
+                                }`}>
+                                    {streakDelta > 0
+                                        ? `↑ Leading by ${streakDelta} day${streakDelta === 1 ? '' : 's'}`
+                                        : streakDelta < 0
+                                            ? `↓ Behind by ${Math.abs(streakDelta)} day${Math.abs(streakDelta) === 1 ? '' : 's'}`
+                                            : '⚖ Tied'}
                                 </div>
                             </div>
                         </div>

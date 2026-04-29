@@ -1,16 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   User as UserIcon, Dumbbell, LogOut, Trash2, Save, Home, Building2,
-  Loader2, Check, AlertTriangle, UserCircle, Calculator, Shield, Cog,
+  Loader2, Check, AlertTriangle, UserCircle, Calculator, Shield, Cog, Upload, ImagePlus,
 } from 'lucide-react';
-import { db } from '../firebase-config';
+import { db, storage } from '../firebase-config';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
-import { Profile } from './Profile';
-import { CalculatorSuite } from './CalculatorSuite';
+import { Profile } from '../pages/Profile';
+import { CalculatorSuite } from '../pages/CalculatorSuite';
 import { AdminDashboard } from './AdminDashboard';
 
 type Environment = 'Home' | 'Gym';
@@ -115,6 +116,53 @@ export const Settings: React.FC = () => {
     const [photoURL, setPhotoURL] = useState(user?.photoURL || '');
     const [profileSave, setProfileSave] = useState<SaveState>('idle');
     const [profileError, setProfileError] = useState<string | null>(null);
+
+    // ── Project Chimera Phase 4: Avatar file upload to Firebase Storage ──
+    const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleAvatarFile = async (file: File) => {
+      if (!user) return;
+      setProfileError(null);
+
+      // Sanity checks — Firebase Storage charges by bytes; cap at ~5 MB and
+      // reject non-images so the bucket never holds e.g. PDFs.
+      if (!file.type.startsWith('image/')) {
+        setProfileError('File must be an image (PNG, JPG, WebP).');
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setProfileError('Image too large — keep it under 5 MB.');
+        return;
+      }
+
+      setUploading(true);
+      setUploadProgress(10);
+      try {
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = `avatars/${user.uid}/avatar-${Date.now()}.${ext}`;
+        const ref = storageRef(storage, path);
+        setUploadProgress(40);
+        await uploadBytes(ref, file, { contentType: file.type });
+        setUploadProgress(80);
+        const url = await getDownloadURL(ref);
+        setUploadProgress(95);
+
+        // Mirror to Auth, Firestore, and the local userState so all surfaces
+        // (Layout sidebar, Compare cards, Hunter Card) see the new avatar.
+        await updateProfile(user, { photoURL: url });
+        await setDoc(doc(db, 'users', user.uid), { photoURL: url }, { merge: true });
+        setPhotoURL(url);
+        setUploadProgress(100);
+      } catch (e: any) {
+        console.error('[Settings] avatar upload:', e);
+        setProfileError(e?.message || 'Failed to upload avatar.');
+      } finally {
+        setUploading(false);
+        setTimeout(() => setUploadProgress(0), 1200);
+      }
+    };
 
     // ── Workout Preferences state ──
     const [environment, setEnvironment] = useState<Environment>('Gym');
@@ -228,16 +276,53 @@ export const Settings: React.FC = () => {
             <SaveBadge state={profileSave} />
           </div>
 
+          {/* Avatar block — file upload to Firebase Storage */}
           <div className="flex items-center space-x-4 mb-4">
-            {photoURL ? (
-              <img src={photoURL} alt="Avatar" className="w-16 h-16 rounded-full border-2 border-slate-700 object-cover"
-                onError={e => { e.currentTarget.style.display = 'none'; }} />
-            ) : (
-              <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center">
-                <UserIcon size={28} className="text-slate-500" />
-              </div>
-            )}
-            <div className="text-xs text-slate-500 font-mono flex-1 truncate">{user?.email}</div>
+            <div className="relative">
+              {photoURL ? (
+                <img src={photoURL} alt="Avatar" className="w-20 h-20 rounded-full border-2 border-slate-700 object-cover"
+                  onError={e => { e.currentTarget.style.display = 'none'; }} />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center">
+                  <UserIcon size={32} className="text-slate-500" />
+                </div>
+              )}
+              {uploading && (
+                <div className="absolute inset-0 rounded-full bg-slate-950/70 backdrop-blur-sm flex items-center justify-center">
+                  <Loader2 size={22} className="text-cyan-400 animate-spin" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0 space-y-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleAvatarFile(f);
+                  // Reset so re-selecting the same file still triggers onChange.
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                }}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-slate-900 border border-slate-700 hover:border-cyan-500/60 text-sm text-slate-200 hover:text-white transition-all disabled:opacity-60"
+              >
+                {uploading ? <Loader2 size={14} className="animate-spin" /> : photoURL ? <ImagePlus size={14} /> : <Upload size={14} />}
+                <span>{uploading ? `Uploading… ${uploadProgress}%` : photoURL ? 'Change avatar' : 'Upload avatar'}</span>
+              </button>
+              {uploading && (
+                <div className="h-1 bg-slate-800 rounded overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }} />
+                </div>
+              )}
+              <div className="text-[10px] text-slate-500 font-mono truncate">{user?.email}</div>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -249,17 +334,6 @@ export const Settings: React.FC = () => {
                 onChange={e => setDisplayName(e.target.value)}
                 className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500"
                 placeholder="How you appear on leaderboards"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-[11px] text-slate-400 font-mono uppercase tracking-wider">Avatar URL</span>
-              <input
-                type="url"
-                value={photoURL}
-                onChange={e => setPhotoURL(e.target.value)}
-                className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500"
-                placeholder="https://…"
               />
             </label>
 

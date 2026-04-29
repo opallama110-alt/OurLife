@@ -828,11 +828,59 @@ export const GymTracker: React.FC = () => {
     try { storageService.saveGymProfile(newProfile); } catch { }
   };
 
-  const volumeData = (logs || []).slice(0, 10).reverse().map(l => ({
-    date: l.date?.slice(5) || '',
-    volume: (l.exercises || []).reduce((s, e) => s + e.sets * e.reps * e.weight, 0),
-    xp: l.xpEarned || 0,
-  }));
+  // ── Project Chimera Phase 4: Weekly / Monthly / Yearly trend selector ──
+  const [trendRange, setTrendRange] = useState<'weekly' | 'monthly' | 'yearly'>('weekly');
+
+  const volumeData = useMemo(() => {
+    if (!logs || logs.length === 0) return [] as { date: string; volume: number; xp: number }[];
+
+    const volumeOf = (l: WorkoutLog) =>
+      (l.exercises || []).reduce((s, e) => s + e.sets * e.reps * e.weight, 0);
+
+    const now = new Date();
+
+    if (trendRange === 'weekly') {
+      // Last 7 daily buckets
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - (6 - i));
+        const key = d.toLocaleDateString('en-CA');
+        const dayLogs = logs.filter(l => l.date === key);
+        return {
+          date: d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }),
+          volume: dayLogs.reduce((s, l) => s + volumeOf(l), 0),
+          xp: dayLogs.reduce((s, l) => s + (l.xpEarned || 0), 0),
+        };
+      });
+    }
+
+    if (trendRange === 'monthly') {
+      // Last 30 daily buckets — empty days kept at zero so the line shows breaks
+      return Array.from({ length: 30 }, (_, i) => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - (29 - i));
+        const key = d.toLocaleDateString('en-CA');
+        const dayLogs = logs.filter(l => l.date === key);
+        return {
+          date: d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }),
+          volume: dayLogs.reduce((s, l) => s + volumeOf(l), 0),
+          xp: dayLogs.reduce((s, l) => s + (l.xpEarned || 0), 0),
+        };
+      });
+    }
+
+    // Yearly: last 12 monthly buckets
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const monthLogs = logs.filter(l => (l.date || '').startsWith(monthKey));
+      return {
+        date: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+        volume: monthLogs.reduce((s, l) => s + volumeOf(l), 0),
+        xp: monthLogs.reduce((s, l) => s + (l.xpEarned || 0), 0),
+      };
+    });
+  }, [logs, trendRange]);
 
   const currentExercise = flowStep === 'active' ? selectedExercises[currentExIndex] : null;
 
@@ -1136,11 +1184,26 @@ export const GymTracker: React.FC = () => {
             );
           })()}
 
-          {/* Volume + XP Trend */}
-          {volumeData.length > 1 && (
-            <div className="jarvis-card p-4 rounded-xl">
-              <h4 className="text-xs font-mono text-slate-400 uppercase mb-3">Volume & XP Trend</h4>
-              <ResponsiveContainer width="100%" height={180}>
+          {/* Volume + XP Trend — with Weekly / Monthly / Yearly toggle */}
+          <div className="jarvis-card p-4 rounded-xl">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <h4 className="text-xs font-mono text-slate-400 uppercase">Volume & XP Trend</h4>
+              <div className="flex bg-slate-900 rounded-lg p-0.5 border border-slate-800">
+                {(['weekly', 'monthly', 'yearly'] as const).map(r => (
+                  <button
+                    key={r}
+                    onClick={() => setTrendRange(r)}
+                    className={`px-3 py-1 text-[10px] font-mono uppercase tracking-wider rounded-md transition-all ${trendRange === r
+                        ? 'bg-cyan-500 text-slate-900 font-bold shadow-lg shadow-cyan-500/30'
+                        : 'text-slate-400 hover:text-white'}`}
+                  >
+                    {r === 'weekly' ? '7D' : r === 'monthly' ? '30D' : '12M'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {volumeData.some(d => d.volume > 0 || d.xp > 0) ? (
+              <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={volumeData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} />
@@ -1150,8 +1213,12 @@ export const GymTracker: React.FC = () => {
                   <Line type="monotone" dataKey="xp" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="XP" />
                 </LineChart>
               </ResponsiveContainer>
-            </div>
-          )}
+            ) : (
+              <div className="py-8 text-center text-xs text-slate-600 font-mono">
+                No data in this {trendRange === 'weekly' ? 'week' : trendRange === 'monthly' ? 'month' : 'year'} — log a workout to populate the trend.
+              </div>
+            )}
+          </div>
 
           {/* Muscle XP Distribution */}
           <div className="jarvis-card p-4 rounded-xl">

@@ -4,6 +4,7 @@ import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getMessaging } from "firebase/messaging";
 import { getDatabase } from "firebase/database";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -24,3 +25,4 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const messaging = getMessaging(app);
 export const rtdb = getDatabase(app);
+export const storage = getStorage(app);
