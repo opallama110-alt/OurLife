@@ -269,9 +269,17 @@ const ExerciseBrowser: React.FC<{
 }> = ({ muscles, selectedExercises, onToggleExercise, userEquipment, logs = [] }) => {
   const [exercisesByMuscle, setExercisesByMuscle] = useState<Record<string, FirestoreExercise[]>>({});
   const [loadingState, setLoadingState] = useState<Record<string, boolean>>({});
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState('');           // raw input — controlled & instant
+  const [debouncedSearch, setDebouncedSearch] = useState(''); // throttled — drives the filter
   const [pageByMuscle, setPageByMuscle] = useState<Record<string, number>>({});
   const fetchedRef = useRef<Set<string>>(new Set());
+
+  // ── 300ms debounce — keeps typing instantaneous and stops the heavy
+  //    filter+sort+paginate work from running on every keystroke. ──
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(t);
+  }, [search]);
 
   // Re-filter cache whenever userEquipment changes (no need to refetch).
   const equipKey = (userEquipment || []).join('|');
@@ -295,11 +303,11 @@ const ExerciseBrowser: React.FC<{
     });
   }, [muscles]);
 
-  // Reset to page 0 whenever search or muscle list changes so we never strand
-  // the user on an empty page.
+  // Reset to page 0 whenever the debounced search or muscle list changes so we
+  // never strand the user on an empty page.
   useEffect(() => {
     setPageByMuscle({});
-  }, [search, equipKey, muscles]);
+  }, [debouncedSearch, equipKey, muscles]);
 
   // ── Habit-history frequency map: exercise name (lowercased) → count ──
   // Used to sort the list so the user's most-used moves bubble to the top.
@@ -317,9 +325,11 @@ const ExerciseBrowser: React.FC<{
 
   // STRICT equipment filter — per Project Chimera spec, exercises requiring
   // gear the user does not have should not be displayed at all.
+  // Reads debouncedSearch (not raw search) so this only re-runs after typing
+  // has settled; the input itself stays buttery.
   const filteredByMuscle = useMemo(() => {
     const out: Record<string, FirestoreExercise[]> = {};
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
 
     for (const m of Object.keys(exercisesByMuscle)) {
       let list = exercisesByMuscle[m] || [];
@@ -348,7 +358,7 @@ const ExerciseBrowser: React.FC<{
       out[m] = list;
     }
     return out;
-  }, [exercisesByMuscle, equipKey, search, historyCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [exercisesByMuscle, equipKey, debouncedSearch, historyCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedIds = new Set(selectedExercises.map(e => e.id));
 
@@ -457,8 +467,8 @@ const ExerciseBrowser: React.FC<{
               {/* Empty */}
               {!isLoading && exercises.length === 0 && (
                 <div className="py-4 text-center text-slate-600 text-xs font-mono">
-                  {search.trim()
-                    ? `No "${search.trim()}" matches in ${cfg.label}.`
+                  {debouncedSearch.trim()
+                    ? `No "${debouncedSearch.trim()}" matches in ${cfg.label}.`
                     : userEquipment && userEquipment.length > 0
                       ? `No ${cfg.label} exercises match your equipment.`
                       : `No exercises found in database for ${cfg.label}.`}

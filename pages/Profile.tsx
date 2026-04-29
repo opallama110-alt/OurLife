@@ -3,16 +3,14 @@ import { UserState, GymProfile, WorkoutLog } from '../types';
 import { storageService } from '../services/storageService';
 import {
     Save, User, UserCircle, Ruler, Weight, Activity, CheckSquare, Calendar, Sparkles,
-    Flame, Trophy, Crown, Shield, Sword, Swords, Skull, Zap, Lock, BarChart3, Users as UsersIcon, Loader2, Award,
+    Flame, Trophy, Crown, BarChart3, Users as UsersIcon, Loader2,
 } from 'lucide-react';
 import {
-    TITLE_TIERS,
     STREAK_TITLE_TIERS,
-    getLevelFromXP,
+    RANK_TIERS,
     getRankForLevel,
     getXPProgress,
     getTitleForLevel,
-    evaluateAchievements,
 } from '../services/gamificationService';
 import { calcBMI, bmiSliderStyle } from '../utils/bmi';
 
@@ -25,20 +23,6 @@ type CompareUser = {
     rank: string;
     rankEmoji: string;
     photoURL?: string;
-};
-
-// Badge rarity mapping — keyed by TITLE_TIERS minLevel
-type BadgeStyle = { icon: React.ComponentType<{ size?: number; className?: string }>; rarity: string; label: string };
-const BADGE_STYLE: Record<number, BadgeStyle> = {
-    1: { icon: Shield, rarity: 'badge-iron', label: 'Iron' },
-    5: { icon: Swords, rarity: 'badge-iron', label: 'Iron' },
-    10: { icon: Sword, rarity: 'badge-silver', label: 'Silver' },
-    15: { icon: Flame, rarity: 'badge-bronze', label: 'Bronze' },
-    20: { icon: Skull, rarity: 'badge-purple', label: 'Epic' },
-    30: { icon: Trophy, rarity: 'badge-gold', label: 'Gold' },
-    50: { icon: Crown, rarity: 'badge-gold', label: 'Gold' },
-    75: { icon: Zap, rarity: 'badge-legendary', label: 'Legendary' },
-    100: { icon: Sparkles, rarity: 'badge-mythic', label: 'Mythic' },
 };
 
 export const Profile: React.FC = () => {
@@ -92,11 +76,8 @@ export const Profile: React.FC = () => {
             {/* ═══════════════════ PHASE 6: PUBLIC HUNTER CARD ═══════════════════ */}
             <HunterCard gymProfile={gymProfile} displayName={user.name} />
 
-            {/* ═══════════════════ PHASE 6: BADGE GRID ═══════════════════ */}
-            <BadgeGrid currentLevel={gymProfile.level || 1} longestStreak={gymProfile.longestStreak || 0} />
-
-            {/* ═══════════════════ Project Chimera Phase 2: ACHIEVEMENTS ═══════════════════ */}
-            <AchievementsGrid workouts={workouts} gymProfile={gymProfile} />
+            {/* ═══════════════════ PENGHARGAAN — Hunter Rank + Consistency Tracks ═══════════════════ */}
+            <Penghargaan gymProfile={gymProfile} />
 
             {/* ═══════════════════ PHASE 6: COMPARE UI ═══════════════════ */}
             <CompareSection gymProfile={gymProfile} displayName={user.name} />
@@ -305,7 +286,7 @@ const HunterCard: React.FC<{ gymProfile: GymProfile; displayName: string }> = ({
                 {/* Header row — name, rank emblem */}
                 <div className="flex items-start justify-between">
                     <div>
-                        <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-cyan-400/80">Public Profile</div>
+                        <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-cyan-400/80">Rekor Personal</div>
                         <h2 className="text-2xl font-bold text-white mt-1">{displayName || 'Hunter'}</h2>
                         <p className={`text-sm font-mono mt-0.5 ${title.color}`}>&ldquo;{title.title}&rdquo;</p>
                     </div>
@@ -381,138 +362,189 @@ const HunterCard: React.FC<{ gymProfile: GymProfile; displayName: string }> = ({
 };
 
 // ═══════════════════════════════════════════════════════════════════
-// Phase 6 — Visual Badge Grid (Solo Leveling Titles as Medals)
+// PENGHARGAAN — Hunter Rank Track + Consistency Track
+// Two horizontal progress bars: progress within current rank tier (E/D/C/B/A/S/National)
+// and progress toward the next streak-title milestone (Spark Bearer → Eternal Phoenix).
 // ═══════════════════════════════════════════════════════════════════
-const BadgeGrid: React.FC<{ currentLevel: number; longestStreak: number }> = ({ currentLevel, longestStreak }) => {
+const Penghargaan: React.FC<{ gymProfile: GymProfile }> = ({ gymProfile }) => {
+    const level = gymProfile.level || 1;
+    const longestStreak = gymProfile.longestStreak ?? 0;
+    const currentStreak = gymProfile.currentStreak ?? 0;
+
+    // ── HUNTER RANK TRACK ─────────────────────────────────────────────
+    const currentRank = getRankForLevel(level);
+    const currentRankIdx = RANK_TIERS.findIndex(r => r.name === currentRank.name);
+    const nextRank = currentRankIdx >= 0 && currentRankIdx < RANK_TIERS.length - 1
+        ? RANK_TIERS[currentRankIdx + 1]
+        : null;
+    const rankFloor = currentRank.minLevel;
+    const rankCeiling = nextRank ? nextRank.minLevel : currentRank.maxLevel + 1;
+    const rankSpan = Math.max(1, rankCeiling - rankFloor);
+    const rankPct = nextRank
+        ? Math.max(0, Math.min(100, ((level - rankFloor) / rankSpan) * 100))
+        : 100;
+
+    // ── CONSISTENCY TRACK ─────────────────────────────────────────────
+    const nextStreakMilestone = STREAK_TITLE_TIERS.find(t => t.minDays > longestStreak) || null;
+    const prevStreakMilestone = [...STREAK_TITLE_TIERS]
+        .reverse()
+        .find(t => t.minDays <= longestStreak) || null;
+    const streakFloor = prevStreakMilestone?.minDays ?? 0;
+    const streakCeiling = nextStreakMilestone?.minDays ?? Math.max(longestStreak, 1);
+    const streakSpan = Math.max(1, streakCeiling - streakFloor);
+    const streakPct = nextStreakMilestone
+        ? Math.max(0, Math.min(100, ((longestStreak - streakFloor) / streakSpan) * 100))
+        : 100;
+
     return (
         <div className="jarvis-card p-5 rounded-2xl space-y-5">
             <div className="flex items-center space-x-3">
                 <Trophy size={22} className="text-amber-400" />
                 <div>
-                    <h3 className="text-lg font-bold text-white">Hall of Titles</h3>
-                    <p className="text-[11px] text-slate-500 font-mono">Unlock medals by climbing ranks</p>
+                    <h3 className="text-lg font-bold text-white">Penghargaan</h3>
+                    <p className="text-[11px] text-slate-500 font-mono">Lacak progres rank & konsistensi-mu</p>
                 </div>
             </div>
 
-            {/* ── Level-based titles ───────────────────────────── */}
-            <div>
-                <div className="flex items-center space-x-2 mb-2">
-                    <Crown size={14} className="text-cyan-400" />
-                    <div className="text-[11px] text-cyan-400 font-mono uppercase tracking-widest">Level Titles</div>
-                </div>
-                <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-                    {TITLE_TIERS.map((tier) => {
-                        const style = BADGE_STYLE[tier.minLevel] || BADGE_STYLE[1];
-                        const unlocked = currentLevel >= tier.minLevel;
-                        const Icon = style.icon;
-                        return (
-                            <div
-                                key={tier.minLevel}
-                                className={`badge-tier ${style.rarity} ${unlocked ? '' : 'badge-locked'} rounded-2xl p-3 flex flex-col items-center text-center aspect-square justify-center relative`}
-                                title={unlocked ? tier.title : `Unlock at Level ${tier.minLevel}`}
-                            >
-                                {!unlocked && (
-                                    <Lock size={14} className="absolute top-2 right-2 text-slate-500" />
-                                )}
-                                <Icon size={30} className={`${unlocked ? tier.color : 'text-slate-600'} mb-1.5`} />
-                                <div className={`text-[10px] font-bold leading-tight ${unlocked ? 'text-white' : 'text-slate-500'}`}>
-                                    {tier.title}
-                                </div>
-                                <div className={`text-[9px] font-mono mt-0.5 ${unlocked ? 'text-slate-400' : 'text-slate-600'}`}>
-                                    Lv {tier.minLevel} • {style.label}
-                                </div>
+            {/* ── HUNTER RANK TRACK ───────────────────────────────────── */}
+            <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
+                <div className="absolute -top-12 -right-12 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <Crown size={14} className="text-cyan-400" />
+                            <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-cyan-400 font-bold">
+                                Hunter Rank Track
+                            </span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-500">
+                            Lv.{level}
+                        </span>
+                    </div>
+
+                    {/* Current → Next emblem row */}
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <span className={`text-2xl ${currentRank.color} drop-shadow-[0_0_6px_currentColor]`}>
+                                {currentRank.emoji}
+                            </span>
+                            <div className="min-w-0">
+                                <div className={`text-xs font-bold font-mono ${currentRank.color} truncate`}>{currentRank.name}</div>
+                                <div className="text-[9px] font-mono text-slate-500">Lv {rankFloor}</div>
                             </div>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* ── Streak-based titles ──────────────────────────── */}
-            <div>
-                <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                        <Flame size={14} className="text-orange-400" />
-                        <div className="text-[11px] text-orange-400 font-mono uppercase tracking-widest">Streak Titles</div>
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-mono">
-                        Best: <span className="text-orange-300">{longestStreak}d</span>
-                    </div>
-                </div>
-                <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-                    {STREAK_TITLE_TIERS.map((tier) => {
-                        const unlocked = longestStreak >= tier.minDays;
-                        return (
-                            <div
-                                key={tier.minDays}
-                                className={`badge-tier badge-${tier.rarity} ${unlocked ? '' : 'badge-locked'} rounded-2xl p-3 flex flex-col items-center text-center aspect-square justify-center relative`}
-                                title={unlocked ? `${tier.title} — ${tier.description}` : `Unlock at ${tier.minDays} day streak`}
-                            >
-                                {!unlocked && (
-                                    <Lock size={14} className="absolute top-2 right-2 text-slate-500" />
-                                )}
-                                <div className={`text-3xl mb-1 leading-none ${unlocked ? '' : 'grayscale opacity-50'}`}>
-                                    {tier.emoji}
+                        </div>
+                        {nextRank ? (
+                            <div className="flex items-center gap-2 min-w-0 text-right">
+                                <div className="min-w-0">
+                                    <div className={`text-xs font-bold font-mono ${nextRank.color} truncate`}>{nextRank.name}</div>
+                                    <div className="text-[9px] font-mono text-slate-500">Lv {nextRank.minLevel}</div>
                                 </div>
-                                <div className={`text-[10px] font-bold leading-tight ${unlocked ? 'text-white' : 'text-slate-500'}`}>
-                                    {tier.title}
-                                </div>
-                                <div className={`text-[9px] font-mono mt-0.5 ${unlocked ? 'text-slate-400' : 'text-slate-600'}`}>
-                                    {tier.minDays}d streak
-                                </div>
+                                <span className={`text-2xl ${nextRank.color} drop-shadow-[0_0_6px_currentColor] opacity-50`}>
+                                    {nextRank.emoji}
+                                </span>
                             </div>
-                        );
-                    })}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// ═══════════════════════════════════════════════════════════════════
-// Project Chimera Phase 2 — Achievements Grid (specific milestones)
-// ═══════════════════════════════════════════════════════════════════
-const AchievementsGrid: React.FC<{ workouts: WorkoutLog[]; gymProfile: GymProfile }> = ({ workouts, gymProfile }) => {
-    const evaluated = useMemo(() => evaluateAchievements(workouts, gymProfile), [workouts, gymProfile]);
-    const unlockedCount = evaluated.filter(a => a.unlocked).length;
-    const total = evaluated.length;
-
-    return (
-        <div className="jarvis-card p-5 rounded-2xl space-y-4">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                    <Award size={22} className="text-amber-400" />
-                    <div>
-                        <h3 className="text-lg font-bold text-white">Achievements</h3>
-                        <p className="text-[11px] text-slate-500 font-mono">Milestones forged through training</p>
-                    </div>
-                </div>
-                <div className="text-right">
-                    <div className="text-xl font-bold text-amber-400 font-mono">{unlockedCount}<span className="text-slate-500 text-sm">/{total}</span></div>
-                    <div className="text-[9px] font-mono uppercase tracking-wider text-slate-500">Unlocked</div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                {evaluated.map((a) => (
-                    <div
-                        key={a.id}
-                        className={`badge-tier badge-${a.rarity} ${a.unlocked ? '' : 'badge-locked'} rounded-2xl p-3 flex flex-col items-center text-center aspect-square justify-center relative`}
-                        title={a.unlocked ? `${a.label} — ${a.description}` : `Locked: ${a.description}`}
-                    >
-                        {!a.unlocked && (
-                            <Lock size={12} className="absolute top-2 right-2 text-slate-500" />
+                        ) : (
+                            <div className="text-right">
+                                <div className="text-xs font-bold font-mono text-yellow-400 drop-shadow-[0_0_6px_currentColor]">MAX RANK</div>
+                                <div className="text-[9px] font-mono text-slate-500">Apex Hunter</div>
+                            </div>
                         )}
-                        <div className={`text-3xl mb-1 leading-none ${a.unlocked ? '' : 'grayscale opacity-50'}`}>
-                            {a.emoji}
-                        </div>
-                        <div className={`text-[10px] font-bold leading-tight ${a.unlocked ? 'text-white' : 'text-slate-500'}`}>
-                            {a.label}
-                        </div>
-                        <div className={`text-[9px] font-mono mt-0.5 ${a.unlocked ? 'text-slate-400' : 'text-slate-600'} leading-tight line-clamp-2`}>
-                            {a.description}
-                        </div>
                     </div>
-                ))}
+
+                    {/* Horizontal progress bar with shimmer */}
+                    <div className="relative h-3 bg-slate-950 border border-slate-800 rounded-full overflow-hidden">
+                        <div
+                            className="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-full transition-all duration-700 ease-out"
+                            style={{ width: `${rankPct}%`, boxShadow: '0 0 14px rgba(6,182,212,0.6)' }}
+                        />
+                        <div
+                            className="absolute inset-y-0 left-0 shimmer rounded-full"
+                            style={{ width: `${rankPct}%` }}
+                        />
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                        <span className="text-[9px] font-mono text-slate-600">
+                            {nextRank
+                                ? `${level - rankFloor}/${rankSpan} levels into ${currentRank.name}`
+                                : 'Maximum Hunter Rank reached'}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-cyan-300">{Math.round(rankPct)}%</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* ── CONSISTENCY TRACK ───────────────────────────────────── */}
+            <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
+                <div className="absolute -top-12 -left-12 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <Flame size={14} className="text-orange-400" />
+                            <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-orange-400 font-bold">
+                                Consistency Track
+                            </span>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-500">
+                            Best: <span className="text-orange-300">{longestStreak}d</span>
+                            {currentStreak > 0 && (
+                                <span className="text-slate-600"> · Now: <span className="text-orange-400">{currentStreak}d</span></span>
+                            )}
+                        </span>
+                    </div>
+
+                    {/* Current → Next milestone row */}
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-2xl drop-shadow-[0_0_6px_rgba(249,115,22,0.5)]">
+                                {prevStreakMilestone?.emoji ?? '🌱'}
+                            </span>
+                            <div className="min-w-0">
+                                <div className={`text-xs font-bold font-mono truncate ${prevStreakMilestone?.color ?? 'text-slate-500'}`}>
+                                    {prevStreakMilestone?.title ?? 'Unawakened'}
+                                </div>
+                                <div className="text-[9px] font-mono text-slate-500">
+                                    {prevStreakMilestone ? `${prevStreakMilestone.minDays}d` : '—'}
+                                </div>
+                            </div>
+                        </div>
+                        {nextStreakMilestone ? (
+                            <div className="flex items-center gap-2 min-w-0 text-right">
+                                <div className="min-w-0">
+                                    <div className={`text-xs font-bold font-mono truncate ${nextStreakMilestone.color}`}>{nextStreakMilestone.title}</div>
+                                    <div className="text-[9px] font-mono text-slate-500">{nextStreakMilestone.minDays}d</div>
+                                </div>
+                                <span className="text-2xl opacity-50 drop-shadow-[0_0_6px_rgba(249,115,22,0.5)]">
+                                    {nextStreakMilestone.emoji}
+                                </span>
+                            </div>
+                        ) : (
+                            <div className="text-right">
+                                <div className="text-xs font-bold font-mono text-yellow-400 drop-shadow-[0_0_6px_currentColor]">LEGEND</div>
+                                <div className="text-[9px] font-mono text-slate-500">All milestones forged</div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Horizontal progress bar with shimmer */}
+                    <div className="relative h-3 bg-slate-950 border border-slate-800 rounded-full overflow-hidden">
+                        <div
+                            className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-full transition-all duration-700 ease-out"
+                            style={{ width: `${streakPct}%`, boxShadow: '0 0 14px rgba(249,115,22,0.6)' }}
+                        />
+                        <div
+                            className="absolute inset-y-0 left-0 shimmer rounded-full"
+                            style={{ width: `${streakPct}%` }}
+                        />
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                        <span className="text-[9px] font-mono text-slate-600">
+                            {nextStreakMilestone
+                                ? `${longestStreak - streakFloor}/${streakSpan} days into next milestone`
+                                : 'Eternal Phoenix awakened'}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold text-orange-300">{Math.round(streakPct)}%</span>
+                    </div>
+                </div>
             </div>
         </div>
     );

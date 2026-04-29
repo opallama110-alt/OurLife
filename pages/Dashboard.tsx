@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { storageService } from '../services/storageService';
 import { WorkoutLog, Habit, MuscleGroup, GymSchedule, MUSCLE_RECOVERY_HOURS, getRecoveryHours, GymProfile, ExerciseDefinition } from '../types';
-import { Activity, CheckCircle2, Flame, Zap, Calendar, Edit3, Save, X, Plus, UserCircle, Play, Repeat, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
+import { Activity, CheckCircle2, Flame, Zap, Calendar, Edit3, Save, X, Plus, UserCircle, Play, Repeat, Sparkles } from 'lucide-react';
 import { View } from '../types';
 import AnatomyViewer from '../components/Anatomy/AnatomyViewer';
 import { getTrainedMuscleIds } from '../constants/muscleMapping';
@@ -9,7 +9,7 @@ import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 import { UserState } from '../types';
 import { getRankForLevel, calculateStreak } from '../services/gamificationService';
 import { computeFatigue } from '../services/fatigueService';
-import { StatusWindow } from '../components/StatusWindow';
+import { StatusWindowModal } from '../components/StatusWindowModal';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -155,7 +155,6 @@ export const Dashboard: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [newHabitName, setNewHabitName] = useState('');
   const [systemMessage, setSystemMessage] = useState<string>(storageService.getLastSystemMessage());
-  const [statusOpenMobile, setStatusOpenMobile] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 1000); // Update every second for recovery timer
@@ -325,34 +324,16 @@ export const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-8 xl:items-start">
-      {/* ── LEFT COLUMN — main dashboard surface ───────────────────────── */}
-      <div className="space-y-8">
-      {/* ── Mobile / tablet Status Window (slide-up sheet) ──────────────── */}
+    <div className="space-y-8">
+      {/* ── Compact Status Window trigger (opens elegant modal) ────────── */}
       {profile && (
-        <div className="xl:hidden animate-slide-up">
-          <button
-            onClick={() => setStatusOpenMobile(o => !o)}
-            className="w-full flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-900/60 border border-cyan-500/25 rounded-2xl px-4 py-3 shadow-lg shadow-cyan-500/5"
-          >
-            <div className="flex items-center space-x-2">
-              <Sparkles size={14} className="text-cyan-400" />
-              <span className="text-[11px] font-mono uppercase tracking-widest text-cyan-300 font-bold">
-                {statusOpenMobile ? 'Hide Status Window' : 'Open Status Window'}
-              </span>
-            </div>
-            {statusOpenMobile ? <ChevronUp size={16} className="text-cyan-400" /> : <ChevronDown size={16} className="text-cyan-400" />}
-          </button>
-          {statusOpenMobile && (
-            <div className="mt-3 animate-slide-up">
-              <StatusWindow
-                gymProfile={profile}
-                workouts={workouts}
-                fatigue={fatigue}
-                displayName={userState?.name || ''}
-              />
-            </div>
-          )}
+        <div className="animate-slide-up">
+          <StatusWindowModal
+            gymProfile={profile}
+            workouts={workouts}
+            fatigue={fatigue}
+            displayName={userState?.name || ''}
+          />
         </div>
       )}
 
@@ -808,18 +789,6 @@ export const Dashboard: React.FC = () => {
           </div>
         )
       }
-      </div>
-      {/* ── RIGHT COLUMN — persistent Status Window (desktop only) ─────── */}
-      {profile && (
-        <div className="hidden xl:block sticky top-8 animate-slide-up">
-          <StatusWindow
-            gymProfile={profile}
-            workouts={workouts}
-            fatigue={fatigue}
-            displayName={userState?.name || ''}
-          />
-        </div>
-      )}
     </div>
   );
 };
