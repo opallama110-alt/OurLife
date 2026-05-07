@@ -1,6 +1,13 @@
-import { Transaction, Habit, WorkoutLog, UserState, GymProfile, GymSchedule, UserProfile } from '../types';
+import { Transaction, Habit, WorkoutLog, UserState, GymProfile, GymSchedule, UserProfile, ExerciseDefinition, MuscleGroup } from '../types';
 import { INITIAL_HABITS } from '../config/constants';
-import { DEFAULT_GYM_PROFILE, rolloverMonthlyIfNeeded, getCurrentMonthKey } from './gamificationService';
+import {
+  DEFAULT_GYM_PROFILE,
+  rolloverMonthlyIfNeeded,
+  getCurrentMonthKey,
+  getLevelFromXP,
+  getRankForLevel,
+  getTitleForLevel,
+} from './gamificationService';
 import { rtdb, auth, db } from '../firebase-config'; 
 import { ref, get, set, update, onValue, off } from 'firebase/database';
 import { collection, query as firestoreQuery, orderBy, limit, getDocs, onSnapshot, doc, setDoc } from 'firebase/firestore';
@@ -50,6 +57,24 @@ const listeners: (() => void)[] = [];
 export const notifyCtx = () => listeners.forEach(l => l());
 
 let activeSubscriptions: (() => void)[] = [];
+
+// ═══════════ CROSS-PAGE WORKOUT LAUNCH STATE ═══════════
+// Used by Dashboard "Today's Plan" / "Repeat Last" cards to hand a pre-built
+// session to GymTracker, bypassing the muscle/exercise pickers entirely.
+// Ephemeral — lives only in memory, not persisted.
+export type PendingWorkout =
+  | { kind: 'repeat'; exercises: ExerciseDefinition[]; type: string }
+  | { kind: 'schedule'; muscles: MuscleGroup[]; label: string }
+  | { kind: 'package'; muscles: MuscleGroup[]; label: string }
+  | null;
+
+let pendingWorkout: PendingWorkout = null;
+
+// ═══════════ SYSTEM CHAT STATE ═══════════
+// Last message returned by aiService.chat — surfaced as a Dashboard "System Briefing" card.
+let lastSystemMessage: string = (() => {
+  try { return localStorage.getItem('ourlife_last_system_message') || ''; } catch { return ''; }
+})();
 
 export const storageService = {
   subscribe: (listener: () => void) => {
@@ -346,6 +371,66 @@ export const storageService = {
 
     notifyCtx();
   },
+
+  // ═══════════ SYSTEM MUTATIONS (AI Tool Calling) ═══════════
+  // Reused by aiService when the LLM returns tool calls.
+  // Both delegate persistence to saveGymProfile so localStorage + RTDB + Firestore stay aligned.
+
+  applySystemPenalty: (xpDeduction: number, resetStreak: boolean): GymProfile => {
+    const current = localCache.gymProfile;
+    const newTotalXP = Math.max(0, (current.totalXP || 0) - Math.max(0, xpDeduction));
+    const newLevel = getLevelFromXP(newTotalXP);
+    const newRank = getRankForLevel(newLevel);
+    const newTitle = getTitleForLevel(newLevel);
+    const next: GymProfile = {
+      ...current,
+      totalXP: newTotalXP,
+      level: newLevel,
+      rank: newRank.name,
+      rankEmoji: newRank.emoji,
+      title: newTitle.title,
+      currentStreak: resetStreak ? 0 : current.currentStreak,
+    };
+    storageService.saveGymProfile(next);
+    return next;
+  },
+
+  rewardSystemQuest: (xpBonus: number): GymProfile => {
+    const current = localCache.gymProfile;
+    const newTotalXP = (current.totalXP || 0) + Math.max(0, xpBonus);
+    const newLevel = getLevelFromXP(newTotalXP);
+    const newRank = getRankForLevel(newLevel);
+    const newTitle = getTitleForLevel(newLevel);
+    const next: GymProfile = {
+      ...current,
+      totalXP: newTotalXP,
+      level: newLevel,
+      rank: newRank.name,
+      rankEmoji: newRank.emoji,
+      title: newTitle.title,
+    };
+    storageService.saveGymProfile(next);
+    return next;
+  },
+
+  // ═══════════ PENDING WORKOUT (Dashboard → GymTracker handoff) ═══════════
+  setPendingWorkout: (p: PendingWorkout): void => {
+    pendingWorkout = p;
+  },
+  consumePendingWorkout: (): PendingWorkout => {
+    const p = pendingWorkout;
+    pendingWorkout = null;
+    return p;
+  },
+  peekPendingWorkout: (): PendingWorkout => pendingWorkout,
+
+  // ═══════════ LAST SYSTEM MESSAGE (Dashboard System Briefing) ═══════════
+  saveLastSystemMessage: (msg: string): void => {
+    lastSystemMessage = msg || '';
+    try { localStorage.setItem('ourlife_last_system_message', lastSystemMessage); } catch {}
+    notifyCtx();
+  },
+  getLastSystemMessage: (): string => lastSystemMessage,
 
   getGymSchedule: (): GymSchedule => localCache.gymSchedule,
   saveGymSchedule: (schedule: GymSchedule) => {
