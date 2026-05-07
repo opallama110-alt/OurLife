@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles, X, Send, Loader2 } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { storageService } from '../services/storageService';
+import { SystemPet, PetEmotion } from './SystemPet';
 
 type ChatMsg = {
   id: string;
@@ -22,6 +23,7 @@ export const SystemChat: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState(storageService.getGymProfile());
+  const [emotion, setEmotion] = useState<PetEmotion>('idle');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Hydrate the most recent System verdict on first open so the user sees continuity.
@@ -40,6 +42,16 @@ export const SystemChat: React.FC = () => {
     return unsub;
   }, []);
 
+  // Pet idle mood — derive from profile when not actively in a request cycle.
+  // 'thinking' / 'happy' / 'excited' / 'shocked' / 'sad' get set explicitly by
+  // send(); this only handles the resting state between interactions.
+  useEffect(() => {
+    if (loading) return; // 'thinking' is owned by send() — don't fight it
+    const streak = profile.currentStreak ?? 0;
+    const hasHistory = (profile.workoutsCompleted ?? 0) > 0;
+    setEmotion(streak === 0 && hasHistory ? 'sad' : 'idle');
+  }, [profile, loading]);
+
   // Auto-scroll to bottom on new message.
   useEffect(() => {
     if (scrollRef.current) {
@@ -55,13 +67,26 @@ export const SystemChat: React.FC = () => {
     setInput('');
     setLoading(true);
     setError(null);
+    setEmotion('thinking');
     try {
       const reply = await aiService.chat(text);
       const sysMsg: ChatMsg = { id: `s_${Date.now()}`, role: 'system', text: reply || '...' };
       setMessages(prev => [...prev, sysMsg]);
+
+      // Heuristic emotion mapping from response text. Cheap; can be upgraded
+      // later by reading tool-call results directly from aiService.
+      const lower = (reply || '').toLowerCase();
+      if (/penalty|deducted|broken|punish/i.test(lower)) {
+        setEmotion('shocked');
+      } else if (/quest|level up|bonus|achievement|xp granted|reward/i.test(lower)) {
+        setEmotion('excited');
+      } else {
+        setEmotion('happy');
+      }
     } catch (e: any) {
       console.error('[SystemChat] aiService.chat failed:', e);
       setError(e?.message || 'The System is unreachable.');
+      setEmotion('sad');
     } finally {
       setLoading(false);
     }
@@ -104,9 +129,7 @@ export const SystemChat: React.FC = () => {
             {/* Header */}
             <div className="relative z-10 flex items-center justify-between p-4 border-b border-slate-800/80">
               <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center shadow-lg shadow-red-500/40">
-                  <Sparkles size={18} className="text-white" />
-                </div>
+                <SystemPet emotion={emotion} size="sm" />
                 <div>
                   <h2 className="text-sm font-bold uppercase tracking-widest text-white font-mono">The System</h2>
                   <p className="text-[10px] text-slate-500 font-mono">
@@ -130,9 +153,7 @@ export const SystemChat: React.FC = () => {
             <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto px-4 py-4 space-y-3 custom-scrollbar">
               {messages.length === 0 && !loading && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-500/20 to-amber-500/20 border border-red-500/30 flex items-center justify-center mb-4">
-                    <Sparkles size={28} className="text-red-400" />
-                  </div>
+                  <SystemPet emotion={emotion} size="lg" className="mb-4" />
                   <p className="text-sm text-slate-300 font-medium mb-1">The System is listening.</p>
                   <p className="text-xs text-slate-500 max-w-[260px]">
                     Report a missed session, request a quest, or ask for guidance. The System can grant XP and apply penalties directly.
