@@ -10,6 +10,7 @@ import { Settings } from './components/Settings';
 import { VerifyEmailGate } from './components/VerifyEmailGate';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { storageService } from './services/storageService';
+import { migrationService } from './services/migrationService';
 
 // --- Protected Route Wrapper ---
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -78,6 +79,11 @@ const AppRoutes: React.FC = () => {
 };
 
 const App: React.FC = () => {
+  // One-shot legacy data migration (idempotent — safe on every boot).
+  useEffect(() => {
+    migrationService.migrateAgeToDateOfBirth();
+  }, []);
+
   return (
     <AuthProvider>
       <AppRoutes />

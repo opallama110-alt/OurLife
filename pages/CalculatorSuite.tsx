@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Calculator, Zap, Activity, Scale, Heart, Utensils, ChevronRight, Dumbbell, Timer, Info } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { UserState } from '../types';
+import { calculateAge } from '../utils/dateUtils';
 
 type ToolType = 'strength' | 'nutrition' | 'plates' | 'timer' | null;
 
@@ -39,7 +40,7 @@ export const CalculatorSuite: React.FC = () => {
     const oneRepMax = weight > 0 && reps > 0 ? Math.round(weight * (1 + reps / 30)) : 0;
 
     // TDEE & Macros — seeded from UserState so the user doesn't have to retype.
-    const [age, setAge] = useState<number>(initialUser.age || 20);
+    const [age, setAge] = useState<number>(initialUser.dateOfBirth ? calculateAge(initialUser.dateOfBirth) : 20);
     const [gender, setGender] = useState<'male' | 'female'>(initialUser.gender === 'Female' ? 'female' : 'male');
     const [height, setHeight] = useState<number>(initialUser.height || 170);
     const [bodyWeight, setBodyWeight] = useState<number>(initialUser.weight || 65);
@@ -55,11 +56,11 @@ export const CalculatorSuite: React.FC = () => {
     // Keep nutrition inputs in lockstep with the live profile so editing the
     // profile reflects here without a remount.
     useEffect(() => {
-        if (userState.age) setAge(userState.age);
+        if (userState.dateOfBirth) setAge(calculateAge(userState.dateOfBirth));
         if (userState.height) setHeight(userState.height);
         if (userState.weight) setBodyWeight(userState.weight);
         if (userState.gender) setGender(userState.gender === 'Female' ? 'female' : 'male');
-    }, [userState.age, userState.height, userState.weight, userState.gender]);
+    }, [userState.dateOfBirth, userState.height, userState.weight, userState.gender]);
 
     // --- CALCULATIONS ---
 

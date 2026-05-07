@@ -116,7 +116,7 @@ export interface UserState {
   height: number; // cm
   weight: number; // kg
   gender: 'Male' | 'Female';
-  age: number;
+  dateOfBirth: string; // ISO 8601 YYYY-MM-DD; age is derived via calculateAge()
   fitnessGoal: 'Lose Weight' | 'Build Muscle' | 'Keep Fit';
   activityLevel: 'Sedentary' | 'Light' | 'Moderate' | 'Active';
   dailyBudget: number; // Daily spending limit

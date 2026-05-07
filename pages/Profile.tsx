@@ -13,6 +13,8 @@ import {
     getTitleForLevel,
 } from '../services/gamificationService';
 import { calcBMI, bmiSliderStyle } from '../utils/bmi';
+import { calculateAge } from '../utils/dateUtils';
+import { DateOfBirthPicker } from '../components/DateOfBirthPicker';
 
 type CompareUser = {
     id: string;
@@ -106,15 +108,18 @@ export const Profile: React.FC = () => {
                         />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs text-slate-500 font-mono uppercase mb-1.5">Age</label>
-                            <input
-                                type="number"
-                                value={user.age}
-                                onChange={e => handleChange('age', parseInt(e.target.value) || 0)}
-                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500 appearance-none"
+                            <DateOfBirthPicker
+                                value={user.dateOfBirth || ''}
+                                onChange={(date) => handleChange('dateOfBirth', date)}
+                                label="Date of Birth"
                             />
+                            {user.dateOfBirth && (
+                                <p className="text-xs text-slate-500 font-mono mt-1">
+                                    Age: {calculateAge(user.dateOfBirth)} (auto)
+                                </p>
+                            )}
                         </div>
                         <div>
                             <label className="block text-xs text-slate-500 font-mono uppercase mb-1.5">Gender</label>

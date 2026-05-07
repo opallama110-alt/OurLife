@@ -13,6 +13,7 @@ import {
 import { GymSchedule } from '../types';
 import { calcBMI, bmiSliderStyle } from '../utils/bmi';
 import AnatomyViewer from './Anatomy/AnatomyViewer';
+import { DateOfBirthPicker } from './DateOfBirthPicker';
 import { getTrainedMuscleIds } from '../constants/muscleMapping';
 
 const EQUIPMENT_OPTIONS = [
@@ -61,7 +62,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     const [formData, setFormData] = useState<Partial<UserState>>({
         name: '',
         gender: 'Male',
-        age: 25,
+        dateOfBirth: '',
         height: 170,
         weight: 60,
         fitnessGoal: 'Build Muscle',
@@ -196,15 +197,12 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                             ))}
                         </div>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1.5">Usia</label>
-                        <input
-                            type="number"
-                            value={formData.age}
-                            onChange={(e) => updateField('age', parseInt(e.target.value) || 0)}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-white focus:outline-none focus:border-cyan-500 transition-colors appearance-none"
-                        />
-                    </div>
+                    <DateOfBirthPicker
+                        value={formData.dateOfBirth || ''}
+                        onChange={(date) => updateField('dateOfBirth', date)}
+                        label="Tanggal Lahir"
+                        required
+                    />
                 </div>
             </div>
         </div>

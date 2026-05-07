@@ -6,6 +6,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineCh
 import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 import { GymProfile, WorkoutLog, MuscleGroup } from '../types';
 import { calculateStreak } from '../services/gamificationService';
+import { calculateAge } from '../utils/dateUtils';
 import { ref, get, remove } from 'firebase/database';
 import { rtdb } from '../firebase-config';
 
@@ -401,7 +402,7 @@ export const AdminDashboard: React.FC = () => {
                                         <div className="text-[10px] text-slate-500 truncate font-mono">{u.email}</div>
                                     </div>
                                     <div className="col-span-2 text-center">
-                                        <div className="text-white font-mono text-sm">{u.userState?.age || u.age || '-'}</div>
+                                        <div className="text-white font-mono text-sm">{u.userState?.dateOfBirth ? calculateAge(u.userState.dateOfBirth) : (u.age || '-')}</div>
                                     </div>
                                     <div className="col-span-2 text-center">
                                         <div className="text-white font-mono text-sm capitalize">{u.userState?.gender || u.gender || 'Not Set'}</div>

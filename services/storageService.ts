@@ -8,7 +8,8 @@ import {
   getRankForLevel,
   getTitleForLevel,
 } from './gamificationService';
-import { rtdb, auth, db } from '../firebase-config'; 
+import { calculateAge } from '../utils/dateUtils';
+import { rtdb, auth, db } from '../firebase-config';
 import { ref, get, set, update, onValue, off } from 'firebase/database';
 import { collection, query as firestoreQuery, orderBy, limit, getDocs, onSnapshot, doc, setDoc } from 'firebase/firestore';
 
@@ -37,7 +38,7 @@ const localCache: StoreCache = {
   habits: _safeParse('jarvis_habits', INITIAL_HABITS),
   userState: _safeParse('jarvis_user_state', {
     name: 'Naufal', isOnboarded: false, height: 170, weight: 60, gender: 'Male',
-    age: 25, fitnessGoal: 'Build Muscle', activityLevel: 'Moderate', dailyBudget: 150000
+    dateOfBirth: '', fitnessGoal: 'Build Muscle', activityLevel: 'Moderate', dailyBudget: 150000
   }),
   gymProfile: _safeParse('jarvis_gym_profile', DEFAULT_GYM_PROFILE),
   gymSchedule: _safeParse('jarvis_gym_schedule', {
@@ -239,7 +240,8 @@ export const storageService = {
         budget: localCache.userState?.dailyBudget || 0,
         weight: localCache.userState?.weight || 0,
         height: localCache.userState?.height || 0,
-        age: localCache.userState?.age || 0,
+        age: calculateAge(localCache.userState?.dateOfBirth || ''),
+        dateOfBirth: localCache.userState?.dateOfBirth || '',
         // Monthly League fields — indexable for "top monthly XP" queries
         monthlyXP: payload.monthlyXP,
         monthlyWorkouts: payload.monthlyWorkouts,
@@ -518,6 +520,7 @@ export const storageService = {
           weight: d.weight || 0,
           height: d.height || 0,
           age: d.age || 0,
+          dateOfBirth: d.dateOfBirth || '',
           role: d.role || 'user',
           // Compare fields — monthly league + streak
           monthlyXP: d.monthlyXP ?? 0,
@@ -573,7 +576,7 @@ export const storageService = {
 
     return `
       Current Date: ${today}
-      User Profile: ${userState.name}, ${userState.gender}, ${userState.age}y, ${userState.height}cm, ${userState.weight}kg
+      User Profile: ${userState.name}, ${userState.gender}, ${calculateAge(userState.dateOfBirth)}y, ${userState.height}cm, ${userState.weight}kg
       Goal: ${userState.fitnessGoal} (${userState.activityLevel} Activity)
       Last Workout: ${lastWorkout}
       Gym Level: ${profile.level} (${profile.rank}) - ${profile.totalXP} XP
