@@ -110,6 +110,16 @@ export type IdealDuration = '30 Menit' | '45 Menit' | '>1 Jam';
 export type FocusArea = 'Dada & Lengan' | 'Kaki & Bokong' | 'Core' | 'Seluruh Tubuh';
 export type Environment = 'Home' | 'Gym';
 
+// Solo Leveling-style 5-stat character signature derived from workout patterns.
+// All values clamped to 0–100 in attributeService.
+export interface Attributes {
+  STR: number; // Strength — heavy compound lifts
+  VIT: number; // Vitality — workout volume + streak consistency
+  AGI: number; // Agility — cardio/HIIT/bodyweight
+  PER: number; // Perception — habit discipline
+  INT: number; // Intelligence — exercise/muscle variety
+}
+
 export interface UserState {
   name: string;
   isOnboarded: boolean;

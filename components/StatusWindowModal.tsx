@@ -3,12 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import {
     RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer,
 } from 'recharts';
-import { Sparkles, X, Flame, Activity, ChevronRight, Trophy } from 'lucide-react';
+import { Sparkles, X, Flame, Activity, ChevronRight, Trophy, Swords, Crown, Radio } from 'lucide-react';
 import { GymProfile, WorkoutLog } from '../types';
 import { FatigueReport } from '../services/fatigueService';
 import {
     getRankForLevel, getTitleForLevel, getXPProgress, evaluateAchievements,
 } from '../services/gamificationService';
+import {
+    calculateAttributes, getJobClass, getRankProgress,
+} from '../services/attributeService';
 import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 
 interface Props {
@@ -44,6 +47,13 @@ export const StatusWindowModal: React.FC<Props> = ({
     const achievements = evaluateAchievements(workouts, gymProfile);
     const unlockedCount = achievements.filter(a => a.unlocked).length;
 
+    // ── Phase 3B: attributes / job class / rank progress ──
+    const attributes = calculateAttributes(gymProfile, workouts);
+    const jobClass = getJobClass(rank.name, attributes);
+    const rankProgress = getRankProgress(level);
+    const attributeRadarData = (Object.entries(attributes) as [keyof typeof attributes, number][])
+        .map(([stat, value]) => ({ stat, value }));
+
     // Build radar dataset — one ring per muscle group, fatigue 0–100.
     // Hidden when no recent stimulus so the radar stays readable.
     const radarData = fatigue.perMuscle
@@ -76,6 +86,9 @@ export const StatusWindowModal: React.FC<Props> = ({
                                 </span>
                             </div>
                             <p className={`text-xs font-mono truncate ${title.color}`}>&ldquo;{title.title}&rdquo;</p>
+                            <p className="text-[10px] font-mono text-cyan-400/70 truncate">
+                                <Swords size={9} className="inline mr-1 -mt-0.5" />{jobClass}
+                            </p>
                         </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
@@ -167,6 +180,61 @@ export const StatusWindowModal: React.FC<Props> = ({
                                 </div>
                             </div>
 
+                            {/* Attributes Block — STR/VIT/AGI/PER/INT (Phase 3B) */}
+                            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                        <Swords size={12} className="text-cyan-400" />
+                                        <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400">
+                                            Attributes
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-5 gap-2">
+                                    {(Object.entries(attributes) as [keyof typeof attributes, number][]).map(([key, value]) => (
+                                        <div key={key} className="bg-slate-900/60 border border-slate-800 rounded-lg py-2 text-center">
+                                            <div className="text-[9px] font-mono uppercase tracking-wider text-cyan-400/80">{key}</div>
+                                            <div className="text-base font-bold font-mono text-white mt-0.5">{value}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Power Signature Radar — visualizes the 5 attributes (Phase 3B) */}
+                            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <Sparkles size={12} className="text-purple-400" />
+                                        <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400">
+                                            Power Signature
+                                        </span>
+                                    </div>
+                                </div>
+                                <ResponsiveContainer width="100%" height={220}>
+                                    <RadarChart data={attributeRadarData} outerRadius="75%">
+                                        <PolarGrid stroke="#1e293b" />
+                                        <PolarAngleAxis
+                                            dataKey="stat"
+                                            tick={{ fill: '#a78bfa', fontSize: 10, fontFamily: 'monospace' }}
+                                        />
+                                        <PolarRadiusAxis
+                                            angle={90}
+                                            domain={[0, 100]}
+                                            tick={{ fill: '#475569', fontSize: 8 }}
+                                            stroke="#1e293b"
+                                        />
+                                        <Radar
+                                            name="Attribute"
+                                            dataKey="value"
+                                            stroke="#a78bfa"
+                                            fill="#a78bfa"
+                                            fillOpacity={0.35}
+                                            strokeWidth={2}
+                                        />
+                                    </RadarChart>
+                                </ResponsiveContainer>
+                            </div>
+
                             {/* Fatigue Radar */}
                             <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3">
                                 <div className="flex items-center justify-between mb-2">
@@ -215,6 +283,52 @@ export const StatusWindowModal: React.FC<Props> = ({
                                 )}
                             </div>
 
+                            {/* Combat Stats Grid (Phase 3B) */}
+                            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Activity size={12} className="text-cyan-400" />
+                                    <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400">
+                                        Combat Stats
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Stat label="Total Workouts" value={(gymProfile.workoutsCompleted || 0).toLocaleString()} accent="text-white" />
+                                    <Stat label="Total Sets" value={(gymProfile.totalSetsCompleted || 0).toLocaleString()} accent="text-white" />
+                                    <Stat label="Total XP" value={totalXP.toLocaleString()} accent="text-cyan-300" />
+                                    <Stat
+                                        label="Best Streak"
+                                        value={gymProfile.longestStreak ?? 0}
+                                        accent="text-orange-300"
+                                        icon={<Flame size={11} className="text-orange-400" />}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Rank Progress Bar (Phase 3B) */}
+                            <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Crown size={12} className="text-amber-400" />
+                                    <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400">
+                                        Rank Progress
+                                    </span>
+                                </div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <span className={`text-xs font-mono font-bold ${rank.color}`}>{rankProgress.current}</span>
+                                    <span className="text-xs font-mono text-slate-500">{rankProgress.next}</span>
+                                </div>
+                                <div className="relative h-2 bg-slate-950 border border-slate-800 rounded-full overflow-hidden">
+                                    <div
+                                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full transition-all duration-700"
+                                        style={{ width: `${rankProgress.progressPercent}%`, boxShadow: '0 0 10px rgba(139,92,246,0.5)' }}
+                                    />
+                                </div>
+                                <p className="text-[9px] font-mono text-slate-500 text-center mt-1.5">
+                                    {rankProgress.next === 'MAX'
+                                        ? 'MAX RANK ACHIEVED'
+                                        : `${rankProgress.levelsToNext} ${rankProgress.levelsToNext === 1 ? 'level' : 'levels'} to ${rankProgress.next}`}
+                                </p>
+                            </div>
+
                             {/* Achievements snapshot */}
                             <button
                                 onClick={() => { setOpen(false); navigate('/profile'); }}
@@ -231,6 +345,18 @@ export const StatusWindowModal: React.FC<Props> = ({
                                 </div>
                                 <ChevronRight size={14} className="text-slate-600 group-hover:text-amber-400 group-hover:translate-x-0.5 transition-all" />
                             </button>
+
+                            {/* SYSTEM ONLINE • REC indicator (Phase 3B) */}
+                            <div className="flex items-center justify-between text-[9px] font-mono text-slate-500 pt-1 px-1">
+                                <span className="flex items-center gap-1.5">
+                                    <Radio size={10} className="text-cyan-400" />
+                                    <span className="tracking-widest uppercase">System Online</span>
+                                </span>
+                                <span className="flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                                    <span className="tracking-widest uppercase">Rec</span>
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
