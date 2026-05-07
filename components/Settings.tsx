@@ -119,7 +119,13 @@ export const Settings: React.FC = () => {
 const MyProfileTab: React.FC = () => {
   const { user } = useAuth();
 
-  const [displayName, setDisplayName] = useState(user?.displayName || '');
+  // UserState is the canonical in-app source (consumed by Profile, Compare,
+  // Dashboard greeting). Firebase Auth's displayName is a write-through
+  // replica for cross-app identity, not a read source. Fallback handles the
+  // edge case where storage hasn't hydrated yet on a fresh account.
+  const [displayName, setDisplayName] = useState(
+    storageService.getUserState().name || user?.displayName || ''
+  );
   const [photoURL, setPhotoURL] = useState(user?.photoURL || '');
   const [profileSave, setProfileSave] = useState<SaveState>('idle');
   const [profileError, setProfileError] = useState<string | null>(null);
