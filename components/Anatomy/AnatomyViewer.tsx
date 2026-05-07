@@ -311,31 +311,35 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
         stroke: #1e293b !important;
         stroke-width: 0.4;
         opacity: 0.95;
-        transition: stroke 0.6s ease, stroke-width 0.4s ease, opacity 0.6s ease;
+        transition: fill 0.6s ease, stroke 0.6s ease, stroke-width 0.4s ease, opacity 0.6s ease;
       }
 
       ${readySelectors ? `
       /* ── RESTED / READY ─────────────────────────────────────────────
-         Grey neutral outline. Communicates "fully recovered & available". */
+         Grey neutral outline. The Dashboard's ✓ Ready chip carries the
+         explicit text signal now, so the SVG outline doesn't need to
+         compete — drop-shadow filter removed (1 paint op vs filter pass
+         per state change), stroke-width softened. */
       ${readySelectors} {
         fill: #0f172a !important;
         stroke: #94a3b8 !important;
-        stroke-width: 1.2 !important;
+        stroke-width: 1.0 !important;
         opacity: 1 !important;
-        filter: drop-shadow(0 0 2px rgba(148, 163, 184, 0.45));
       }
       ` : ''}
 
       ${trainedSelectors ? `
       /* ── EXHAUSTED / RECOVERING ─────────────────────────────────────
-         Neon-red outline only — no fill flood. Reads at a glance without
-         hiding underlying anatomy. */
+         Translucent red fill + edge stroke. Anatomy stays readable
+         underneath (translucent ≠ flood), and dropping the drop-shadow
+         filter trades a per-path filter pass for a single paint op —
+         this is the real fix for the muscle picker's perceived "search
+         lag" across Dashboard, GymTracker picker, and active session. */
       ${trainedSelectors} {
-        fill: #0f172a !important;
+        fill: rgba(239, 68, 68, 0.45) !important;
         stroke: #ef4444 !important;
-        stroke-width: 1.4 !important;
+        stroke-width: 1.2 !important;
         opacity: 1 !important;
-        filter: drop-shadow(0 0 3px rgba(239, 68, 68, 0.7));
       }
       ` : ''}
 
