@@ -326,20 +326,6 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      {/* ── Inline Status Card (replaces StatusWindowModal) ─────────────
-           Compact identity always visible; chevron reveals attributes
-           grid + Power Signature radar + combat stats + rank progress. */}
-      {profile && (
-        <div className="animate-slide-up">
-          <StatusCard
-            gymProfile={profile}
-            workouts={workouts}
-            fatigue={fatigue}
-            displayName={userState?.name || ''}
-          />
-        </div>
-      )}
-
       {/* Greeting Header */}
       <div className="animate-slide-up">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
@@ -601,6 +587,19 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Hunter Status — collapsed identity / chevron-expand reveals
+            attributes / Power Signature / combat / rank progress. */}
+        {profile && (
+          <div className="animate-slide-up delay-200">
+            <StatusCard
+              gymProfile={profile}
+              workouts={workouts}
+              fatigue={fatigue}
+              displayName={userState?.name || ''}
+            />
+          </div>
+        )}
       </div>
 
       {/* ═══ MUSCLE RECOVERY MAP ═══ */}
