@@ -12,9 +12,11 @@ import { CalculatorSuite } from './pages/CalculatorSuite';
 import { VerifyEmailGate } from './components/VerifyEmailGate';
 import { TokenUsedModal } from './components/TokenUsedModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { AchievementProvider, useAchievements } from './context/AchievementContext';
 import { storageService } from './services/storageService';
 import { migrationService } from './services/migrationService';
 import { streakProtectionService, StreakProtectionResult } from './services/streakProtectionService';
+import { achievementService } from './services/achievementService';
 
 const OWNER_EMAILS = ['opallama110@gmail.com', 'opallama11@gmail.com'];
 
@@ -46,6 +48,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 const AppRoutes: React.FC = () => {
   const { user, hasProfile, emailVerified } = useAuth();
   const [tokenResult, setTokenResult] = useState<StreakProtectionResult | null>(null);
+  const { addUnlocks } = useAchievements();
 
   useEffect(() => {
     if (user && hasProfile) {
@@ -54,7 +57,15 @@ const AppRoutes: React.FC = () => {
       // self-rate-limited via lastTokenUsed inside the service.
       const result = streakProtectionService.checkAndProtectStreak();
       if (result?.tokenUsed) setTokenResult(result);
+
+      // Achievement boot check — picks up retroactively-met achievements on
+      // first run (Option A path) and any milestones the streak-protection
+      // step just crossed. checkAndGrant batches into one profile save.
+      const unlocks = achievementService.checkAndGrant();
+      if (unlocks.length > 0) addUnlocks(unlocks);
     }
+    // addUnlocks is stable via useCallback in the provider; safe to omit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, hasProfile]);
 
   // Hard gate — any signed-in user with an unverified email is held at VerifyEmailGate
@@ -113,7 +124,9 @@ const App: React.FC = () => {
 
   return (
     <AuthProvider>
-      <AppRoutes />
+      <AchievementProvider>
+        <AppRoutes />
+      </AchievementProvider>
     </AuthProvider>
   );
 };

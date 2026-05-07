@@ -3,6 +3,8 @@ import { Habit } from '../types';
 import { storageService } from '../services/storageService';
 import { aiService } from '../services/aiService';
 import { computeFatigue } from '../services/fatigueService';
+import { achievementService } from '../services/achievementService';
+import { useAchievements } from '../context/AchievementContext';
 import { Plus, Trash2, CheckCircle2, Circle, X, Clock, Flame, Trophy, Zap, Target, Sparkles, Loader2, Activity } from 'lucide-react';
 
 // Calculate current streak properly (consecutive days including today or yesterday)
@@ -210,6 +212,7 @@ const DailyProtocolEvaluator: React.FC<{
 };
 
 export const HabitTracker: React.FC = () => {
+  const { addUnlocks } = useAchievements();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newHabitName, setNewHabitName] = useState('');
@@ -266,6 +269,13 @@ export const HabitTracker: React.FC = () => {
         window.setTimeout(() => setTokenToast(null), 2800);
       }
     }
+
+    // Achievement check — habit-category entries (habit_starter, etc.) and
+    // anything XP-bumped by a token grant re-evaluates against fresh state.
+    try {
+      const unlocks = achievementService.checkAndGrant(undefined, undefined, updated);
+      if (unlocks.length > 0) addUnlocks(unlocks);
+    } catch (e) { console.error('[HabitTracker] achievement check:', e); }
   };
 
   const handleAddHabit = () => {

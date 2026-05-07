@@ -20,6 +20,8 @@ import {
   Search, ChevronLeft,
 } from 'lucide-react';
 import { Leaderboard } from '../components/Leaderboard';
+import { useAchievements } from '../context/AchievementContext';
+import { achievementService } from '../services/achievementService';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 import AnatomyViewer, { getViewForMuscle } from '../components/Anatomy/AnatomyViewer';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
@@ -577,6 +579,7 @@ const sortRoutinesByFocus = (routines: WorkoutRoutine[], focus?: FocusArea): Wor
 
 // ═══════════ MAIN GYMTRACKER ═══════════
 export const GymTracker: React.FC = () => {
+  const { addUnlocks } = useAchievements();
   const [logs, setLogs] = useState<WorkoutLog[]>([]);
   const [profile, setProfile] = useState<GymProfile>(storageService.getGymProfile());
   const [viewMode, setViewMode] = useState<'workout' | 'analytics'>('workout');
@@ -819,6 +822,13 @@ export const GymTracker: React.FC = () => {
     setProfile(newProfile);
     try { storageService.saveGymProfile(newProfile); } catch (e) { console.error('[GymTracker] saveGymProfile:', e); }
 
+    // Achievement check — workout-driven achievements (volume, muscle-group counts,
+    // streak, XP, rank, etc.) re-evaluate against the freshly saved state.
+    try {
+      const unlocks = achievementService.checkAndGrant();
+      if (unlocks.length > 0) addUnlocks(unlocks);
+    } catch (e) { console.error('[GymTracker] achievement check:', e); }
+
     // Reset
     setFlowStep('idle');
     setSelectedMuscles([]);
@@ -833,7 +843,9 @@ export const GymTracker: React.FC = () => {
     const updated = logs.filter(l => l.id !== id);
     setLogs(updated);
     try { storageService.saveWorkouts(updated); } catch { }
-    const newProfile = recalculateGymProfile(updated);
+    // Pass current profile in so token economy + unlocked achievements survive
+    // a delete-induced rebuild.
+    const newProfile = recalculateGymProfile(updated, profile);
     setProfile(newProfile);
     try { storageService.saveGymProfile(newProfile); } catch { }
   };
