@@ -15,6 +15,7 @@ import {
 import { calcBMI, bmiSliderStyle } from '../utils/bmi';
 import { calculateAge } from '../utils/dateUtils';
 import { DateOfBirthPicker } from '../components/DateOfBirthPicker';
+import { AchievementGallery } from '../components/AchievementGallery';
 
 type CompareUser = {
     id: string;
@@ -80,6 +81,9 @@ export const Profile: React.FC = () => {
 
             {/* ═══════════════════ PENGHARGAAN — Hunter Rank + Consistency Tracks ═══════════════════ */}
             <Penghargaan gymProfile={gymProfile} />
+
+            {/* ═══════════════════ PHASE 5B: ACHIEVEMENT GALLERY ═══════════════════ */}
+            <AchievementGallery />
 
             {/* ═══════════════════ PHASE 6: COMPARE UI ═══════════════════ */}
             <CompareSection gymProfile={gymProfile} displayName={user.name} />
