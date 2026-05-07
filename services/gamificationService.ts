@@ -1,4 +1,4 @@
-import { GymProfile, MuscleGroup, WorkoutLog } from '../types';
+import { GymProfile, Habit, MuscleGroup, WorkoutLog } from '../types';
 
 // ═══════════════════ RANK SYSTEM (Level-Based, Single Source of Truth) ═══════════════════
 interface RankTier {
@@ -124,6 +124,19 @@ export const getXPProgress = (totalXP: number): { current: number; needed: numbe
 // against the user's full WorkoutLog history + GymProfile and either unlocked or
 // shown locked in the BadgeGrid. Rarity drives the badge-* CSS class.
 export type AchievementRarity = 'iron' | 'bronze' | 'silver' | 'purple' | 'gold' | 'legendary' | 'mythic';
+export type AchievementCategory = 'workout' | 'streak' | 'xp' | 'rank' | 'habit' | 'special';
+
+// Tier-driven reward scale. Used as the default when an achievement omits
+// xpBonus/tokenReward — keeps reward economy consistent across the catalog.
+export const REWARDS_BY_RARITY: Record<AchievementRarity, { xp: number; tokens: number }> = {
+    iron:      { xp: 50,    tokens: 0 },
+    bronze:    { xp: 100,   tokens: 0 },
+    silver:    { xp: 250,   tokens: 0 },
+    purple:    { xp: 500,   tokens: 1 },
+    gold:      { xp: 1000,  tokens: 1 },
+    legendary: { xp: 5000,  tokens: 2 },
+    mythic:    { xp: 10000, tokens: 3 },
+};
 
 export interface Achievement {
     id: string;
@@ -132,7 +145,18 @@ export interface Achievement {
     emoji: string;
     rarity: AchievementRarity;
     /** Returns true when the user has earned this achievement. */
-    isUnlocked: (logs: WorkoutLog[], profile: GymProfile) => boolean;
+    isUnlocked: (logs: WorkoutLog[], profile: GymProfile, habits?: Habit[]) => boolean;
+
+    // ── Phase 5 additions (all optional; defaults derive from rarity) ──
+    category?: AchievementCategory;
+    /** Numeric target for the progress bar (e.g. 100 for "complete 100 sets"). */
+    requirement?: number;
+    /** Current value toward `requirement`. Boolean/multi-condition achievements omit this. */
+    getProgress?: (logs: WorkoutLog[], profile: GymProfile, habits?: Habit[]) => number;
+    /** Override the rarity-default reward XP. */
+    xpBonus?: number;
+    /** Override the rarity-default reward tokens. */
+    tokenReward?: number;
 }
 
 const countWorkoutsHittingMuscles = (logs: WorkoutLog[], muscles: MuscleGroup[]): number =>
@@ -151,6 +175,27 @@ const hasWorkoutAtHour = (logs: WorkoutLog[], predicate: (h: number) => boolean)
         return !isNaN(h) && predicate(h);
     });
 
+// ═══════════════════ HABIT HELPERS (Phase 5) ═══════════════════
+// Counts the longest run of consecutive days where ALL provided habits were
+// completed — used by habit-streak achievements.
+const consecutiveAllHabitDays = (habits: Habit[] | undefined): number => {
+    if (!habits || habits.length === 0) return 0;
+    const day = new Date();
+    day.setHours(0, 0, 0, 0);
+    let streak = 0;
+    while (true) {
+        const dateStr = day.toLocaleDateString('en-CA');
+        const allDone = habits.every(h => (h.completedDates || []).includes(dateStr));
+        if (!allDone) break;
+        streak++;
+        day.setDate(day.getDate() - 1);
+    }
+    return streak;
+};
+
+const totalHabitCompletions = (habits: Habit[] | undefined): number =>
+    (habits || []).reduce((s, h) => s + (h.completedDates?.length || 0), 0);
+
 export const ACHIEVEMENTS: Achievement[] = [
     {
         id: 'first_blood',
@@ -158,6 +203,9 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Logged your very first workout.',
         emoji: '🩸',
         rarity: 'iron',
+        category: 'workout',
+        requirement: 1,
+        getProgress: (logs) => logs.length,
         isUnlocked: (logs) => logs.length >= 1,
     },
     {
@@ -166,6 +214,9 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Completed 10 lifetime workouts.',
         emoji: '⚒️',
         rarity: 'iron',
+        category: 'workout',
+        requirement: 10,
+        getProgress: (logs) => logs.length,
         isUnlocked: (logs) => logs.length >= 10,
     },
     {
@@ -174,6 +225,9 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Crushed 10 leg-focused sessions.',
         emoji: '🦵',
         rarity: 'silver',
+        category: 'workout',
+        requirement: 10,
+        getProgress: (logs) => countWorkoutsHittingMuscles(logs, ['quads', 'hamstrings', 'glutes', 'calves']),
         isUnlocked: (logs) =>
             countWorkoutsHittingMuscles(logs, ['quads', 'hamstrings', 'glutes', 'calves']) >= 10,
     },
@@ -183,6 +237,9 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: '15 sessions hitting chest/shoulders/triceps.',
         emoji: '🤜',
         rarity: 'silver',
+        category: 'workout',
+        requirement: 15,
+        getProgress: (logs) => countWorkoutsHittingMuscles(logs, ['chest', 'shoulders', 'triceps']),
         isUnlocked: (logs) =>
             countWorkoutsHittingMuscles(logs, ['chest', 'shoulders', 'triceps']) >= 15,
     },
@@ -192,6 +249,9 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: '15 sessions hitting back & biceps.',
         emoji: '🪝',
         rarity: 'silver',
+        category: 'workout',
+        requirement: 15,
+        getProgress: (logs) => countWorkoutsHittingMuscles(logs, ['lats', 'traps', 'lower_back', 'biceps']),
         isUnlocked: (logs) =>
             countWorkoutsHittingMuscles(logs, ['lats', 'traps', 'lower_back', 'biceps']) >= 15,
     },
@@ -201,6 +261,9 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Logged 10 workouts touching abs or obliques.',
         emoji: '🧱',
         rarity: 'bronze',
+        category: 'workout',
+        requirement: 10,
+        getProgress: (logs) => countWorkoutsHittingMuscles(logs, ['abs', 'obliques']),
         isUnlocked: (logs) => countWorkoutsHittingMuscles(logs, ['abs', 'obliques']) >= 10,
     },
     {
@@ -209,6 +272,9 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Completed 100 sets across all sessions.',
         emoji: '💯',
         rarity: 'bronze',
+        category: 'workout',
+        requirement: 100,
+        getProgress: (logs) => countSets(logs),
         isUnlocked: (logs) => countSets(logs) >= 100,
     },
     {
@@ -217,6 +283,9 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Accumulated 5,000 lifetime XP.',
         emoji: '📈',
         rarity: 'purple',
+        category: 'xp',
+        requirement: 5000,
+        getProgress: (_logs, p) => p.totalXP || 0,
         isUnlocked: (_logs, p) => (p.totalXP || 0) >= 5000,
     },
     {
@@ -225,6 +294,9 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Held a 7-day workout streak.',
         emoji: '🔗',
         rarity: 'purple',
+        category: 'streak',
+        requirement: 7,
+        getProgress: (_logs, p) => p.longestStreak || 0,
         isUnlocked: (_logs, p) => (p.longestStreak || 0) >= 7,
     },
     {
@@ -233,6 +305,8 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Trained before 7 AM at least once.',
         emoji: '🌅',
         rarity: 'bronze',
+        category: 'special',
+        // Boolean — no progress bar.
         isUnlocked: (logs) => hasWorkoutAtHour(logs, h => h < 7),
     },
     {
@@ -241,6 +315,7 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Trained after 10 PM at least once.',
         emoji: '🌙',
         rarity: 'bronze',
+        category: 'special',
         isUnlocked: (logs) => hasWorkoutAtHour(logs, h => h >= 22),
     },
     {
@@ -249,6 +324,7 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Logged a heavy single — strength baseline set.',
         emoji: '🏋️',
         rarity: 'silver',
+        category: 'workout',
         isUnlocked: (logs) =>
             logs.some(l => (l.exercises || []).some(e => (e.reps || 0) === 1 && (e.weight || 0) > 0)),
     },
@@ -258,6 +334,8 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Trained on 5 distinct days within a single week.',
         emoji: '🗓️',
         rarity: 'purple',
+        category: 'streak',
+        // Multi-condition (sliding window) — skip progress bar.
         isUnlocked: (logs) => {
             // Walk a 7-day sliding window; any window with ≥5 unique dates wins.
             const sortedDates = Array.from(new Set(logs.map(l => l.date))).filter(Boolean).sort();
@@ -279,6 +357,8 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Logged squat, deadlift, AND bench press.',
         emoji: '👑',
         rarity: 'gold',
+        category: 'workout',
+        // Three-condition — skip progress bar.
         isUnlocked: (logs) =>
             exerciseNameHas(logs, /\bsquat\b/i) > 0 &&
             exerciseNameHas(logs, /\bdeadlift\b/i) > 0 &&
@@ -290,6 +370,9 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Held a 100-day workout streak.',
         emoji: '🛡️',
         rarity: 'gold',
+        category: 'streak',
+        requirement: 100,
+        getProgress: (_logs, p) => p.longestStreak || 0,
         isUnlocked: (_logs, p) => (p.longestStreak || 0) >= 100,
     },
     {
@@ -298,6 +381,9 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Reached Level 50 — the Shadow Monarch tier.',
         emoji: '🌑',
         rarity: 'legendary',
+        category: 'rank',
+        requirement: 50,
+        getProgress: (_logs, p) => p.level || 0,
         isUnlocked: (_logs, p) => (p.level || 0) >= 50,
     },
     {
@@ -306,12 +392,65 @@ export const ACHIEVEMENTS: Achievement[] = [
         description: 'Reached Level 100 — only a few have ever stood here.',
         emoji: '✨',
         rarity: 'mythic',
+        category: 'rank',
+        requirement: 100,
+        getProgress: (_logs, p) => p.level || 0,
         isUnlocked: (_logs, p) => (p.level || 0) >= 100,
+    },
+
+    // ═══════════════════ HABIT ACHIEVEMENTS (Phase 5) ═══════════════════
+    {
+        id: 'habit_starter',
+        label: 'Habit Starter',
+        description: 'Completed all daily habits 7 days running.',
+        emoji: '✅',
+        rarity: 'bronze',
+        category: 'habit',
+        requirement: 7,
+        getProgress: (_logs, _p, habits) => consecutiveAllHabitDays(habits),
+        isUnlocked: (_logs, _p, habits) => consecutiveAllHabitDays(habits) >= 7,
+    },
+    {
+        id: 'consistency_king',
+        label: 'Consistency King',
+        description: 'Completed all daily habits 30 days running.',
+        emoji: '🏅',
+        rarity: 'silver',
+        category: 'habit',
+        requirement: 30,
+        getProgress: (_logs, _p, habits) => consecutiveAllHabitDays(habits),
+        isUnlocked: (_logs, _p, habits) => consecutiveAllHabitDays(habits) >= 30,
+    },
+    {
+        id: 'discipline_master',
+        label: 'Discipline Master',
+        description: 'Completed all daily habits 100 days running.',
+        emoji: '🏆',
+        rarity: 'gold',
+        category: 'habit',
+        requirement: 100,
+        getProgress: (_logs, _p, habits) => consecutiveAllHabitDays(habits),
+        isUnlocked: (_logs, _p, habits) => consecutiveAllHabitDays(habits) >= 100,
+    },
+    {
+        id: 'thousand_acts',
+        label: 'Thousand Acts',
+        description: 'Logged 1,000 lifetime habit completions.',
+        emoji: '🌌',
+        rarity: 'purple',
+        category: 'habit',
+        requirement: 1000,
+        getProgress: (_logs, _p, habits) => totalHabitCompletions(habits),
+        isUnlocked: (_logs, _p, habits) => totalHabitCompletions(habits) >= 1000,
     },
 ];
 
-export const evaluateAchievements = (logs: WorkoutLog[], profile: GymProfile) =>
-    ACHIEVEMENTS.map(a => ({ ...a, unlocked: a.isUnlocked(logs, profile) }));
+export const evaluateAchievements = (
+    logs: WorkoutLog[],
+    profile: GymProfile,
+    habits?: Habit[],
+) =>
+    ACHIEVEMENTS.map(a => ({ ...a, unlocked: a.isUnlocked(logs, profile, habits) }));
 
 // ═══════════════════ XP CALCULATION ═══════════════════
 export const calculateWorkoutXP = (
@@ -411,6 +550,7 @@ export const DEFAULT_GYM_PROFILE: GymProfile = {
     streakFreezeTokens: 0,
     tokenProtectedDates: [],
     streakProtectionHistory: [],
+    unlockedAchievementIds: [],
 };
 
 // Update profile after workout
@@ -476,13 +616,14 @@ export const recalculateGymProfile = (
     const profile: GymProfile = JSON.parse(JSON.stringify(DEFAULT_GYM_PROFILE));
     const thisMonth = getCurrentMonthKey();
 
-    // Preserve the token economy across recalculation.
+    // Preserve the token economy + achievement record across recalculation.
     if (existing) {
         profile.streakFreezeTokens = existing.streakFreezeTokens || 0;
         profile.lastTokenEarned = existing.lastTokenEarned;
         profile.lastTokenUsed = existing.lastTokenUsed;
         profile.tokenProtectedDates = existing.tokenProtectedDates || [];
         profile.streakProtectionHistory = existing.streakProtectionHistory || [];
+        profile.unlockedAchievementIds = existing.unlockedAchievementIds || [];
     }
 
     logs.forEach(log => {

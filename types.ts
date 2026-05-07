@@ -83,6 +83,11 @@ export interface GymProfile {
   lastTokenUsed?: string;                  // ISO timestamp — caps protection at 1/day
   tokenProtectedDates?: string[];          // dates a token bridged; treated as filled by streak math
   streakProtectionHistory?: { date: string; streakSaved: number }[];
+
+  // ── Achievements (Phase 5) ──
+  // IDs of achievements the user has unlocked. The catalog is computed live;
+  // this list is the persisted record of "rewards already granted / notified."
+  unlockedAchievementIds?: string[];
 }
 
 export interface Transaction {
