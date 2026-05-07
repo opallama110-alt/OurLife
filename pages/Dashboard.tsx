@@ -633,6 +633,31 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* AT-A-GLANCE STATUS CHIPS — answer "what can I train right now"
+            without making the user read the colored bars below. */}
+        <div className="mt-4 space-y-2 max-w-md mx-auto">
+          {readyMuscles.length > 0 && (
+            <div className="flex items-start gap-3 px-3 py-2 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-emerald-400 shrink-0 mt-0.5 whitespace-nowrap">
+                ✓ Ready
+              </span>
+              <span className="text-xs text-slate-300 leading-relaxed">
+                {readyMuscles.map(m => MUSCLE_GROUP_CONFIG[m]?.label || m).join(' · ')}
+              </span>
+            </div>
+          )}
+          {recoveringMuscles.length > 0 && (
+            <div className="flex items-start gap-3 px-3 py-2 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-amber-400 shrink-0 mt-0.5 whitespace-nowrap">
+                ⏳ Recovering
+              </span>
+              <span className="text-xs text-slate-400 leading-relaxed">
+                {recoveringMuscles.map(m => MUSCLE_GROUP_CONFIG[m]?.label || m).join(' · ')}
+              </span>
+            </div>
+          )}
+        </div>
+
         {/* RECOVERY TIMERS LIST */}
         {recoveringData.length > 0 && (
           <div className="mt-8 space-y-3 max-w-md mx-auto">
@@ -646,13 +671,13 @@ export const Dashboard: React.FC = () => {
 
               return (
                 <div key={i} className="p-3 bg-slate-900 border border-slate-800 rounded-xl relative overflow-hidden group">
-                  <div className={`absolute top-0 left-0 w-1 h-full ${nearlyDone ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]'}`} />
+                  <div className={`absolute top-0 left-0 w-1 h-full ${nearlyDone ? 'bg-emerald-500' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]'}`} />
 
                   <div className="flex items-center justify-between pl-2 mb-2">
                     <span className="text-sm font-bold text-slate-300 capitalize flex items-center tracking-wide">
                       {MUSCLE_GROUP_CONFIG[data.muscle as MuscleGroup]?.label || data.muscle}
                     </span>
-                    <span className={`text-[10px] font-mono font-bold tracking-widest ${nearlyDone ? 'text-emerald-400 drop-shadow-[0_0_5px_rgba(16,185,129,0.8)]' : 'text-red-400 drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]'}`}>
+                    <span className={`text-[10px] font-mono font-bold tracking-widest ${nearlyDone ? 'text-emerald-400' : 'text-red-400 drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]'}`}>
                       {data.hoursLeft}h {data.minutesLeft}m {data.secondsLeft}s remaining
                     </span>
                   </div>
@@ -660,7 +685,7 @@ export const Dashboard: React.FC = () => {
                   {/* Progress Bar - fills up as recovery progresses */}
                   <div className="w-full ml-2 h-1 bg-slate-800 rounded-full overflow-hidden">
                     <div
-                      className={`h-full ${nearlyDone ? 'bg-gradient-to-r from-emerald-600 to-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-gradient-to-r from-red-600 to-red-400 shadow-[0_0_8px_rgba(239,68,68,0.8)]'} transition-all duration-1000 ease-linear`}
+                      className={`h-full ${nearlyDone ? 'bg-emerald-700/70' : 'bg-gradient-to-r from-red-600 to-red-400 shadow-[0_0_8px_rgba(239,68,68,0.8)]'} transition-all duration-1000 ease-linear`}
                       style={{ width: `${pct}%` }}
                     />
                   </div>
