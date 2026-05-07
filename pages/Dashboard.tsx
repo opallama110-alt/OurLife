@@ -9,7 +9,7 @@ import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 import { UserState } from '../types';
 import { getRankForLevel, calculateStreak } from '../services/gamificationService';
 import { computeFatigue } from '../services/fatigueService';
-import { StatusWindowModal } from '../components/StatusWindowModal';
+import { StatusCard } from '../components/StatusCard';
 import { TokenDisplay } from '../components/TokenDisplay';
 
 import { useNavigate } from 'react-router-dom';
@@ -326,10 +326,12 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      {/* ── Compact Status Window trigger (opens elegant modal) ────────── */}
+      {/* ── Inline Status Card (replaces StatusWindowModal) ─────────────
+           Compact identity always visible; chevron reveals attributes
+           grid + Power Signature radar + combat stats + rank progress. */}
       {profile && (
         <div className="animate-slide-up">
-          <StatusWindowModal
+          <StatusCard
             gymProfile={profile}
             workouts={workouts}
             fatigue={fatigue}
