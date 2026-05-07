@@ -14,6 +14,7 @@ import { db, storage } from '../firebase-config';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
 import { Profile } from '../pages/Profile';
+import { TokenDisplay } from './TokenDisplay';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SETTINGS — 3-tab redesign
@@ -349,6 +350,15 @@ const GoalsTrackingTab: React.FC = () => {
   const [equipment, setEquipment] = useState<string[]>(['Dumbbell', 'Bodyweight']);
   const [prefsSave, setPrefsSave] = useState<SaveState>('idle');
   const [prefsLoading, setPrefsLoading] = useState(true);
+  const [tokens, setTokens] = useState<number>(storageService.getGymProfile().streakFreezeTokens || 0);
+
+  // Live-update token count when granted/used elsewhere.
+  useEffect(() => {
+    const unsub = storageService.subscribe(() => {
+      setTokens(storageService.getGymProfile().streakFreezeTokens || 0);
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -458,7 +468,29 @@ const GoalsTrackingTab: React.FC = () => {
         )}
       </section>
 
-      {/* ═══════════ HABIT TRACKING (stubs — Phase 4 wires Streak Protection) ═══════════ */}
+      {/* ═══════════ STREAK PROTECTION (Phase 4 — real) ═══════════ */}
+      <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
+        <h2 className="text-sm font-bold text-white flex items-center">
+          <Shield size={16} className="mr-2 text-cyan-400" />Streak Protection
+        </h2>
+
+        <div className="flex items-center justify-between bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 mb-1">
+              Freeze Tokens
+            </div>
+            <div className="text-xs text-slate-400">{tokens}/3 available</div>
+          </div>
+          <TokenDisplay count={tokens} size="lg" />
+        </div>
+
+        <div className="text-xs text-slate-400 space-y-1.5">
+          <p><span className="text-cyan-400 font-bold">How to earn:</span> Complete <span className="text-white">ALL</span> daily habits → +1 token (max 1/day, cap 3).</p>
+          <p><span className="text-cyan-400 font-bold">How they work:</span> Auto-applied when you miss a day, bridging the gap so your streak survives.</p>
+        </div>
+      </section>
+
+      {/* ═══════════ HABIT TRACKING (remaining stubs) ═══════════ */}
       <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
         <h2 className="text-sm font-bold text-white flex items-center">
           <Sparkles size={16} className="mr-2 text-cyan-400" />Habit Tracking
@@ -468,12 +500,6 @@ const GoalsTrackingTab: React.FC = () => {
           icon={Clock}
           label="Daily Check-in Reminder"
           value="09:00 AM"
-          disabled
-        />
-        <PrefRow
-          icon={Shield}
-          label="Streak Protection"
-          value="Tokens land in a future update"
           disabled
         />
         <PrefRow

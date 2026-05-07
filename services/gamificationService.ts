@@ -408,6 +408,9 @@ export const DEFAULT_GYM_PROFILE: GymProfile = {
     currentStreak: 0,
     longestStreak: 0,
     lastWorkoutDate: undefined,
+    streakFreezeTokens: 0,
+    tokenProtectedDates: [],
+    streakProtectionHistory: [],
 };
 
 // Update profile after workout
@@ -435,10 +438,16 @@ export const updateProfileAfterWorkout = (
     }
 
     const today = new Date().toLocaleDateString('en-CA');
-    const currentStreak = allLogs ? calculateStreak(allLogs) : (rolled.currentStreak || 0) + 1;
+    // Pass through any Streak Freeze Token-protected dates so the streak math
+    // continues to honor them after a workout log.
+    const protectedDates = rolled.tokenProtectedDates || [];
+    const currentStreak = allLogs
+        ? calculateStreak(allLogs, protectedDates)
+        : (rolled.currentStreak || 0) + 1;
     const longestStreak = Math.max(rolled.longestStreak || 0, currentStreak);
 
     return {
+        ...rolled, // preserve token fields and any future GymProfile additions
         totalXP: newTotalXP,
         level: newLevel,
         rank: newRank.name,
@@ -456,10 +465,25 @@ export const updateProfileAfterWorkout = (
     };
 };
 
-// Recalculate entire profile from history (for sync/deletion)
-export const recalculateGymProfile = (logs: WorkoutLog[]): GymProfile => {
+// Recalculate entire profile from history (for sync/deletion).
+// `existing` (optional) is the current profile — passed in so we don't lose
+// the token economy state (streakFreezeTokens, tokenProtectedDates, history)
+// when the caller does a "rebuild from logs" sync.
+export const recalculateGymProfile = (
+    logs: WorkoutLog[],
+    existing?: GymProfile,
+): GymProfile => {
     const profile: GymProfile = JSON.parse(JSON.stringify(DEFAULT_GYM_PROFILE));
     const thisMonth = getCurrentMonthKey();
+
+    // Preserve the token economy across recalculation.
+    if (existing) {
+        profile.streakFreezeTokens = existing.streakFreezeTokens || 0;
+        profile.lastTokenEarned = existing.lastTokenEarned;
+        profile.lastTokenUsed = existing.lastTokenUsed;
+        profile.tokenProtectedDates = existing.tokenProtectedDates || [];
+        profile.streakProtectionHistory = existing.streakProtectionHistory || [];
+    }
 
     logs.forEach(log => {
         const xp = log.xpEarned || 0;
@@ -484,9 +508,10 @@ export const recalculateGymProfile = (logs: WorkoutLog[]): GymProfile => {
         }
     });
 
-    // Streak fields
-    profile.currentStreak = calculateStreak(logs);
-    profile.longestStreak = calculateLongestStreak(logs);
+    // Streak fields — honor token-protected dates so a recalc doesn't undo
+    // a freeze the user already burned.
+    profile.currentStreak = calculateStreak(logs, profile.tokenProtectedDates || []);
+    profile.longestStreak = calculateLongestStreak(logs, profile.tokenProtectedDates || []);
     profile.lastWorkoutDate = logs.length > 0
         ? logs.map(l => l.date).sort().slice(-1)[0]
         : undefined;
@@ -505,14 +530,23 @@ export const recalculateGymProfile = (logs: WorkoutLog[]): GymProfile => {
 
 /**
  * Longest historical streak — scans unique workout dates chronologically
- * and tracks the longest run of consecutive days.
+ * and tracks the longest run of consecutive days. Optional `protectedDates`
+ * (Phase 4: Streak Protection) are merged into the date set so a token-bridged
+ * gap doesn't reset the streak.
  */
-export const calculateLongestStreak = (workoutLogs: WorkoutLog[]): number => {
-    if (!workoutLogs || workoutLogs.length === 0) return 0;
+export const calculateLongestStreak = (
+    workoutLogs: WorkoutLog[],
+    protectedDates: string[] = [],
+): number => {
+    const hasWorkouts = workoutLogs && workoutLogs.length > 0;
+    const hasProtected = protectedDates.length > 0;
+    if (!hasWorkouts && !hasProtected) return 0;
 
-    const uniqueDates = Array.from(new Set(workoutLogs.map(l => l.date)))
-        .filter(Boolean)
-        .sort(); // ascending — YYYY-MM-DD sorts lexicographically
+    const dates = new Set<string>();
+    for (const l of workoutLogs || []) if (l.date) dates.add(l.date);
+    for (const d of protectedDates) if (d) dates.add(d);
+
+    const uniqueDates = Array.from(dates).sort(); // ascending — YYYY-MM-DD sorts lexicographically
 
     let longest = 1;
     let current = 1;
@@ -535,30 +569,39 @@ export const calculateLongestStreak = (workoutLogs: WorkoutLog[]): number => {
 };
 
 // ═══════════════════ STREAK CALCULATION ═══════════════════
-export const calculateStreak = (workoutLogs: WorkoutLog[]): number => {
-    if (!workoutLogs || workoutLogs?.length === 0) return 0;
+// Optional `protectedDates` (Phase 4) are dates a Streak Freeze Token bridged.
+// They count as filled days alongside actual workouts so the chain survives.
+export const calculateStreak = (
+    workoutLogs: WorkoutLog[],
+    protectedDates: string[] = [],
+): number => {
+    const hasWorkouts = workoutLogs && workoutLogs.length > 0;
+    const hasProtected = protectedDates.length > 0;
+    if (!hasWorkouts && !hasProtected) return 0;
 
-    const workoutDates = new Set(workoutLogs.map(l => l.date));
+    const filledDates = new Set<string>();
+    for (const l of workoutLogs || []) if (l.date) filledDates.add(l.date);
+    for (const d of protectedDates) if (d) filledDates.add(d);
 
     let streak = 0;
     const currentDate = new Date();
     currentDate.setHours(0, 0, 0, 0);
 
     const todayStr = currentDate.toLocaleDateString('en-CA');
-    let hasWorkedOutToday = workoutDates.has(todayStr);
+    let hasFilledToday = filledDates.has(todayStr);
 
     const checkDate = new Date(currentDate);
-    if (!hasWorkedOutToday) {
+    if (!hasFilledToday) {
         checkDate.setDate(checkDate.getDate() - 1);
         const yesterdayStr = checkDate.toLocaleDateString('en-CA');
-        if (!workoutDates.has(yesterdayStr)) {
+        if (!filledDates.has(yesterdayStr)) {
             return 0;
         }
     }
 
     while (true) {
         const dateStr = checkDate.toLocaleDateString('en-CA');
-        if (workoutDates.has(dateStr)) {
+        if (filledDates.has(dateStr)) {
             streak++;
             checkDate.setDate(checkDate.getDate() - 1);
         } else {

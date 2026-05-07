@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Onboarding } from './components/Onboarding';
@@ -10,9 +10,11 @@ import { Settings } from './components/Settings';
 import { AdminDashboard } from './components/AdminDashboard';
 import { CalculatorSuite } from './pages/CalculatorSuite';
 import { VerifyEmailGate } from './components/VerifyEmailGate';
+import { TokenUsedModal } from './components/TokenUsedModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { storageService } from './services/storageService';
 import { migrationService } from './services/migrationService';
+import { streakProtectionService, StreakProtectionResult } from './services/streakProtectionService';
 
 const OWNER_EMAILS = ['opallama110@gmail.com', 'opallama11@gmail.com'];
 
@@ -43,10 +45,15 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 const AppRoutes: React.FC = () => {
   const { user, hasProfile, emailVerified } = useAuth();
+  const [tokenResult, setTokenResult] = useState<StreakProtectionResult | null>(null);
 
   useEffect(() => {
     if (user && hasProfile) {
       storageService.syncUser(user);
+      // Streak Protection check runs once on auth-ready boot. Idempotent —
+      // self-rate-limited via lastTokenUsed inside the service.
+      const result = streakProtectionService.checkAndProtectStreak();
+      if (result?.tokenUsed) setTokenResult(result);
     }
   }, [user, hasProfile]);
 
@@ -58,6 +65,13 @@ const AppRoutes: React.FC = () => {
 
   return (
     <Router>
+      <TokenUsedModal
+        open={!!tokenResult}
+        onClose={() => setTokenResult(null)}
+        protectedDate={tokenResult?.protectedDate}
+        tokensRemaining={tokenResult?.tokensRemaining ?? 0}
+        streakSaved={tokenResult?.streakSaved}
+      />
       <Routes>
         {/* Unprotected Auth Route */}
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />

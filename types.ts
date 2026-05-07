@@ -74,6 +74,15 @@ export interface GymProfile {
   currentStreak?: number;
   longestStreak?: number;
   lastWorkoutDate?: string;  // "YYYY-MM-DD"
+
+  // ── Streak Protection (Phase 4) ──
+  // Token economy: earn by completing all daily habits, max 3.
+  // Auto-applied when a missed day would otherwise break the streak.
+  streakFreezeTokens?: number;             // 0–3
+  lastTokenEarned?: string;                // "YYYY-MM-DD" — caps earning at 1/day
+  lastTokenUsed?: string;                  // ISO timestamp — caps protection at 1/day
+  tokenProtectedDates?: string[];          // dates a token bridged; treated as filled by streak math
+  streakProtectionHistory?: { date: string; streakSaved: number }[];
 }
 
 export interface Transaction {

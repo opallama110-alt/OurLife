@@ -10,6 +10,7 @@ import { UserState } from '../types';
 import { getRankForLevel, calculateStreak } from '../services/gamificationService';
 import { computeFatigue } from '../services/fatigueService';
 import { StatusWindowModal } from '../components/StatusWindowModal';
+import { TokenDisplay } from '../components/TokenDisplay';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -360,6 +361,14 @@ export const Dashboard: React.FC = () => {
               <div className="flex items-center space-x-2 bg-orange-500/10 border border-orange-500/30 rounded-full px-4 py-2 shadow-[0_0_10px_rgba(249,115,22,0.1)]">
                 <Flame size={16} className="text-orange-500 animate-pulse" />
                 <span className="text-sm font-bold text-orange-400 font-mono">{workoutStreak} Day Streak</span>
+              </div>
+            )}
+            {(profile?.streakFreezeTokens || 0) > 0 && (
+              <div
+                className="flex items-center space-x-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-2 shadow-[0_0_10px_rgba(6,182,212,0.1)]"
+                title="Streak Freeze Tokens — auto-protect your streak when you miss a day"
+              >
+                <TokenDisplay count={profile?.streakFreezeTokens || 0} size="sm" />
               </div>
             )}
             {profile && (() => {

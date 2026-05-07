@@ -214,6 +214,7 @@ export const HabitTracker: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newHabitName, setNewHabitName] = useState('');
   const [newHabitCue, setNewHabitCue] = useState('');
+  const [tokenToast, setTokenToast] = useState<string | null>(null);
 
   useEffect(() => {
     const loadedHabits = storageService.getHabits();
@@ -253,6 +254,18 @@ export const HabitTracker: React.FC = () => {
 
     setHabits(updated);
     storageService.saveHabits(updated);
+
+    // Phase 4: grant a Streak Freeze Token when ALL daily habits are now done.
+    // grantStreakToken self-rate-limits (max 3 tokens, max 1 earned/day) so we
+    // don't need to guard here — call it and let storage decide.
+    if (updated.length > 0 && updated.every(h => h.completedDates?.includes(today))) {
+      const granted = storageService.grantStreakToken();
+      if (granted) {
+        const remaining = storageService.getGymProfile().streakFreezeTokens || 0;
+        setTokenToast(`+1 Streak Freeze Token  (${remaining}/3)`);
+        window.setTimeout(() => setTokenToast(null), 2800);
+      }
+    }
   };
 
   const handleAddHabit = () => {
@@ -441,6 +454,14 @@ export const HabitTracker: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Phase 4 Streak Freeze Token earn toast */}
+      {tokenToast && (
+        <div className="fixed left-1/2 -translate-x-1/2 bottom-24 z-[70] px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-sm shadow-[0_0_25px_rgba(6,182,212,0.55)] animate-slide-up flex items-center gap-2">
+          <span className="drop-shadow-[0_0_4px_rgba(255,255,255,0.9)]">🛡️</span>
+          {tokenToast}
+        </div>
+      )}
 
       {/* Add Modal */}
       {showAddModal && (

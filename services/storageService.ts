@@ -260,7 +260,8 @@ export const storageService = {
 
     // 1. Recalculate Profile locally based on workouts
     const { recalculateGymProfile } = require('./gamificationService');
-    const newProfile = recalculateGymProfile(localCache.workouts);
+    // Pass in current profile so token economy survives the rebuild.
+    const newProfile = recalculateGymProfile(localCache.workouts, localCache.gymProfile);
 
     // 2. Save directly to cache
     localCache.gymProfile = newProfile;
@@ -395,6 +396,25 @@ export const storageService = {
     };
     storageService.saveGymProfile(next);
     return next;
+  },
+
+  // ═══════════ STREAK FREEZE TOKENS (Phase 4) ═══════════
+  // Caps at MAX_STREAK_TOKENS, plus once-per-day earning via lastTokenEarned.
+  // Returns true if a token was actually granted; false if at cap or already
+  // earned today.
+  grantStreakToken: (): boolean => {
+    const MAX = 3;
+    const profile = localCache.gymProfile;
+    const today = new Date().toLocaleDateString('en-CA');
+    const tokens = profile.streakFreezeTokens || 0;
+    if (tokens >= MAX) return false;
+    if (profile.lastTokenEarned === today) return false;
+    storageService.saveGymProfile({
+      ...profile,
+      streakFreezeTokens: tokens + 1,
+      lastTokenEarned: today,
+    });
+    return true;
   },
 
   rewardSystemQuest: (xpBonus: number): GymProfile => {
