@@ -1,6 +1,6 @@
 import { Transaction, Habit, WorkoutLog, UserState, GymProfile, GymSchedule, UserProfile } from '../types';
-import { INITIAL_HABITS } from '../constants';
-import { DEFAULT_GYM_PROFILE, rolloverMonthlyIfNeeded, getCurrentMonthKey } from '../gamification';
+import { INITIAL_HABITS } from '../config/constants';
+import { DEFAULT_GYM_PROFILE, rolloverMonthlyIfNeeded, getCurrentMonthKey } from './gamificationService';
 import { rtdb, auth, db } from '../firebase-config'; 
 import { ref, get, set, update, onValue, off } from 'firebase/database';
 import { collection, query as firestoreQuery, orderBy, limit, getDocs, onSnapshot, doc, setDoc } from 'firebase/firestore';
@@ -232,7 +232,7 @@ export const storageService = {
     if (!user) return;
 
     // 1. Recalculate Profile locally based on workouts
-    const { recalculateGymProfile } = require('../gamification');
+    const { recalculateGymProfile } = require('./gamificationService');
     const newProfile = recalculateGymProfile(localCache.workouts);
 
     // 2. Save directly to cache

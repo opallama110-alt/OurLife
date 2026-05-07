@@ -3,9 +3,9 @@ import { Users, Search, TrendingUp, DollarSign, Activity, Shield, Loader, Eye, X
 import { storageService } from '../services/storageService';
 import { useAuth } from '../context/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, AreaChart, Area } from 'recharts';
-import { MUSCLE_GROUP_CONFIG } from '../constants';
+import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 import { GymProfile, WorkoutLog, MuscleGroup } from '../types';
-import { calculateStreak } from '../gamification';
+import { calculateStreak } from '../services/gamificationService';
 import { ref, get, remove } from 'firebase/database';
 import { rtdb } from '../firebase-config';
 

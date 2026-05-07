@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Crown, Loader2 } from 'lucide-react';
-import { RANK_TIERS, getRankForLevel, generateLeaderboard } from '../gamification';
+import { RANK_TIERS, getRankForLevel, generateLeaderboard } from '../services/gamificationService';
 import { GymProfile } from '../types';
 import { storageService } from '../services/storageService';
 
