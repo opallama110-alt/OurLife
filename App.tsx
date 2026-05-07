@@ -7,10 +7,23 @@ import { GymTracker } from './pages/GymTracker';
 import { HabitTracker } from './pages/HabitTracker';
 import { Login } from './components/Login';
 import { Settings } from './components/Settings';
+import { AdminDashboard } from './components/AdminDashboard';
+import { CalculatorSuite } from './pages/CalculatorSuite';
 import { VerifyEmailGate } from './components/VerifyEmailGate';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { storageService } from './services/storageService';
 import { migrationService } from './services/migrationService';
+
+const OWNER_EMAILS = ['opallama110@gmail.com', 'opallama11@gmail.com'];
+
+// Admin route guard — non-admins land on /settings instead of seeing AdminDashboard
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
+  const profileRole = storageService.getUserProfile()?.role;
+  const isAdmin = profileRole === 'admin' || OWNER_EMAILS.includes(user?.email || '');
+  if (!isAdmin) return <Navigate to="/settings" replace />;
+  return <>{children}</>;
+};
 
 // --- Protected Route Wrapper ---
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -63,10 +76,10 @@ const AppRoutes: React.FC = () => {
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/gym" element={<GymTracker />} />
                   <Route path="/habits" element={<HabitTracker />} />
-                  {/* Profile / Tools / Admin are now Settings tabs — preserve deep links via redirect */}
+                  {/* /profile remains a Settings tab; /tools and /admin moved out of Settings */}
                   <Route path="/profile" element={<Navigate to="/settings?tab=profile" replace />} />
-                  <Route path="/tools" element={<Navigate to="/settings?tab=tools" replace />} />
-                  <Route path="/admin" element={<Navigate to="/settings?tab=admin" replace />} />
+                  <Route path="/tools" element={<CalculatorSuite />} />
+                  <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
