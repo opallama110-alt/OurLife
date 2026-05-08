@@ -9,6 +9,7 @@ import { getRankForLevel } from '../services/gamificationService';
 import {
     calculateAttributes, getJobClass, getRankProgress,
 } from '../services/attributeService';
+import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATUS CARD — replaces StatusWindowModal with an inline card on the
@@ -119,20 +120,27 @@ export const StatusCard: React.FC<Props> = ({ gymProfile, workouts, fatigue }) =
                 </div>
 
                 {/* Fatigue */}
-                <div className="flex items-center justify-between pt-2 border-t border-slate-800/60">
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400">
-                        Fatigue
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                        <span className={`text-sm font-bold font-mono ${fatigue.color}`}>
-                            {fatigue.score}
+                <div className="pt-2 border-t border-slate-800/60">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400">
+                            Fatigue
                         </span>
-                        <span
-                            className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: fatigue.accent, boxShadow: `0 0 6px ${fatigue.accent}` }}
-                            aria-label={fatigue.label}
-                        />
+                        <div className="flex items-center gap-1.5">
+                            <span className={`text-sm font-bold font-mono ${fatigue.color}`}>
+                                {fatigue.score}
+                            </span>
+                            <span
+                                className="w-2 h-2 rounded-full"
+                                style={{ backgroundColor: fatigue.accent, boxShadow: `0 0 6px ${fatigue.accent}` }}
+                                aria-label={fatigue.label}
+                            />
+                        </div>
                     </div>
+                    {fatigue.recoveringCount > 0 && (
+                        <p className="mt-1 text-[10px] font-mono text-slate-500">
+                            {fatigue.recoveringCount} of {fatigue.totalMuscles} muscles recovering · {fatigue.recoveringPercent}%
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -210,6 +218,33 @@ export const StatusCard: React.FC<Props> = ({ gymProfile, workouts, fatigue }) =
                             />
                         </div>
                     </div>
+
+                    {/* Recovering — top 3 most-fatigued muscles. Skipped
+                        entirely when nothing is recovering (clean fresh state). */}
+                    {fatigue.recoveringCount > 0 && (
+                        <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3">
+                            <div className="flex items-center gap-2 mb-2.5">
+                                <Activity size={12} className="text-amber-400" />
+                                <span className="text-[10px] font-mono uppercase tracking-widest text-slate-400">
+                                    Recovering
+                                </span>
+                            </div>
+                            <div className="space-y-1.5">
+                                {[...fatigue.perMuscle]
+                                    .filter(m => m.fatigue > 5)
+                                    .sort((a, b) => b.fatigue - a.fatigue)
+                                    .slice(0, 3)
+                                    .map(m => (
+                                        <div key={m.muscle} className="flex items-center justify-between text-xs font-mono">
+                                            <span className="text-slate-300 capitalize">
+                                                {MUSCLE_GROUP_CONFIG[m.muscle]?.label || m.muscle}
+                                            </span>
+                                            <span className="text-amber-400">{Math.round(m.fatigue)}%</span>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Rank Progress */}
                     <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3">

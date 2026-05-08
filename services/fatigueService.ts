@@ -19,11 +19,20 @@ export interface MuscleFatigue {
 }
 
 export interface FatigueReport {
-    score: number;              // 0–100 overall
+    score: number;              // 0–100 overall (avg of perMuscle.fatigue)
     label: 'Fresh' | 'Primed' | 'Warm' | 'Heavy' | 'Cooked';
     color: string;              // tailwind color class
     accent: string;             // hex for SVG gauges
     perMuscle: MuscleFatigue[];
+
+    // ── Phase 6b: surface "how much body is offline" alongside score ──
+    // Score answers "how cooked overall?", these answer "how much of the
+    // body is recovering right now?" — both belong on the surface.
+    // Threshold for "recovering" is fatigue > 5 (small dead zone — anything
+    // below 5% reads as fresh enough to ignore for count purposes).
+    recoveringCount: number;
+    totalMuscles: number;
+    recoveringPercent: number;  // 0–100, rounded
 }
 
 const ALL_MUSCLES = Object.keys(MUSCLE_RECOVERY_HOURS) as MuscleGroup[];
@@ -70,11 +79,20 @@ export const computeFatigue = (
     );
     const meta = labelFor(score);
 
+    // Recovering = strictly above the 5% dead zone. A muscle at exactly 5%
+    // does NOT count, by design.
+    const recoveringCount = perMuscle.filter(m => m.fatigue > 5).length;
+    const totalMuscles = ALL_MUSCLES.length;
+    const recoveringPercent = Math.round((recoveringCount / totalMuscles) * 100);
+
     return {
         score,
         label: meta.label,
         color: meta.color,
         accent: meta.accent,
         perMuscle,
+        recoveringCount,
+        totalMuscles,
+        recoveringPercent,
     };
 };
