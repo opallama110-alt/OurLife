@@ -144,18 +144,26 @@ export const SystemChat: React.FC = () => {
   return (
     <>
       {/* ── Floating Action Button — pet IS the trigger ──
-           Mobile: centered horizontally above the bottom nav (bottom-24
-           clears the ~80px nav at Layout.tsx:177).
-           Desktop: bottom-right via md: overrides (left-auto cancels the
-           centering, translate-x-0 cancels the horizontal transform).
-           Ping ring is conditional: only fires when emotion signals an
-           alert state, so the pet calls attention only when it should. */}
+           Mobile (notched FAB): centered horizontally, sits ON the bottom
+           nav at Layout.tsx:177 — pet's lower ~30% sinks behind the nav,
+           upper ~70% protrudes above. The halo span (mobile only) is a
+           page-bg-colored ring extending 8px around the pet, rendering
+           over the nav (button z-[60] vs nav z-50) so the eye reads it
+           as the nav being cut around the pet. Halo color matches the
+           body background (#0f172a / slate-950 in index.css).
+           Desktop: bottom-right via md: overrides — no nav, no halo.
+           Ping ring stays conditional: only fires when emotion signals
+           an alert state, so the pet calls attention only when it should. */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
           aria-label="Open System chat"
-          className="fixed z-[60] bottom-24 left-1/2 -translate-x-1/2 md:bottom-6 md:right-6 md:left-auto md:translate-x-0 transition-all duration-300 hover:scale-110 active:scale-95 group"
+          className="fixed z-[60] bottom-12 left-1/2 -translate-x-1/2 md:bottom-6 md:right-6 md:left-auto md:translate-x-0 transition-all duration-300 hover:scale-110 active:scale-95 group"
         >
+          <span
+            className="absolute -inset-2 rounded-full bg-slate-950 md:hidden"
+            aria-hidden="true"
+          />
           {(['angry', 'sad', 'shocked'] as const).includes(emotion as any) && (
             <span className="absolute inset-0 rounded-full bg-red-500/40 animate-ping pointer-events-none" />
           )}
