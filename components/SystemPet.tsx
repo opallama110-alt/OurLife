@@ -14,7 +14,8 @@ export type PetEmotion =
   | 'excited'
   | 'tired'
   | 'sad'
-  | 'shocked';
+  | 'shocked'
+  | 'angry';
 
 interface SystemPetProps {
   emotion: PetEmotion;
@@ -31,6 +32,7 @@ const FACES: Record<PetEmotion, string> = {
   tired:    '-_-',
   sad:      ';_;',
   shocked:  'O_O',
+  angry:    '>_<',
 };
 
 // Tailwind gradient pairs per emotion. Surrounding shadow stays red-tinted
@@ -43,6 +45,9 @@ const GRADIENTS: Record<PetEmotion, string> = {
   tired:    'from-slate-500 to-slate-700',
   sad:      'from-blue-500 to-indigo-700',
   shocked:  'from-red-600 to-orange-600',
+  // Deeper than 'shocked' so they read as distinct: shocked = surprise
+  // (eyes wide), angry = displeasure (deeper red, brow furrowed via '>_<').
+  angry:    'from-red-800 via-rose-600 to-orange-500',
 };
 
 export const SystemPet: React.FC<SystemPetProps> = ({

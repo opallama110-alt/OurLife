@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Sparkles, X, Send, Loader2 } from 'lucide-react';
+import { X, Send, Loader2 } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { storageService } from '../services/storageService';
 import { SystemPet, PetEmotion } from './SystemPet';
@@ -42,15 +42,57 @@ export const SystemChat: React.FC = () => {
     return unsub;
   }, []);
 
-  // Pet idle mood — derive from profile when not actively in a request cycle.
-  // 'thinking' / 'happy' / 'excited' / 'shocked' / 'sad' get set explicitly by
-  // send(); this only handles the resting state between interactions.
+  // Pet resting mood — habit-aware priority chain. send() owns interaction-
+  // driven emotions (thinking/happy/excited/shocked/sad-on-error); when the
+  // sheet is open the emotion is sticky from the last interaction. This
+  // effect only runs in the closed-sheet, non-loading rest state.
+  //
+  // Priority (highest first):
+  //   angry  — user dropped the ball yesterday (any habit missed)
+  //   sad    — workout streak broken (had history, now zero)
+  //   tired  — late in the day, today's protocol incomplete
+  //   happy  — today's protocol fully cleared
+  //   idle   — fresh state (morning / no signal)
   useEffect(() => {
     if (loading) return; // 'thinking' is owned by send() — don't fight it
+    if (open) return;    // sticky emotion while sheet is open
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    const habits = storageService.getHabits() || [];
+    const hasHabits = habits.length > 0;
+
+    const allTodayDone =
+      hasHabits &&
+      habits.every(h => (h.completedDates || []).includes(todayStr));
+
+    const missedYesterday =
+      hasHabits &&
+      habits.some(h => !(h.completedDates || []).includes(yesterdayStr));
+
     const streak = profile.currentStreak ?? 0;
     const hasHistory = (profile.workoutsCompleted ?? 0) > 0;
-    setEmotion(streak === 0 && hasHistory ? 'sad' : 'idle');
-  }, [profile, loading]);
+    const hour = new Date().getHours();
+    const lateAndNotDone =
+      hasHabits &&
+      hour >= 18 &&
+      !allTodayDone;
+
+    if (missedYesterday) {
+      setEmotion('angry');
+    } else if (streak === 0 && hasHistory) {
+      setEmotion('sad');
+    } else if (lateAndNotDone) {
+      setEmotion('tired');
+    } else if (allTodayDone) {
+      setEmotion('happy');
+    } else {
+      setEmotion('idle');
+    }
+  }, [profile, loading, open]);
 
   // Auto-scroll to bottom on new message.
   useEffect(() => {
@@ -101,16 +143,23 @@ export const SystemChat: React.FC = () => {
 
   return (
     <>
-      {/* ── Floating Action Button ── */}
+      {/* ── Floating Action Button — pet IS the trigger ──
+           Mobile: centered horizontally above the bottom nav (bottom-24
+           clears the ~80px nav at Layout.tsx:177).
+           Desktop: bottom-right via md: overrides (left-auto cancels the
+           centering, translate-x-0 cancels the horizontal transform).
+           Ping ring is conditional: only fires when emotion signals an
+           alert state, so the pet calls attention only when it should. */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
           aria-label="Open System chat"
-          className="fixed z-[60] bottom-24 right-4 md:bottom-6 md:right-6 w-14 h-14 rounded-full bg-gradient-to-br from-red-500 via-orange-500 to-amber-500 shadow-[0_0_25px_rgba(239,68,68,0.6)] hover:shadow-[0_0_40px_rgba(239,68,68,0.9)] flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 group"
+          className="fixed z-[60] bottom-24 left-1/2 -translate-x-1/2 md:bottom-6 md:right-6 md:left-auto md:translate-x-0 transition-all duration-300 hover:scale-110 active:scale-95 group"
         >
-          <span className="absolute inset-0 rounded-full bg-red-500/30 animate-ping" />
-          <span className="absolute inset-1 rounded-full bg-gradient-to-br from-red-500 to-amber-500" />
-          <Sparkles size={22} className="relative z-10 text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.8)]" strokeWidth={2.4} />
+          {(['angry', 'sad', 'shocked'] as const).includes(emotion as any) && (
+            <span className="absolute inset-0 rounded-full bg-red-500/40 animate-ping pointer-events-none" />
+          )}
+          <SystemPet emotion={emotion} size="lg" />
         </button>
       )}
 
