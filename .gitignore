@@ -26,8 +26,17 @@ dist-ssr
 .idea
 .DS_Store
 thumbs.db
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Backup / temp files
+*.bak
+*.orig
+*~
+
+# Claude Code session metadata
+.claude/
