@@ -1,25 +1,29 @@
-# OurLife Project Guidelines
+# OurLife — Claude Code Auto-Load Pointer
 
-## Core Identity & Vibe
-- **Project**: OurLife (Fitness & Habit Tracking App).
-- **Theme**: Dark mode, modern, sleek. Inspired by industry standards like "Hevy" and "Strong".
-- **Gamification**: Heavy "Solo Leveling" x "Duolingo" aesthetics. Uses Ranks, Lifetime XP, Monthly League XP, Streaks (🔥), and glowing rarity badges (Iron, Silver, Gold, Epic).
-- **Colors**: Deep slates (`bg-slate-900`), neon reds (`text-red-500`, `shadow-red-500/20`), and cyan/blue accents for specific UI elements.
+> File ini di-auto-load oleh Claude Code setiap sesi. Sengaja dibuat slim biar gak ngabisin context budget. Konteks lengkap (identitas proyek, state, arsitektur, roadmap, konvensi, eksekusi fase, pola kerja) ada di **`PROMPT_CLAUDE_CODE.md`**.
 
-## Tech Stack
-- **Frontend**: React (Vite), TypeScript, Tailwind CSS.
-- **Backend/BaaS**: Firebase (Auth, Firestore, Realtime Database/RTDB).
-- **Icons & Charts**: `lucide-react`, `recharts`.
-- **Animations**: CSS transitions/keyframes, `anime.js` (if complex).
+## Aksi yang HARUS Claude lakukan saat sesi baru
 
-## Strict Coding Rules
-1. **No SvelteKit Syntax**: Do NOT use `error(500, ...)` or SvelteKit-specific routing. This is a strict React/Vite project.
-2. **Local Assets First**: Assume images and SVG assets are hosted locally in `/public/exercises/` or `/public/assets/`. Do not fetch from external APIs like `v2.exercisedb.io` unless explicitly asked.
-3. **CSS 3D Constraints**: When using `transform-style: preserve-3d` (e.g., for flip cards), absolutely DO NOT use `filter` (like `drop-shadow`) or `mix-blend-mode` on the animated element or its parents, as it flattens the 3D context in CSS and breaks `backface-visibility: hidden`.
-4. **State Management**: Rely on `services/storageService.ts` for global state and caching. Use `onSnapshot` for real-time Leaderboard syncing instead of one-off fetches.
-5. **Clean Navigation**: Keep the main router and navigation bars minimal. Features like Profile, Tools, and Admin should be nested under `/settings`.
+1. **Baca `D:\OurLife\PROMPT_CLAUDE_CODE.md`** — itu master prompt + project bible.
+2. **Verifikasi file management** — pastikan cuma 3 `.md` di project root: `PROMPT_CLAUDE_CODE.md`, `CLAUDE.md` (file ini), `README.md`. Kalau ada `CLAUDE_NEXT_PHASES.md` atau `COMMERCIAL_ROADMAP.md`, mereka stale dari konsolidasi sebelumnya — surface to user dengan cleanup command dari Section 12.3 di master prompt.
+3. **Konfirmasi paham + tanya 2-3 klarifikasi** sebelum tulis kode apa pun.
 
-## Execution Workflow
-- When given a large epic or refactor, break it down into sequential phases.
-- **ALWAYS pause after completing one phase and ask for user confirmation before proceeding to the next.** Do not attempt to refactor the entire app in one massive generation.
-- Keep terminal output concise. Do not explain standard React concepts unless asked.
+## Rules cepat (override default behavior)
+
+- **Tech stack:** React 18 + Vite + TypeScript + Tailwind, Firebase (Auth + Firestore + RTDB), Groq AI. **No SvelteKit syntax. No Next.js syntax.**
+- **State:** `services/storageService.ts` adalah single source of truth. **No new state libraries** (Redux/Zustand/Recoil) tanpa diskusi.
+- **Animasi:** Di `index.css`. camelCase keyframe + kebab-case utility class. **No `tailwind.config.js` extends.** **No `<style jsx>` (Next.js).**
+- **CSS 3D:** Element dengan `transform-style: preserve-3d` (mis. flip cards) — **JANGAN** pakai `filter` (drop-shadow) atau `mix-blend-mode` di element itu atau parent-nya (flattens 3D context).
+- **Eksekusi:** Satu fitur sampai sempurna. Pause after each commit. Audit before edit. Build green sebelum commit.
+- **Bahasa:** Copy untuk user (toast, modal, button) = Bahasa Indonesia. Code, comments, logs = English.
+- **Security:** Jangan introduce hardcoded API keys atau `dangerouslyAllowBrowser` baru. Existing `aiService.ts` exposure adalah Tier 0.1 task di roadmap.
+
+## Quick reference
+
+- Proyek: OurLife (gamified fitness + habit tracker)
+- Theme: Solo Leveling × Duolingo
+- Branch aktif: cek `git branch --show-current`
+- Build: `npm run build` (harus green sebelum commit)
+- Tier prioritas: 0 (security) → 1 (quick wins) → 2 (coming soon stubs) → 3 (feature complete) → 4 (polish) → 5 (differentiation) → 6 (epics)
+
+**Detail penuh: `PROMPT_CLAUDE_CODE.md`.**
