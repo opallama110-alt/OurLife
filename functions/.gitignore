@@ -1,0 +1,14 @@
+# Build artifacts
+lib/
+
+# Dependencies
+node_modules/
+
+# Local secrets — NEVER commit
+.env
+.env.*
+*.local
+
+# Firebase logs
+firebase-debug.log
+firebase-debug.*.log

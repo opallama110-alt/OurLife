@@ -43,3 +43,8 @@ Thumbs.db
 
 # Design reference (extracted prototype, visual spec only — do not commit)
 .design-reference/
+
+# Firebase Functions workspace (defense-in-depth alongside functions/.gitignore)
+functions/lib/
+functions/node_modules/
+functions/.env
