@@ -40,3 +40,6 @@ Thumbs.db
 
 # Claude Code session metadata
 .claude/
+
+# Design reference (extracted prototype, visual spec only — do not commit)
+.design-reference/
