@@ -1,7 +1,7 @@
-import { Achievement, GymProfile, Habit, WorkoutLog } from '../types';
+import { GymProfile, Habit, WorkoutLog } from '../types';
 import { storageService } from './storageService';
 import {
-  ACHIEVEMENTS, REWARDS_BY_RARITY, evaluateAchievements,
+  Achievement, ACHIEVEMENTS, REWARDS_BY_RARITY, evaluateAchievements,
 } from './gamificationService';
 
 // ═══════════════════════════════════════════════════════════════════════════
