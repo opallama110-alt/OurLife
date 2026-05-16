@@ -11,13 +11,19 @@ type ChatMsg = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SYSTEM CHAT — FAB + slide-up sheet
-// Persistent floating action button anchored bottom-right (above the mobile nav).
-// Tapping opens a slide-up sheet with a Solo Leveling-themed chat surface that
-// pipes user messages into aiService.chat() and renders the System's reply.
+// SYSTEM CHAT — slide-up sheet (controlled).
+// Open state is owned by the parent (Layout) so the bottom-nav bot mascot
+// can toggle the chat. The internal SystemPet FAB block was removed when
+// the Layout shell wholesale restyle landed; SystemPet.tsx is still imported
+// for the in-sheet header avatar (and the file is preserved for rollback
+// safety per the same restyle commit).
 // ═══════════════════════════════════════════════════════════════════════════
-export const SystemChat: React.FC = () => {
-  const [open, setOpen] = useState(false);
+export interface SystemChatProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+export const SystemChat: React.FC<SystemChatProps> = ({ open, onClose }) => {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -141,42 +147,18 @@ export const SystemChat: React.FC = () => {
     }
   };
 
+  // FAB removed when the Layout shell wholesale restyle landed — the chat
+  // is now opened by the center bot mascot in the BottomNav (Layout.tsx
+  // owns `open` state and passes it as a prop). `emotion` is still computed
+  // and surfaced inside the sheet header avatar / empty state.
   return (
     <>
-      {/* ── Floating Action Button — pet IS the trigger ──
-           Mobile (notched FAB): centered horizontally, sits ON the bottom
-           nav at Layout.tsx:177 — pet's lower ~30% sinks behind the nav,
-           upper ~70% protrudes above. The halo span (mobile only) is a
-           page-bg-colored ring extending 8px around the pet, rendering
-           over the nav (button z-[60] vs nav z-50) so the eye reads it
-           as the nav being cut around the pet. Halo color matches the
-           body background (#0f172a / slate-950 in index.css).
-           Desktop: bottom-right via md: overrides — no nav, no halo.
-           Ping ring stays conditional: only fires when emotion signals
-           an alert state, so the pet calls attention only when it should. */}
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          aria-label="Open System chat"
-          className="fixed z-[60] bottom-12 left-1/2 -translate-x-1/2 md:bottom-6 md:right-6 md:left-auto md:translate-x-0 transition-all duration-300 hover:scale-110 active:scale-95 group"
-        >
-          <span
-            className="absolute -inset-2 rounded-full bg-slate-950 md:hidden"
-            aria-hidden="true"
-          />
-          {(['angry', 'sad', 'shocked'] as const).includes(emotion as any) && (
-            <span className="absolute inset-0 rounded-full bg-red-500/40 animate-ping pointer-events-none" />
-          )}
-          <SystemPet emotion={emotion} size="lg" />
-        </button>
-      )}
-
-      {/* ── Slide-up Sheet ── */}
+      {/* ── Slide-up Sheet (controlled by parent) ── */}
       {open && (
         <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center md:p-4">
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fade-in"
-            onClick={() => setOpen(false)}
+            onClick={onClose}
           />
           <div className="relative w-full md:max-w-lg md:rounded-2xl rounded-t-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-t md:border border-red-500/40 shadow-[0_-10px_60px_rgba(239,68,68,0.3)] md:shadow-[0_0_60px_rgba(239,68,68,0.3)] flex flex-col max-h-[90vh] md:max-h-[80vh] animate-slide-up overflow-hidden">
             {/* Decorative glow */}
@@ -198,7 +180,7 @@ export const SystemChat: React.FC = () => {
                 </div>
               </div>
               <button
-                onClick={() => setOpen(false)}
+                onClick={onClose}
                 className="p-2 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
                 aria-label="Close System chat"
               >

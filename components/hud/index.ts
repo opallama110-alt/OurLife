@@ -21,3 +21,9 @@ export type { SystemNotificationProps, SystemNotificationTone, SystemNotificatio
 
 export { default as BodyAnatomy, splitExhaustedByView } from './BodyAnatomy';
 export type { BodyAnatomyProps, BodyView, BodyGender } from './BodyAnatomy';
+
+export { default as SystemBot, BotFace } from './SystemBot';
+export type { SystemBotProps, BotFaceProps, BotMood } from './SystemBot';
+
+export { default as BottomNav } from './BottomNav';
+export type { BottomNavProps, BottomNavTab } from './BottomNav';
