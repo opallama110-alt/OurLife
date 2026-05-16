@@ -949,3 +949,137 @@ input, select, textarea {
   animation: caret 1s steps(1) infinite;
   color: var(--cyan);
 }
+
+/* ============================================================
+   RANK BADGE — hex-framed sci-fi emblem with layered idle
+   animations (float / halo / ring spin / sheen sweep) and an
+   amplified `.is-current` state (faster spin, dashed orbit ring,
+   doubled drop-shadow). Per-rank palette via --rank-badge-* vars
+   set inline by the component.
+
+   NOTE: none of these elements use `transform-style: preserve-3d`,
+   so the `filter: drop-shadow` + `mix-blend-mode: overlay` here
+   are safe (no 3D-context flattening — see CLAUDE.md §6.8).
+   ============================================================ */
+.rank-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.rank-badge__svg {
+  position: relative;
+  z-index: 2;
+  filter: drop-shadow(0 0 4px var(--rank-badge-glow));
+  animation: rank-badge-float 4s ease-in-out infinite;
+}
+@keyframes rank-badge-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-1.5px); }
+}
+
+.rank-badge__halo {
+  position: absolute;
+  inset: -8%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--rank-badge-glow), transparent 70%);
+  filter: blur(1.5px);
+  opacity: 0.55;
+  animation: rank-badge-halo 3.4s ease-in-out infinite;
+  z-index: 0;
+  pointer-events: none;
+}
+@keyframes rank-badge-halo {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50%      { opacity: 0.75; transform: scale(1.06); }
+}
+
+.rank-badge__ring {
+  position: absolute;
+  inset: -4%;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg,
+    transparent 0deg,
+    var(--rank-badge-secondary) 60deg,
+    transparent 120deg,
+    transparent 240deg,
+    var(--rank-badge-primary) 300deg,
+    transparent 360deg
+  );
+  -webkit-mask: radial-gradient(circle, transparent calc(50% - 1px), black calc(50%));
+          mask: radial-gradient(circle, transparent calc(50% - 1px), black calc(50%));
+  opacity: 0.55;
+  animation: rank-badge-ring-spin 8s linear infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+@keyframes rank-badge-ring-spin {
+  to { transform: rotate(360deg); }
+}
+
+.rank-badge__shimmer {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  background: linear-gradient(115deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.35) 45%,
+    rgba(255, 255, 255, 0.08) 55%,
+    transparent 70%
+  );
+  background-size: 300% 300%;
+  -webkit-mask: radial-gradient(circle, black 0% 60%, transparent 100%);
+          mask: radial-gradient(circle, black 0% 60%, transparent 100%);
+  mix-blend-mode: overlay;
+  opacity: 0.7;
+  pointer-events: none;
+  z-index: 3;
+  animation: rank-badge-shimmer 6s ease-in-out infinite;
+}
+@keyframes rank-badge-shimmer {
+  0%, 100% { background-position: -100% 0; opacity: 0; }
+  50%      { background-position: 100% 0;  opacity: 0.55; }
+}
+
+/* CURRENT — amplified animations for the player's active rank. */
+.rank-badge.is-current .rank-badge__halo {
+  background: radial-gradient(closest-side, var(--rank-badge-glow), transparent 65%);
+  opacity: 0.9;
+  animation: rank-badge-halo-current 1.8s ease-in-out infinite;
+}
+@keyframes rank-badge-halo-current {
+  0%, 100% { opacity: 0.75; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.15); }
+}
+.rank-badge.is-current .rank-badge__ring {
+  opacity: 1;
+  animation-duration: 3s;
+}
+.rank-badge.is-current .rank-badge__svg {
+  animation: rank-badge-pulse-current 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px var(--rank-badge-glow)) drop-shadow(0 0 16px var(--rank-badge-glow));
+}
+@keyframes rank-badge-pulse-current {
+  0%, 100% { transform: scale(1) translateY(0); }
+  50%      { transform: scale(1.05) translateY(-2px); }
+}
+.rank-badge__current-ring {
+  position: absolute;
+  inset: -16%;
+  border-radius: 50%;
+  border: 1.5px dashed var(--rank-badge-primary);
+  opacity: 0.45;
+  animation: rank-badge-current-spin 12s linear infinite,
+             rank-badge-current-fade 2.4s ease-in-out infinite;
+  z-index: 0;
+  pointer-events: none;
+}
+@keyframes rank-badge-current-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes rank-badge-current-fade {
+  0%, 100% { opacity: 0.3; }
+  50%      { opacity: 0.75; }
+}

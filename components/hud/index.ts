@@ -12,3 +12,6 @@ export type { DotPulseProps } from './DotPulse';
 
 export { default as StatChip } from './StatChip';
 export type { StatChipProps } from './StatChip';
+
+export { default as RankBadge, RANK_THEMES, rankFromTierName } from './RankBadge';
+export type { RankBadgeProps, Rank, RankBadgeSize, RankBadgeVariant, RankTheme } from './RankBadge';

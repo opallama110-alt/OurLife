@@ -10,6 +10,7 @@ import {
     calculateAttributes, getJobClass, getRankProgress,
 } from '../services/attributeService';
 import { MUSCLE_GROUP_CONFIG } from '../config/constants';
+import { RankBadge, rankFromTierName } from './hud';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATUS CARD — replaces StatusWindowModal with an inline card on the
@@ -89,9 +90,12 @@ export const StatusCard: React.FC<Props> = ({ gymProfile, workouts, fatigue }) =
             <div className="relative z-10 px-4 py-3 space-y-3">
                 {/* Identity row */}
                 <div className="flex items-center gap-3">
-                    <div className={`text-3xl ${rank.color} drop-shadow-[0_0_6px_currentColor]`}>
-                        {rank.emoji}
-                    </div>
+                    <RankBadge
+                        rank={rankFromTierName(rank.name)}
+                        size="md"
+                        variant="compact"
+                        isCurrent
+                    />
                     <div className="min-w-0">
                         <div className="flex items-baseline gap-1.5">
                             <span className="text-base font-bold text-white font-mono">Lv.{level}</span>
