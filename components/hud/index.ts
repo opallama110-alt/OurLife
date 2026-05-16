@@ -15,3 +15,6 @@ export type { StatChipProps } from './StatChip';
 
 export { default as RankBadge, RANK_THEMES, rankFromTierName } from './RankBadge';
 export type { RankBadgeProps, Rank, RankBadgeSize, RankBadgeVariant, RankTheme } from './RankBadge';
+
+export { default as SystemNotification } from './SystemNotification';
+export type { SystemNotificationProps, SystemNotificationTone, SystemNotificationMode } from './SystemNotification';

@@ -11,6 +11,7 @@ import { getRankForLevel, calculateStreak } from '../services/gamificationServic
 import { computeFatigue } from '../services/fatigueService';
 import { StatusCard } from '../components/StatusCard';
 import { TokenDisplay } from '../components/TokenDisplay';
+import { SystemNotification } from '../components/hud';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -483,31 +484,24 @@ export const Dashboard: React.FC = () => {
 
       {/* ═══ Phase 25: SYSTEM BRIEFING ═══ */}
       {systemMessage && (
-        <div className="animate-slide-up jarvis-card p-4 rounded-xl border border-red-500/30 bg-gradient-to-br from-slate-900 via-red-500/5 to-slate-900 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/10 rounded-full blur-3xl" />
-          <div className="relative z-10 flex items-start space-x-3">
-            <div className="shrink-0 mt-0.5">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-red-500 to-amber-500 flex items-center justify-center shadow-lg shadow-red-500/40">
-                <Sparkles size={16} className="text-white" />
-              </div>
+        <div className="animate-slide-up">
+          <SystemNotification
+            mode="inline"
+            tone="cyan"
+            closable
+            onClose={() => { storageService.saveLastSystemMessage(''); setSystemMessage(''); }}
+          >
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <Sparkles size={12} className="text-orange-400" />
+              <span className="text-[10px] font-mono uppercase tracking-[0.25em] font-bold text-orange-400">
+                The System
+              </span>
+              <span className="text-[10px] font-mono text-slate-500">latest verdict</span>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center space-x-2 mb-1">
-                <span className="text-[10px] font-mono uppercase tracking-widest font-bold text-red-400">The System</span>
-                <span className="text-[10px] font-mono text-slate-500">latest verdict</span>
-              </div>
-              <p className="text-sm text-slate-200 leading-relaxed line-clamp-3 whitespace-pre-line">
-                {systemMessage}
-              </p>
-            </div>
-            <button
-              onClick={() => { storageService.saveLastSystemMessage(''); setSystemMessage(''); }}
-              className="shrink-0 p-1 text-slate-600 hover:text-slate-300 transition-colors"
-              aria-label="Dismiss System briefing"
-            >
-              <X size={14} />
-            </button>
-          </div>
+            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line glitch-in">
+              {systemMessage}
+            </p>
+          </SystemNotification>
         </div>
       )}
 

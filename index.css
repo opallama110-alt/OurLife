@@ -1083,3 +1083,253 @@ input, select, textarea {
   0%, 100% { opacity: 0.3; }
   50%      { opacity: 0.75; }
 }
+
+/* ============================================================
+   SYSTEM NOTIFICATION — ornate Solo-Leveling frame for major
+   System pronouncements. Two modes:
+     - .sn-root (modal): full-viewport backdrop + centered panel
+     - .sn-panel.sn-inline: panel only, sits in document flow
+   Visual ornamentation (corner filigree, crown, glow border,
+   sn-materialize entrance) is shared between modes via the
+   .sn-panel selectors.
+   ============================================================ */
+.sn-root {
+  position: fixed;
+  inset: 0;
+  z-index: 350;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+.sn-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(2, 4, 9, 0);
+  backdrop-filter: blur(0px);
+  transition: background 320ms ease, backdrop-filter 320ms ease;
+  pointer-events: none;
+}
+.sn-root.is-open .sn-backdrop {
+  background:
+    radial-gradient(closest-side, rgba(34, 211, 238, 0.06), transparent 60%),
+    rgba(2, 4, 9, 0.82);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+/* Panel — shared between modal and inline. Modal hides until .is-open. */
+.sn-panel {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  padding: 36px 22px 22px;
+  border-radius: 4px;
+  background:
+    radial-gradient(closest-side at 50% 0%, rgba(34, 211, 238, 0.18), transparent 65%),
+    linear-gradient(180deg, #14245A 0%, #0B1530 60%, #050A1C 100%);
+  border: 2px solid rgba(103, 232, 249, 0.6);
+  box-shadow:
+    inset 0 0 0 1px rgba(34, 211, 238, 0.35),
+    inset 0 0 40px rgba(34, 211, 238, 0.15),
+    0 0 28px rgba(34, 211, 238, 0.45),
+    0 0 60px rgba(34, 211, 238, 0.25),
+    0 30px 80px -20px rgba(0, 0, 0, 0.9);
+  pointer-events: auto;
+}
+/* Modal-only entrance — hidden until parent .sn-root is open. */
+.sn-root .sn-panel {
+  opacity: 0;
+  transform: translateY(6px) scale(0.92);
+  filter: blur(2px);
+}
+.sn-root.is-open .sn-panel {
+  animation: sn-materialize 540ms var(--ease-out) forwards;
+}
+/* Inline-mode panel — full width, animates on mount. */
+.sn-panel.sn-inline {
+  max-width: 100%;
+  animation: sn-materialize 540ms var(--ease-out) both;
+}
+@keyframes sn-materialize {
+  0%   { opacity: 0; transform: translateY(6px) scale(0.92); filter: blur(2px); }
+  18%  { opacity: 0.8; transform: translate(-2px, 0) scale(1); filter: blur(0.6px); }
+  22%  { transform: translate(3px, 0); }
+  28%  { transform: translate(-1px, 0); }
+  60%  { opacity: 1; transform: translate(0, 0); filter: none; }
+  100% { opacity: 1; transform: translate(0, 0); filter: none; }
+}
+
+/* Inner second-frame ornament */
+.sn-panel::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* Corner filigree — animates in regardless of mode */
+.sn-corner {
+  position: absolute;
+  width: 44px; height: 44px;
+  filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.55));
+  opacity: 0;
+  animation: sn-corner-in 520ms 240ms var(--ease-out) forwards;
+}
+.sn-corner-tl { top: -6px; left: -6px; }
+.sn-corner-tr { top: -6px; right: -6px; }
+.sn-corner-bl { bottom: -6px; left: -6px; }
+.sn-corner-br { bottom: -6px; right: -6px; }
+@keyframes sn-corner-in {
+  from { opacity: 0; transform: scale(0.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Crown ornament — sits above panel center */
+.sn-crown-wrap {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.6));
+  opacity: 0;
+  animation: sn-crown-in 600ms 320ms var(--ease-out) forwards;
+}
+@keyframes sn-crown-in {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.85); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+.sn-crown { display: block; }
+
+.sn-close {
+  position: absolute;
+  top: 14px; right: 14px;
+  width: 24px; height: 24px;
+  background: transparent;
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  color: rgba(167, 243, 252, 0.8);
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 4;
+}
+.sn-close:hover { color: var(--cyan); border-color: var(--cyan); }
+
+.sn-body {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+}
+.sn-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  text-shadow:
+    0 0 18px rgba(167, 243, 252, 0.7),
+    0 0 28px rgba(34, 211, 238, 0.4);
+  opacity: 0;
+  animation: sn-fade-in 520ms 360ms var(--ease-out) forwards;
+}
+
+.sn-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin: 14px auto;
+  width: 80%;
+  opacity: 0;
+  animation: sn-fade-in 420ms 460ms var(--ease-out) forwards;
+}
+.sn-divider-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(103, 232, 249, 0.95), transparent);
+  box-shadow: 0 0 4px rgba(34, 211, 238, 0.6);
+}
+.sn-divider-bead {
+  width: 18px; height: 6px;
+  margin: 0 -2px;
+  background:
+    radial-gradient(closest-side, #FFFFFF, rgba(167, 243, 252, 0.8) 30%, transparent 65%);
+  filter: blur(0.4px);
+}
+
+.sn-subtitle {
+  margin: 0 0 14px;
+  font-size: 17px;
+  font-weight: 600;
+  color: #E0F2FE;
+  line-height: 1.4;
+  opacity: 0;
+  animation: sn-fade-in 420ms 560ms var(--ease-out) forwards;
+}
+
+.sn-content {
+  font-size: 14.5px;
+  color: #CBD5E1;
+  line-height: 1.55;
+  opacity: 0;
+  animation: sn-fade-in 420ms 620ms var(--ease-out) forwards;
+}
+
+.sn-footer {
+  margin-top: 18px;
+  opacity: 0;
+  animation: sn-fade-in 380ms 760ms var(--ease-out) forwards;
+}
+
+@keyframes sn-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Tone variants — apply to both modal parent and inline panel ─── */
+.sn-root.tone-gold .sn-panel,
+.sn-panel.tone-gold {
+  background:
+    radial-gradient(closest-side at 50% 0%, rgba(251, 191, 36, 0.20), transparent 65%),
+    linear-gradient(180deg, #3A2A12 0%, #1A1308 60%, #0A0703 100%);
+  border-color: rgba(251, 191, 36, 0.6);
+  box-shadow:
+    inset 0 0 0 1px rgba(251, 191, 36, 0.35),
+    inset 0 0 40px rgba(251, 146, 60, 0.18),
+    0 0 28px rgba(251, 146, 60, 0.5),
+    0 30px 80px -20px rgba(0, 0, 0, 0.9);
+}
+.sn-root.tone-gold .sn-panel::before,
+.sn-panel.tone-gold::before { border-color: rgba(251, 191, 36, 0.22); }
+.sn-root.tone-gold .sn-divider-line,
+.sn-panel.tone-gold .sn-divider-line {
+  background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.95), transparent);
+}
+.sn-root.tone-gold .sn-title,
+.sn-panel.tone-gold .sn-title { text-shadow: 0 0 18px rgba(251, 191, 36, 0.7); }
+
+.sn-root.tone-red .sn-panel,
+.sn-panel.tone-red {
+  background:
+    radial-gradient(closest-side at 50% 0%, rgba(239, 68, 68, 0.20), transparent 65%),
+    linear-gradient(180deg, #3A0E14 0%, #1F0810 60%, #0A0408 100%);
+  border-color: rgba(239, 68, 68, 0.6);
+  box-shadow:
+    inset 0 0 0 1px rgba(239, 68, 68, 0.35),
+    inset 0 0 40px rgba(239, 68, 68, 0.15),
+    0 0 28px rgba(239, 68, 68, 0.45),
+    0 30px 80px -20px rgba(0, 0, 0, 0.9);
+}
+.sn-root.tone-red .sn-panel::before,
+.sn-panel.tone-red::before { border-color: rgba(239, 68, 68, 0.22); }
+.sn-root.tone-red .sn-divider-line,
+.sn-panel.tone-red .sn-divider-line {
+  background: linear-gradient(90deg, transparent, rgba(252, 165, 165, 0.9), transparent);
+}
+.sn-root.tone-red .sn-title,
+.sn-panel.tone-red .sn-title { text-shadow: 0 0 18px rgba(239, 68, 68, 0.7); }
