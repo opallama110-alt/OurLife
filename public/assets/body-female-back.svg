@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 648">
+
+
+<g id="Back_female_silhouette">
+  <ellipse cx="216" cy="74" rx="40" ry="48" class="ba-0"></ellipse>
+  <path d="M198 118 Q200 138 196 152 Q208 162 216 162 Q224 162 236 152 Q232 138 234 118 Z" class="ba-0"></path>
+  <path d="M132 154 Q160 142 216 142 Q272 142 300 154 L302 196 Q302 218 290 252 Q294 280 282 310 Q284 340 296 376 Q302 396 296 416 L268 426 Q216 438 164 426 L136 416 Q130 396 136 376 Q148 340 150 310 Q138 280 142 252 Q130 218 130 196 Z" class="ba-0"></path>
+  <path d="M132 162 Q108 192 100 246 Q92 296 96 354 Q102 366 112 358 Q116 352 118 340 Q124 296 130 246 Q132 200 140 174 Z" class="ba-0"></path>
+  <path d="M300 162 Q324 192 332 246 Q340 296 336 354 Q330 366 320 358 Q316 352 314 340 Q308 296 302 246 Q300 200 292 174 Z" class="ba-0"></path>
+  <path d="M98 358 Q92 370 94 384 Q102 390 110 384 Q116 372 112 358 Z" class="ba-0"></path>
+  <path d="M334 358 Q340 370 338 384 Q330 390 322 384 Q316 372 320 358 Z" class="ba-0"></path>
+  <path d="M136 416 Q216 438 296 416 L290 480 Q260 494 216 494 Q172 494 142 480 Z" class="ba-0"></path>
+  <path d="M148 480 Q156 492 200 492 L206 600 Q204 616 196 622 Q186 624 178 614 L174 596 Z" class="ba-0"></path>
+  <path d="M284 480 Q276 492 232 492 L226 600 Q228 616 236 622 Q246 624 254 614 L258 596 Z" class="ba-0"></path>
+  <ellipse cx="186" cy="630" rx="14" ry="6" class="ba-0"></ellipse>
+  <ellipse cx="246" cy="630" rx="14" ry="6" class="ba-0"></ellipse>
+  
+  <path d="M216 154 L216 416" class="ba-line" stroke-width="0.5" opacity="0.4"></path>
+</g>
+
+<g id="Trapz">
+  <path d="M186 142 Q216 130 246 142 Q240 168 216 178 Q192 168 186 142 Z" class="ba-3"></path>
+  <path d="M216 142 L216 178" class="ba-line"></path>
+</g>
+
+<g id="Middle_and_lower_trapz">
+  <path d="M198 178 Q216 184 234 178 L228 240 Q216 246 204 240 Z" class="ba-3"></path>
+  <path d="M216 178 L216 240" class="ba-line"></path>
+</g>
+
+<g id="Rhomboid_major">
+  <path d="M192 188 Q216 192 240 188 L236 224 Q216 226 196 224 Z" class="ba-5"></path>
+</g>
+
+<g id="Infraspinatus">
+  <path d="M170 184 Q188 196 196 220 Q188 230 178 230 Q166 218 168 196 Z" class="ba-5"></path>
+  <path d="M262 184 Q244 196 236 220 Q244 230 254 230 Q266 218 264 196 Z" class="ba-5"></path>
+</g>
+
+<g id="Teres_Major">
+  <path d="M166 224 Q178 232 186 246 L178 254 Q166 248 162 234 Z" class="ba-5"></path>
+  <path d="M266 224 Q254 232 246 246 L254 254 Q266 248 270 234 Z" class="ba-5"></path>
+</g>
+
+<g id="Delts">
+  <path d="M132 156 Q116 170 122 208 Q142 214 158 198 Q160 184 156 168 Q148 156 138 152 Z" class="ba-3"></path>
+  <path d="M300 156 Q316 170 310 208 Q290 214 274 198 Q272 184 276 168 Q284 156 294 152 Z" class="ba-3"></path>
+  <path d="M138 168 Q146 180 152 194" class="ba-line"></path>
+  <path d="M294 168 Q286 180 280 194" class="ba-line"></path>
+</g>
+
+<g id="Triceps">
+  <path d="M114 208 Q100 244 102 290 Q120 294 132 264 Q132 226 122 208 Z" class="ba-3"></path>
+  <path d="M318 208 Q332 244 330 290 Q312 294 300 264 Q300 226 310 208 Z" class="ba-3"></path>
+  <path d="M116 250 Q124 268 124 286" class="ba-line"></path>
+  <path d="M316 250 Q308 268 308 286" class="ba-line"></path>
+</g>
+
+<g id="Lats">
+  <path d="M158 210 Q188 222 212 246 L210 332 Q188 338 168 318 Q150 270 154 222 Z" class="ba-3"></path>
+  <path d="M274 210 Q244 222 220 246 L222 332 Q244 338 264 318 Q282 270 278 222 Z" class="ba-3"></path>
+  <path d="M168 260 Q188 274 210 282" class="ba-line"></path>
+  <path d="M264 260 Q244 274 222 282" class="ba-line"></path>
+</g>
+
+<g id="Lower_back">
+  <path d="M198 330 Q216 334 234 330 L228 388 Q216 394 204 388 Z" class="ba-3"></path>
+  <path d="M216 330 L216 392" class="ba-line"></path>
+</g>
+
+<g id="Extensor_carpi">
+  <path d="M108 286 Q98 322 102 360 Q118 360 124 332 Q126 304 120 290 Z" class="ba-3"></path>
+  <path d="M324 286 Q334 322 330 360 Q314 360 308 332 Q306 304 312 290 Z" class="ba-3"></path>
+</g>
+
+<g id="Extensor_digitorum">
+  <path d="M104 320 Q108 348 112 360 L120 358 Q118 332 114 320 Z" class="ba-5"></path>
+  <path d="M328 320 Q324 348 320 360 L312 358 Q314 332 318 320 Z" class="ba-5"></path>
+</g>
+
+<g id="Obliques">
+  <path d="M168 292 Q190 296 202 308 L198 332 Q178 332 168 318 Z" class="ba-3"></path>
+  <path d="M264 292 Q242 296 230 308 L234 332 Q254 332 264 318 Z" class="ba-3"></path>
+</g>
+
+<g id="Upper_obliques">
+  <path d="M178 248 Q196 254 200 270 L196 286 Q184 286 176 272 Z" class="ba-5"></path>
+  <path d="M254 248 Q236 254 232 270 L236 286 Q248 286 256 272 Z" class="ba-5"></path>
+</g>
+
+<g id="Gluteus_maximus">
+  <path d="M154 410 Q198 422 214 442 L212 488 Q190 494 168 488 Q150 466 152 432 Z" class="ba-3"></path>
+  <path d="M278 410 Q234 422 218 442 L220 488 Q242 494 264 488 Q282 466 280 432 Z" class="ba-3"></path>
+  <path d="M216 426 L216 490" class="ba-line"></path>
+</g>
+
+<g id="Gluteus_medius">
+  <path d="M146 414 Q160 414 168 432 L162 444 Q150 432 144 420 Z" class="ba-5"></path>
+  <path d="M286 414 Q272 414 264 432 L270 444 Q282 432 288 420 Z" class="ba-5"></path>
+</g>
+
+<g id="Biceps_Femoris">
+  <path d="M150 488 Q172 484 196 488 L194 580 Q174 586 158 580 Q146 540 150 502 Z" class="ba-3"></path>
+  <path d="M282 488 Q260 484 236 488 L238 580 Q258 586 274 580 Q286 540 282 502 Z" class="ba-3"></path>
+  <path d="M158 530 Q176 540 192 540" class="ba-line"></path>
+  <path d="M274 530 Q256 540 240 540" class="ba-line"></path>
+</g>
+
+<g id="Semi_Tendinosis">
+  <path d="M170 496 L188 496 L186 568 L172 568 Z" class="ba-5"></path>
+  <path d="M262 496 L244 496 L246 568 L260 568 Z" class="ba-5"></path>
+</g>
+
+<g id="Semimembranosis">
+  <path d="M188 496 L210 496 L208 568 L188 568 Z" class="ba-5"></path>
+  <path d="M244 496 L222 496 L224 568 L244 568 Z" class="ba-5"></path>
+</g>
+
+<g id="Upper_inner_hamstring">
+  <path d="M196 488 Q216 490 220 488 L218 512 Q200 512 198 488 Z" class="ba-3"></path>
+</g>
+
+<g id="Claves">
+  <path d="M170 588 Q186 586 200 588 L206 624 Q190 626 178 622 Q170 608 170 588 Z" class="ba-3"></path>
+  <path d="M262 588 Q246 586 232 588 L226 624 Q242 626 254 622 Q262 608 262 588 Z" class="ba-3"></path>
+  <path d="M186 596 L186 620" class="ba-line"></path>
+  <path d="M246 596 L246 620" class="ba-line"></path>
+</g>
+
+<g id="Soleus">
+  <path d="M180 600 Q192 598 200 600 L202 622 L184 622 Z" class="ba-5"></path>
+  <path d="M252 600 Q240 598 232 600 L230 622 L248 622 Z" class="ba-5"></path>
+</g>
+</svg>

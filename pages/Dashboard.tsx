@@ -1,22 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { storageService } from '../services/storageService';
-import { WorkoutLog, Habit, MuscleGroup, GymSchedule, MUSCLE_RECOVERY_HOURS, getRecoveryHours, GymProfile, ExerciseDefinition } from '../types';
-import { Activity, CheckCircle2, Flame, Zap, Calendar, Edit3, Save, X, Plus, UserCircle, Play, Repeat, Sparkles } from 'lucide-react';
-import { View } from '../types';
-import AnatomyViewer from '../components/Anatomy/AnatomyViewer';
-import { getTrainedMuscleIds } from '../constants/muscleMapping';
+import { WorkoutLog, Habit, MuscleGroup, GymSchedule, getRecoveryHours, GymProfile, ExerciseDefinition, UserState } from '../types';
+import { Calendar, Edit3, Save, X, Plus, Play, Repeat, Activity, CheckCircle2, Sparkles, Pencil } from 'lucide-react';
 import { MUSCLE_GROUP_CONFIG } from '../config/constants';
-import { UserState } from '../types';
-import { getRankForLevel, calculateStreak } from '../services/gamificationService';
+import { calculateStreak } from '../services/gamificationService';
 import { computeFatigue } from '../services/fatigueService';
 import { StatusCard } from '../components/StatusCard';
-import { TokenDisplay } from '../components/TokenDisplay';
-import { SystemNotification } from '../components/hud';
-
+import { SystemNotification, BodyAnatomy, splitExhaustedByView, CornerBracket } from '../components/hud';
 import { useNavigate } from 'react-router-dom';
 
 // Maps free-form schedule strings ("Push — Chest, Shoulders, Triceps") to MuscleGroup keys.
-// Used by the "Today's Plan" hero card to launch a session without the muscle picker.
+// Used by the today-row Quick Start to launch a session without the muscle picker.
 const SCHEDULE_KEYWORD_MAP: { keyword: RegExp; muscle: MuscleGroup }[] = [
   { keyword: /chest|dada/i, muscle: 'chest' },
   { keyword: /shoulder|bahu/i, muscle: 'shoulders' },
@@ -63,6 +57,21 @@ const exercisesFromLog = (log: WorkoutLog): ExerciseDefinition[] => {
   }));
 };
 
+// Indonesia relative date format. "Hari ini" / "Kemarin" / "X hari lalu" /
+// "X minggu lalu" — falls back to YYYY-MM-DD when older than 30 days.
+const formatRelativeID = (input: number | string | undefined): string => {
+  if (!input) return '';
+  const ts = typeof input === 'number' ? input : new Date(input + (input.includes('T') ? '' : 'T12:00:00')).getTime();
+  if (isNaN(ts)) return '';
+  const diffDays = Math.floor((Date.now() - ts) / (24 * 60 * 60 * 1000));
+  if (diffDays < 0) return new Date(ts).toLocaleDateString('en-CA');
+  if (diffDays === 0) return 'Hari ini';
+  if (diffDays === 1) return 'Kemarin';
+  if (diffDays < 7) return `${diffDays} hari lalu`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} minggu lalu`;
+  return new Date(ts).toLocaleDateString('en-CA');
+};
+
 // Get muscles currently recovering based on workout history.
 // Phase 9: gender modifier — Female users recover ~18% faster.
 function getRecoveringMuscles(
@@ -74,16 +83,14 @@ function getRecoveringMuscles(
   const seen = new Set<MuscleGroup>();
 
   for (const w of workouts) {
-    // Use precise timestamp if available, otherwise fall back to noon
     const workoutTime = w.timestamp
       ? new Date(w.timestamp).getTime()
       : new Date(w.date + 'T12:00:00').getTime();
 
-    // NaN guard
     if (isNaN(workoutTime)) continue;
 
     const msSince = nowMs - workoutTime;
-    if (msSince < 0) continue; // future date guard
+    if (msSince < 0) continue;
 
     const muscles: MuscleGroup[] = w.muscleGroups && w.muscleGroups?.length > 0
       ? w.muscleGroups
@@ -111,9 +118,6 @@ function getRecoveringMuscles(
   return recovering;
 }
 
-// Phase 9: muscles trained in the last 7 days that are NOW fully recovered.
-// Surfaced as a green "ready" overlay on the Anatomy SVG so the gender-based
-// recovery boost is visually obvious for female users.
 function getReadyMuscles(
   workouts: WorkoutLog[],
   nowMs: number,
@@ -136,8 +140,8 @@ function getReadyMuscles(
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 const DAY_LABELS: Record<string, string> = {
-  monday: 'Sen', tuesday: 'Sel', wednesday: 'Rab', thursday: 'Kam',
-  friday: 'Jum', saturday: 'Sab', sunday: 'Min'
+  monday: 'SEN', tuesday: 'SEL', wednesday: 'RAB', thursday: 'KAM',
+  friday: 'JUM', saturday: 'SAB', sunday: 'MIN'
 };
 
 export const Dashboard: React.FC = () => {
@@ -158,8 +162,12 @@ export const Dashboard: React.FC = () => {
   const [newHabitName, setNewHabitName] = useState('');
   const [systemMessage, setSystemMessage] = useState<string>(storageService.getLastSystemMessage());
 
+  // Muscle Recovery 3D flip state (Q4: 600ms cubic ease-out)
+  const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
+  const [bodyAngle, setBodyAngle] = useState(0);
+
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(Date.now()), 1000); // Update every second for recovery timer
+    const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -177,8 +185,6 @@ export const Dashboard: React.FC = () => {
     }
   }, []);
 
-  // ── Phase 3: subscribe to storageService so XP/Rank/Title updates from
-  // GymTracker (or RTDB sync) are reflected here in real-time. ──
   useEffect(() => {
     const unsubscribe = storageService.subscribe(() => {
       setProfile(storageService.getGymProfile());
@@ -189,7 +195,25 @@ export const Dashboard: React.FC = () => {
     return unsubscribe;
   }, []);
 
-  // ═══ Phase 25: Quick-Start launchers ═══
+  // Body flip RAF — interpolate to target angle (600ms cubic ease-out)
+  useEffect(() => {
+    const target = bodyView === 'back' ? 180 : 0;
+    const from = bodyAngle;
+    if (Math.abs(target - from) < 0.1) return;
+    const start = performance.now();
+    const dur = 600;
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / dur);
+      setBodyAngle(from + (target - from) * ease(t));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bodyView]);
+
   const launchTodaysPlan = () => {
     const label = schedule[currentDayKey];
     if (!label || isRestDay(label)) return;
@@ -216,8 +240,6 @@ export const Dashboard: React.FC = () => {
     });
     navigate('/gym');
   };
-
-
 
   const handleWeightUpdate = () => {
     if (!userState || !newWeight) return;
@@ -246,7 +268,7 @@ export const Dashboard: React.FC = () => {
 
     const newHabit: Habit = {
       id: Date.now().toString(),
-      name: newHabitName,
+      name: newHabitName.trim(),
       streak: 0,
       completedDates: []
     };
@@ -257,7 +279,28 @@ export const Dashboard: React.FC = () => {
     setNewHabitName('');
   };
 
+  // Toggle today's completion for a habit (Dashboard inline quick-toggle)
+  const toggleHabitToday = (id: string) => {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const updated = habits.map(h => {
+      if (h.id !== id) return h;
+      const dates = h.completedDates || [];
+      const done = dates.includes(todayStr);
+      return { ...h, completedDates: done ? dates.filter(d => d !== todayStr) : [...dates, todayStr] };
+    });
+    storageService.saveHabits(updated);
+    setHabits(updated);
+  };
 
+  const startEditSchedule = () => {
+    setEditSchedule({ ...schedule });
+    setEditingSchedule(true);
+  };
+  const saveSchedule = () => {
+    setSchedule(editSchedule);
+    storageService.saveGymSchedule(editSchedule);
+    setEditingSchedule(false);
+  };
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -268,9 +311,9 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 
-  const today = new Date(currentTime).toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+  const today = new Date(currentTime).toLocaleDateString('en-CA');
   const now = new Date(currentTime);
-  const currentDayKey = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1]; // JS 0=Sun
+  const currentDayKey = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1];
 
   const getGreeting = () => {
     const hour = now.getHours();
@@ -282,13 +325,12 @@ export const Dashboard: React.FC = () => {
 
   const formattedDate = now.toLocaleDateString('id-ID', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-  });
+  }).toUpperCase();
 
-  // Quick Stats
   const lastWorkout = workouts[0];
   const habitCompletion = habits.filter(h => h.completedDates?.includes(today))?.length;
   const habitTotal = habits?.length;
-  const habitPercentage = habitTotal > 0 ? (habitCompletion / habitTotal) * 100 : 0;
+  const habitPercentage = habitTotal > 0 ? Math.round((habitCompletion / habitTotal) * 100) : 0;
   const workoutStreak = calculateStreak(workouts);
 
   const weekStart = new Date(now);
@@ -296,195 +338,63 @@ export const Dashboard: React.FC = () => {
   const weekStartStr = weekStart.toLocaleDateString('en-CA');
   const workoutsThisWeek = workouts.filter(w => w.date >= weekStartStr)?.length;
 
-  // 7-day heatmap
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(now);
-    d.setDate(d.getDate() - (6 - i)); // Only call setDate ONCE
-    const dateStr = d.toLocaleDateString('en-CA');
-    const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
-    const completedCount = habits.filter(h => h.completedDates?.includes(dateStr))?.length;
-    return { dateStr, dayLabel, completedCount, total: habitTotal, isToday: dateStr === today };
-  });
-
-  // Recovery — Phase 9: gender-aware threshold
   const recoveringData = getRecoveringMuscles(workouts, currentTime, userState?.gender);
   const recoveringMuscles = recoveringData.map(r => r.muscle);
   const readyMuscles = getReadyMuscles(workouts, currentTime, new Set(recoveringMuscles));
 
-  // Project Chimera Phase 2 — fatigue/recovery signal for the Status Window
   const fatigue = computeFatigue(workouts, currentTime, userState?.gender);
 
-  // Schedule editing
-  const startEditSchedule = () => {
-    setEditSchedule({ ...schedule });
-    setEditingSchedule(true);
-  };
-  const saveSchedule = () => {
-    setSchedule(editSchedule);
-    storageService.saveGymSchedule(editSchedule);
-    setEditingSchedule(false);
-  };
+  // Split exhausted muscles by view (front/back) — feeds BodyAnatomy
+  const exhaustedSplit = splitExhaustedByView(recoveringMuscles);
+
+  // 3D body flip transform math
+  const rad = bodyAngle * Math.PI / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const scaleX = 0.04 + 0.96 * Math.abs(cos);
+  const showFront = cos >= 0;
+  const edgeIntensity = Math.pow(1 - Math.abs(cos), 1.5);
+  const rotateShade = Math.abs(sin) * 0.85;
+  const visibleExhausted = showFront ? exhaustedSplit.front : exhaustedSplit.back;
+  const exhaustedCount = visibleExhausted.length;
+
+  const gender: 'male' | 'female' = (userState?.gender === 'Female' ? 'female' : 'male');
+
+  // Last-session derived bits
+  const lastMuscleLabel = lastWorkout?.muscleGroups?.[0]
+    ? (MUSCLE_GROUP_CONFIG[lastWorkout.muscleGroups[0]]?.label || lastWorkout.muscleGroups[0]).toLowerCase()
+    : '';
+  const lastRelative = lastWorkout ? formatRelativeID(lastWorkout.timestamp || lastWorkout.date) : '';
+
+  const todayLabel = schedule[currentDayKey] || '';
+  const todayIsRest = isRestDay(todayLabel);
+  const todayMuscles = todayLabel ? parseScheduleMuscles(todayLabel) : [];
+  const canStartToday = !!todayLabel && !todayIsRest && todayMuscles.length > 0;
 
   return (
-    <div className="space-y-8">
-      {/* Greeting Header */}
-      <div className="animate-slide-up">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-          <div>
-            <p className="text-slate-400 text-sm mb-1">{formattedDate}</p>
-            <h2 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">
-              {getGreeting()}, <span
-                onClick={() => navigate('/profile')}
-                className="gradient-text-cyan cursor-pointer hover:underline decoration-cyan-500/30 underline-offset-4 transition-all"
-              >{userState?.name || 'Naufal'}</span>
-            </h2>
-            <div className="flex items-center space-x-3 mt-1 cursor-pointer hover:bg-slate-800/50 p-1 rounded-lg transition-colors w-fit" onClick={() => { setNewWeight(userState?.weight.toString() || ''); setEditingWeight(true); }}>
-              <p className="text-slate-500 text-sm">
-                Current Weight: <span className="text-white font-mono">{userState?.weight || '--'} kg</span>
-              </p>
-              <Edit3 size={12} className="text-slate-600" />
-            </div>
-          </div>
-          <div className="flex items-center space-x-3">
-            {workoutStreak > 0 && (
-              <div className="flex items-center space-x-2 bg-orange-500/10 border border-orange-500/30 rounded-full px-4 py-2 shadow-[0_0_10px_rgba(249,115,22,0.1)]">
-                <Flame size={16} className="text-orange-500 animate-pulse" />
-                <span className="text-sm font-bold text-orange-400 font-mono">{workoutStreak} Day Streak</span>
-              </div>
-            )}
-            {(profile?.streakFreezeTokens || 0) > 0 && (
-              <div
-                className="flex items-center space-x-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full px-3 py-2 shadow-[0_0_10px_rgba(6,182,212,0.1)]"
-                title="Streak Freeze Tokens — auto-protect your streak when you miss a day"
-              >
-                <TokenDisplay count={profile?.streakFreezeTokens || 0} size="sm" />
-              </div>
-            )}
-            {profile && (() => {
-              const rank = getRankForLevel(profile.level || 1);
-              return (
-                <div
-                  onClick={() => navigate('/gym')}
-                  className="flex items-center space-x-2 bg-slate-900/80 border border-slate-700 rounded-full px-4 py-2 cursor-pointer hover:border-cyan-500/50 transition-all shadow-lg"
-                >
-                  <span className="text-lg">{rank.emoji}</span>
-                  <div className="flex flex-col">
-                    <span className={`text-[10px] font-bold leading-none ${rank.color}`}>{rank.name} <span className="text-slate-500 font-mono">Lv.{profile.level || 1}</span></span>
-                    <span className="text-[10px] text-slate-400 font-mono font-bold">{(profile?.totalXP || 0).toLocaleString()} XP</span>
-                  </div>
-                </div>
-              );
-            })()}
-            <button
-              onClick={() => navigate('/profile')}
-              className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
-            >
-              <UserCircle size={20} />
-            </button>
-          </div>
+    <div className="dashboard">
+      {/* ── 1. GREETING ── */}
+      <section className="d-greet reveal" style={{ '--reveal-i': 0 } as React.CSSProperties}>
+        <div className="d-greet-date">{formattedDate}</div>
+        <h1 className="d-greet-hello">
+          {getGreeting()}, <span
+            className="fz-cyan"
+            onClick={() => { setNewName(userState?.name || ''); setEditingName(true); }}
+          >{userState?.name || 'Hunter'}</span>
+        </h1>
+        <div
+          className="d-greet-weight"
+          onClick={() => { setNewWeight(userState?.weight?.toString() || ''); setEditingWeight(true); }}
+        >
+          <span className="hud-label-sm">CURRENT WEIGHT:</span>
+          <span className="d-greet-weight-val">{userState?.weight ?? '--'} <span className="d-greet-unit">kg</span></span>
+          <button className="d-greet-edit" aria-label="Edit berat"><Pencil size={11} /></button>
         </div>
-      </div>
+      </section>
 
-      {/* ═══ Phase 25: QUICK-START HERO STRIP ═══ */}
-      {(() => {
-        const todayLabel = schedule[currentDayKey] || '';
-        const todayIsRest = isRestDay(todayLabel);
-        const todayMuscles = todayLabel ? parseScheduleMuscles(todayLabel) : [];
-        const canStartToday = !!todayLabel && !todayIsRest && todayMuscles.length > 0;
-        const repeatLabel = lastWorkout?.type;
-        const repeatExerciseCount = lastWorkout?.exercises?.length ?? 0;
-        const repeatXP = lastWorkout?.xpEarned ?? 0;
-
-        return (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-slide-up">
-            {/* Today's Plan */}
-            <button
-              onClick={launchTodaysPlan}
-              disabled={!canStartToday}
-              className={`relative overflow-hidden text-left p-5 rounded-2xl border transition-all duration-200 group ${canStartToday
-                ? 'bg-gradient-to-br from-red-500/15 via-orange-500/10 to-amber-500/5 border-red-500/40 hover:border-red-400 shadow-[0_0_25px_rgba(239,68,68,0.15)] hover:shadow-[0_0_35px_rgba(239,68,68,0.3)] cursor-pointer'
-                : 'bg-slate-900/60 border-slate-800 cursor-not-allowed opacity-70'
-                }`}
-            >
-              {canStartToday && (
-                <div className="absolute -top-12 -right-12 w-40 h-40 bg-red-500/20 rounded-full blur-3xl group-hover:scale-110 transition-transform duration-500" />
-              )}
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center space-x-2">
-                    <div className={`p-2 rounded-lg ${canStartToday ? 'bg-red-500/20 text-red-400' : 'bg-slate-800 text-slate-600'}`}>
-                      <Calendar size={16} />
-                    </div>
-                    <span className={`text-[10px] font-mono uppercase tracking-widest font-bold ${canStartToday ? 'text-red-400' : 'text-slate-500'}`}>
-                      Today's Plan
-                    </span>
-                  </div>
-                  {canStartToday && (
-                    <div className="flex items-center space-x-1 bg-red-500 text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full shadow-lg shadow-red-500/40 group-hover:bg-red-400 transition-colors">
-                      <Play size={10} fill="currentColor" />
-                      <span>Start</span>
-                    </div>
-                  )}
-                </div>
-                <h3 className={`text-lg font-extrabold mb-1 ${canStartToday ? 'text-white' : 'text-slate-400'}`}>
-                  {todayLabel || 'No schedule set'}
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {canStartToday
-                    ? `${todayMuscles.length} muscle ${todayMuscles.length === 1 ? 'group' : 'groups'} · skips picker`
-                    : todayIsRest
-                      ? 'Rest day — recover well 🧘'
-                      : 'Edit your schedule below to enable Quick Start'}
-                </p>
-              </div>
-            </button>
-
-            {/* Repeat Last Workout */}
-            <button
-              onClick={launchRepeatLast}
-              disabled={!lastWorkout}
-              className={`relative overflow-hidden text-left p-5 rounded-2xl border transition-all duration-200 group ${lastWorkout
-                ? 'bg-gradient-to-br from-cyan-500/10 via-blue-500/5 to-slate-900 border-cyan-500/30 hover:border-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.1)] hover:shadow-[0_0_30px_rgba(6,182,212,0.25)] cursor-pointer'
-                : 'bg-slate-900/60 border-slate-800 cursor-not-allowed opacity-70'
-                }`}
-            >
-              {lastWorkout && (
-                <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-cyan-500/15 rounded-full blur-3xl group-hover:scale-110 transition-transform duration-500" />
-              )}
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center space-x-2">
-                    <div className={`p-2 rounded-lg ${lastWorkout ? 'bg-cyan-500/20 text-cyan-400' : 'bg-slate-800 text-slate-600'}`}>
-                      <Repeat size={16} />
-                    </div>
-                    <span className={`text-[10px] font-mono uppercase tracking-widest font-bold ${lastWorkout ? 'text-cyan-400' : 'text-slate-500'}`}>
-                      Repeat Last
-                    </span>
-                  </div>
-                  {lastWorkout && (
-                    <div className="flex items-center space-x-1 bg-cyan-500 text-slate-900 text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full shadow-lg shadow-cyan-500/40 group-hover:bg-cyan-400 transition-colors">
-                      <Play size={10} fill="currentColor" />
-                      <span>Start</span>
-                    </div>
-                  )}
-                </div>
-                <h3 className={`text-lg font-extrabold mb-1 ${lastWorkout ? 'text-white' : 'text-slate-400'}`}>
-                  {repeatLabel || 'No previous workout'}
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {lastWorkout
-                    ? `${repeatExerciseCount} exercises · ${repeatXP > 0 ? `${repeatXP} XP earned` : 'last session'}`
-                    : 'Log your first session to enable Repeat'}
-                </p>
-              </div>
-            </button>
-          </div>
-        );
-      })()}
-
-      {/* ═══ Phase 25: SYSTEM BRIEFING ═══ */}
+      {/* ── 2. SYSTEM VERDICT (inline SystemNotification — C1) ── */}
       {systemMessage && (
-        <div className="animate-slide-up">
+        <div className="reveal" style={{ '--reveal-i': 1 } as React.CSSProperties}>
           <SystemNotification
             mode="inline"
             tone="cyan"
@@ -505,319 +415,359 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {/* Gym Card */}
-        <div onClick={() => navigate('/gym')}
-          className="animate-slide-up delay-100 jarvis-card jarvis-card-glow p-6 cursor-pointer group gradient-border rounded-xl">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-cyan-500/10 rounded-xl text-cyan-400 group-hover:bg-cyan-500 group-hover:text-slate-900 transition-all duration-300">
-              <Activity size={22} />
-            </div>
-            <div className="text-right">
-              {lastWorkout && lastWorkout.date === today ? (
-                <span className="bg-emerald-500/15 text-emerald-400 text-[10px] px-2.5 py-1 rounded-full border border-emerald-500/30 font-bold uppercase tracking-wider">Logged</span>
-              ) : (
-                <span className="bg-slate-800 text-slate-500 text-[10px] px-2.5 py-1 rounded-full border border-slate-700 font-bold uppercase tracking-wider">Pending</span>
-              )}
-            </div>
-          </div>
-          <h3 className="text-slate-400 text-xs uppercase tracking-widest font-mono mb-2">Last Session</h3>
-          {lastWorkout ? (
-            <>
-              <span className="text-2xl font-extrabold text-white">{lastWorkout.type}</span>
-              <span className="text-slate-500 text-xs ml-2">({lastWorkout.date})</span>
-              <div className="text-xs text-slate-400 mt-2 flex items-center">
-                <Calendar size={12} className={schedule[currentDayKey] ? "text-cyan-400 mr-1.5" : "text-slate-600 mr-1.5"} />
-                {schedule[currentDayKey] ? (
-                  <span>Scheduled: <span className="text-white font-medium">{schedule[currentDayKey]}</span></span>
-                ) : (
-                  <span>Rest Day</span>
-                )}
-              </div>
-              <div className="mt-3 flex items-center justify-between text-[10px] text-slate-500">
-                <span className="flex items-center"><Zap size={10} className="mr-1" />{workoutsThisWeek} this week</span>
-                {lastWorkout.xpEarned > 0 && <span className="text-amber-400 font-mono">+{lastWorkout.xpEarned} XP</span>}
-              </div>
-            </>
-          ) : (
-            <span className="text-lg text-slate-500">No data logged</span>
-          )}
+      {/* ── 3. LAST SESSION ── */}
+      <div className="reveal" style={{ '--reveal-i': 2 } as React.CSSProperties}>
+      <CornerBracket
+        className="card card-cyan d-card-last"
+        tone="cyan"
+        size={9}
+        inset={4}
+      >
+        <div className="card-head">
+          <span className="card-head-icon d-last-icon"><Activity size={14} /></span>
+          <span className="hud-label">LAST SESSION</span>
+          {lastWorkout && <span className="d-last-pending">PENDING</span>}
         </div>
-
-        {/* Habits Card */}
-        <div onClick={() => navigate('/habits')}
-          className="animate-slide-up delay-300 jarvis-card jarvis-card-glow p-6 cursor-pointer group gradient-border rounded-xl">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-3 bg-amber-500/10 rounded-xl text-amber-400 group-hover:bg-amber-500 group-hover:text-slate-900 transition-all duration-300">
-              <CheckCircle2 size={22} />
-            </div>
-            <span className="text-2xl font-mono font-extrabold text-white">{Math.round(habitPercentage)}%</span>
-          </div>
-          <h3 className="text-slate-400 text-xs uppercase tracking-widest font-mono mb-2">Daily Protocol</h3>
-          <div className="text-sm text-slate-300 font-medium">{habitCompletion} / {habitTotal} Tasks Executed</div>
-          <div className="mt-3 flex space-x-1.5">
-            {habits.slice(0, 5).map(h => (
-              <div key={h.id}
-                className={`h-2 flex-1 rounded-full transition-all duration-500 ${h.completedDates?.includes(today) ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-slate-800'}`} />
-            ))}
-          </div>
-
-          {/* Quick Add Habit */}
-          <div onClick={e => e.stopPropagation()} className="mt-4 pt-3 border-t border-slate-800">
-            <div className="text-[10px] text-slate-500 font-mono uppercase tracking-wider mb-2">Create New Protocol</div>
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={newHabitName}
-                onChange={e => setNewHabitName(e.target.value)}
-                placeholder="e.g. Morning Run..."
-                className="bg-slate-950 border border-slate-600 rounded-lg px-3 py-2 text-xs text-white w-full focus:outline-none focus:border-cyan-500 placeholder:text-slate-600 shadow-inner"
-                onKeyDown={e => e.key === 'Enter' && handleAddHabit(e)}
-              />
-              <button onClick={handleAddHabit} className="bg-cyan-500 hover:bg-cyan-400 text-slate-900 p-2 rounded-lg transition-colors font-bold shadow-lg shadow-cyan-500/20">
-                <Plus size={14} strokeWidth={3} />
-              </button>
-            </div>
-          </div>
+        <div className="d-last-title">
+          {lastWorkout ? lastWorkout.type : 'Belum ada sesi'}
+          {lastWorkout && <span className="d-last-date">({lastRelative})</span>}
         </div>
-
-        {/* Hunter Status — collapsed identity / chevron-expand reveals
-            attributes / Power Signature / combat / rank progress. */}
-        {profile && (
-          <div className="animate-slide-up delay-200">
-            <StatusCard
-              gymProfile={profile}
-              workouts={workouts}
-              fatigue={fatigue}
-              displayName={userState?.name || ''}
-            />
+        {lastWorkout && (
+          <div className="d-last-row">
+            <span className="d-last-row-icon"><Calendar size={13} /></span>
+            <span>
+              <strong>{lastWorkout.exercises.length}</strong> latihan
+              {lastMuscleLabel && <> · <strong>{lastMuscleLabel}</strong></>}
+              {(lastWorkout.xpEarned ?? 0) > 0 && <> · {lastWorkout.xpEarned} XP</>}
+            </span>
           </div>
         )}
+        <div className="d-last-foot">
+          <span className="d-last-streak">
+            <Sparkles size={11} />
+            {workoutsThisWeek} minggu ini · {workoutStreak} day streak
+          </span>
+          <span className="d-last-xp">+{(lastWorkout?.xpEarned ?? 0).toLocaleString()} XP</span>
+        </div>
+        <button
+          className="d-last-repeat"
+          onClick={launchRepeatLast}
+          disabled={!lastWorkout}
+        >
+          <span className="d-last-repeat-ico"><Repeat size={16} /></span>
+          <span className="d-last-repeat-text">
+            <span className="d-last-repeat-hud">REPEAT LAST</span>
+            <span className="d-last-repeat-sub">
+              {lastWorkout
+                ? (lastMuscleLabel ? `Mulai sesi ${lastMuscleLabel} lagi` : 'Mulai sesi lagi')
+                : 'Selesaikan sesi pertamamu untuk mengaktifkan'}
+            </span>
+          </span>
+          {lastWorkout && (
+            <span className="d-last-repeat-cta">
+              <Play size={10} fill="currentColor" /> START
+            </span>
+          )}
+        </button>
+      </CornerBracket>
       </div>
 
-      {/* ═══ MUSCLE RECOVERY MAP ═══ */}
-      <div className="animate-slide-up delay-400 jarvis-card p-6 rounded-xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <Activity size={18} className="text-red-400" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Muscle Recovery Status</h3>
+      {/* ── 4. DAILY PROTOCOL ── */}
+      <article className="card reveal" style={{ '--reveal-i': 3 } as React.CSSProperties}>
+        <div className="card-head">
+          <span className="card-head-icon d-proto-icon"><CheckCircle2 size={14} /></span>
+          <span className="hud-label">DAILY PROTOCOL</span>
+          <span className="d-proto-pct">{habitPercentage}%</span>
+        </div>
+        <div className="d-proto-count">{habitCompletion} / {habitTotal} Tugas Hari Ini</div>
+        <div className="d-proto-progress">
+          <div className="d-proto-progress-fill" style={{ width: `${habitPercentage}%` }} />
+        </div>
+        {habits.length > 0 && (
+          <div className="d-proto-list">
+            {habits.map(h => {
+              const done = h.completedDates?.includes(today) ?? false;
+              return (
+                <button
+                  key={h.id}
+                  type="button"
+                  onClick={() => toggleHabitToday(h.id)}
+                  className={`d-proto-item ${done ? 'is-done' : ''}`}
+                >
+                  <span className="d-proto-item-check">
+                    {done && <CheckCircle2 size={14} />}
+                  </span>
+                  <span className="d-proto-item-text">{h.name}</span>
+                  {(h.streak ?? 0) > 0 && (
+                    <span className="d-proto-item-streak">{h.streak}d</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
-          <div className="flex items-center space-x-3 text-[10px]">
-            <span className="flex items-center">
-              <span className="w-2.5 h-2.5 rounded-full bg-transparent border-2 border-red-500 mr-1.5 shadow-[0_0_4px_rgba(239,68,68,0.7)]" />
-              Exhausted
-            </span>
-            <span className="flex items-center">
-              <span className="w-2.5 h-2.5 rounded-full bg-transparent border-2 border-slate-400 mr-1.5" />
-              Rested
-            </span>
-          </div>
+        )}
+        <div className="hud-label-sm" style={{ marginTop: 14, marginBottom: 6, letterSpacing: '0.18em', color: 'var(--t-3)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+          BUAT PROTOKOL BARU
+        </div>
+        <div className="d-proto-input">
+          <input
+            type="text"
+            placeholder="cth: Lari pagi, baca 10 hal..."
+            value={newHabitName}
+            onChange={(e) => setNewHabitName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddHabit(e); }}
+          />
+          <button
+            className="d-proto-add"
+            aria-label="Tambah protokol"
+            onClick={handleAddHabit}
+            disabled={!newHabitName.trim()}
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+      </article>
+
+      {/* ── 5. HUNTER STATUS (existing StatusCard — Phase 3 wired) ── */}
+      {profile && userState && (
+        <div className="reveal" style={{ '--reveal-i': 4 } as React.CSSProperties}>
+          <StatusCard
+            gymProfile={profile}
+            workouts={workouts}
+            fatigue={fatigue}
+            displayName={userState?.name || ''}
+          />
+        </div>
+      )}
+
+      {/* ── 6. MUSCLE RECOVERY ── */}
+      <article className="card d-card-body reveal" style={{ '--reveal-i': 5 } as React.CSSProperties}>
+        <div className="card-head">
+          <span className="card-head-icon"><Activity size={14} /></span>
+          <span className="hud-label">MUSCLE RECOVERY STATUS</span>
         </div>
 
-        {/* SINGLE CENTERED ANATOMY VIEWER — built-in toggle handles front/back */}
-        <div className="w-full flex justify-center mt-6">
-          <div className="w-full max-w-[280px] sm:max-w-xs">
-            <AnatomyViewer
-              trainedMuscles={getTrainedMuscleIds(recoveringMuscles)}
-              readyMuscles={getTrainedMuscleIds(readyMuscles)}
-              defaultView="front"
+        <div className="d-body-legend">
+          <span className="d-legend-item"><span className="d-legend-dot d-dot-exh" /><span>Lelah</span></span>
+          <span className="d-legend-item"><span className="d-legend-dot d-dot-rest" /><span>Pulih</span></span>
+        </div>
+
+        <CornerBracket className="d-body-stage" tone="cyan" size={11} inset={6}>
+          <div className="d-body-toggle">
+            <button className={`d-body-toggle-opt ${bodyView === 'front' ? 'is-on' : ''}`} onClick={() => setBodyView('front')}>FRONT</button>
+            <button className={`d-body-toggle-opt ${bodyView === 'back' ? 'is-on' : ''}`} onClick={() => setBodyView('back')}>BACK</button>
+          </div>
+
+          <div className="d-body-fig-wrap">
+            <div className="d-body-scan" />
+            <div
+              className="d-body-3d"
+              style={{
+                transform: `rotateY(${bodyAngle}deg) scaleX(${scaleX})`,
+                filter: `brightness(${0.6 + 0.4 * Math.abs(cos)})`,
+              }}
+            >
+              <div
+                className="d-body-face-real"
+                style={{ opacity: showFront ? 1 : 0, '--rotate-shade': rotateShade } as React.CSSProperties}
+              >
+                <BodyAnatomy view="front" exhausted={exhaustedSplit.front} gender={gender} />
+              </div>
+              <div
+                className="d-body-face-real d-body-face-mirror"
+                style={{ opacity: showFront ? 0 : 1, '--rotate-shade': rotateShade } as React.CSSProperties}
+              >
+                <BodyAnatomy view="back" exhausted={exhaustedSplit.back} gender={gender} />
+              </div>
+            </div>
+            <div
+              className="d-body-edge"
+              style={{
+                opacity: edgeIntensity * 0.9,
+                transform: `translateX(-50%) scaleY(${1 - edgeIntensity * 0.05})`,
+              }}
             />
           </div>
-        </div>
 
-        {/* AT-A-GLANCE STATUS CHIPS — answer "what can I train right now"
-            without making the user read the colored bars below. */}
-        <div className="mt-4 space-y-2 max-w-md mx-auto">
-          {readyMuscles.length > 0 && (
-            <div className="flex items-start gap-3 px-3 py-2 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-emerald-400 shrink-0 mt-0.5 whitespace-nowrap">
-                ✓ Ready
-              </span>
-              <span className="text-xs text-slate-300 leading-relaxed">
-                {readyMuscles.map(m => MUSCLE_GROUP_CONFIG[m]?.label || m).join(' · ')}
-              </span>
-            </div>
-          )}
-          {recoveringMuscles.length > 0 && (
-            <div className="flex items-start gap-3 px-3 py-2 bg-amber-500/5 border border-amber-500/20 rounded-lg">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-amber-400 shrink-0 mt-0.5 whitespace-nowrap">
-                ⏳ Recovering
-              </span>
-              <span className="text-xs text-slate-400 leading-relaxed">
-                {recoveringMuscles.map(m => MUSCLE_GROUP_CONFIG[m]?.label || m).join(' · ')}
-              </span>
-            </div>
-          )}
-        </div>
+          <div className="d-body-active">
+            <span style={{ color: 'var(--red)' }}>●</span> {exhaustedCount} LELAH
+          </div>
+        </CornerBracket>
 
-        {/* RECOVERY TIMERS LIST */}
+        {readyMuscles.length > 0 && (
+          <div className="d-body-ready">
+            <div className="d-body-ready-head">
+              <span className="hud-label-sm" style={{ color: 'var(--green-bright)', letterSpacing: '0.18em', fontSize: 10, fontFamily: 'var(--font-mono)' }}>
+                SIAP DILATIH
+              </span>
+              <span className="d-body-ready-count">{readyMuscles.length} otot</span>
+            </div>
+            <div className="d-body-ready-list">
+              {readyMuscles.map(m => (
+                <span key={m} className="d-body-ready-chip">
+                  <span className="d-body-ready-dot" />
+                  <span>{MUSCLE_GROUP_CONFIG[m]?.label || m}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {recoveringData.length > 0 && (
-          <div className="mt-8 space-y-3 max-w-md mx-auto">
-            <h4 className="text-[10px] font-mono text-slate-500 uppercase tracking-widest mb-3 text-center">Recovery Estimations</h4>
-            {recoveringData.map((data, i) => {
-              const maxH = getRecoveryHours(data.muscle as MuscleGroup, userState?.gender);
+          <div className="mt-3 space-y-2">
+            {recoveringData.map((data) => {
+              const maxH = getRecoveryHours(data.muscle, userState?.gender);
               const totalSecsLeft = (data.hoursLeft * 3600) + (data.minutesLeft * 60) + (data.secondsLeft || 0);
-              // Progress = how much recovery is COMPLETE (0% = just started, 100% = fully recovered)
               const pct = Math.max(0, Math.min(100, 100 - (totalSecsLeft / (maxH * 3600)) * 100));
               const nearlyDone = pct > 80;
-
               return (
-                <div key={i} className="p-3 bg-slate-900 border border-slate-800 rounded-xl relative overflow-hidden group">
-                  <div className={`absolute top-0 left-0 w-1 h-full ${nearlyDone ? 'bg-emerald-500' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]'}`} />
-
-                  <div className="flex items-center justify-between pl-2 mb-2">
-                    <span className="text-sm font-bold text-slate-300 capitalize flex items-center tracking-wide">
-                      {MUSCLE_GROUP_CONFIG[data.muscle as MuscleGroup]?.label || data.muscle}
+                <div key={data.muscle} className="p-2.5 bg-slate-950/60 border border-slate-800 rounded-lg relative overflow-hidden">
+                  <div className={`absolute top-0 left-0 w-1 h-full ${nearlyDone ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ boxShadow: nearlyDone ? undefined : '0 0 8px rgba(239,68,68,0.7)' }} />
+                  <div className="flex items-center justify-between pl-2 mb-1.5">
+                    <span className="text-xs font-bold text-slate-200 capitalize">
+                      {MUSCLE_GROUP_CONFIG[data.muscle]?.label || data.muscle}
                     </span>
-                    <span className={`text-[10px] font-mono font-bold tracking-widest ${nearlyDone ? 'text-emerald-400' : 'text-red-400 drop-shadow-[0_0_5px_rgba(239,68,68,0.8)]'}`}>
-                      {data.hoursLeft}h {data.minutesLeft}m {data.secondsLeft}s remaining
+                    <span className={`text-[10px] font-mono font-bold tracking-wider ${nearlyDone ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {data.hoursLeft}h {data.minutesLeft}m {data.secondsLeft}s
                     </span>
                   </div>
-
-                  {/* Progress Bar - fills up as recovery progresses */}
-                  <div className="w-full ml-2 h-1 bg-slate-800 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${nearlyDone ? 'bg-emerald-700/70' : 'bg-gradient-to-r from-red-600 to-red-400 shadow-[0_0_8px_rgba(239,68,68,0.8)]'} transition-all duration-1000 ease-linear`}
-                      style={{ width: `${pct}%` }}
-                    />
+                  <div className="w-full ml-2 h-1 bg-slate-900 rounded-full overflow-hidden">
+                    <div className={`h-full ${nearlyDone ? 'bg-emerald-700/70' : 'bg-gradient-to-r from-red-600 to-red-400'}`} style={{ width: `${pct}%`, transition: 'width 1s linear' }} />
                   </div>
                 </div>
               );
             })}
           </div>
         )}
-      </div>
+      </article>
 
-      {/* ═══ GYM SCHEDULE ═══ */}
-      <div className="animate-slide-up delay-400 jarvis-card p-6 rounded-xl">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <Calendar size={18} className="text-jarvis-accent" />
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Weekly Gym Schedule</h3>
-          </div>
+      {/* ── 7. WEEKLY SCHEDULE ── */}
+      <article className="card reveal" style={{ '--reveal-i': 6 } as React.CSSProperties}>
+        <div className="card-head">
+          <span className="card-head-icon"><Calendar size={14} /></span>
+          <span className="hud-label">WEEKLY GYM SCHEDULE</span>
           {editingSchedule ? (
-            <div className="flex space-x-2">
-              <button onClick={saveSchedule} className="flex items-center space-x-1 text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 px-3 py-1.5 rounded-lg">
-                <Save size={12} /><span>Save</span>
+            <div className="d-sched-edit-actions">
+              <button onClick={saveSchedule} className="d-sched-edit-btn is-primary">
+                <Save size={11} /> Save
               </button>
-              <button onClick={() => setEditingSchedule(false)} className="flex items-center space-x-1 text-xs text-slate-400 hover:text-white bg-slate-800 px-3 py-1.5 rounded-lg">
-                <X size={12} /><span>Cancel</span>
+              <button onClick={() => setEditingSchedule(false)} className="d-sched-edit-btn">
+                <X size={11} /> Cancel
               </button>
             </div>
           ) : (
-            <button onClick={startEditSchedule} className="flex items-center space-x-1 text-xs text-slate-400 hover:text-white bg-slate-800 px-3 py-1.5 rounded-lg">
-              <Edit3 size={12} /><span>Edit</span>
+            <button onClick={startEditSchedule} className="d-sched-edit">
+              <Edit3 size={11} /> Edit
             </button>
           )}
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
+        <ul className="d-sched-list">
           {DAYS.map(day => {
             const isToday = day === currentDayKey;
-            const val = editingSchedule ? editSchedule[day] || '' : schedule[day] || '';
+            const val = editingSchedule ? (editSchedule[day] ?? schedule[day] ?? '') : (schedule[day] || '');
+            const rest = isRestDay(val);
+            const muscles = val && !rest ? parseScheduleMuscles(val) : [];
+            const canStart = isToday && !rest && muscles.length > 0;
             return (
-              <div key={day}
-                className={`p-3 rounded-xl border transition-all ${isToday
-                  ? 'bg-gradient-to-b from-cyan-500/15 to-blue-500/10 border-cyan-500/40 shadow-lg shadow-cyan-500/5'
-                  : 'bg-slate-900/50 border-slate-800'
-                  }`}>
-                <div className={`text-[10px] font-mono font-bold uppercase tracking-widest mb-1.5 ${isToday ? 'text-cyan-400' : 'text-slate-500'}`}>
+              <li
+                key={day}
+                className={`d-sched-row ${isToday ? 'is-today' : ''} ${rest ? 'is-rest' : ''}`}
+              >
+                {isToday && <span className="d-sched-glow" />}
+                <span className="d-sched-day">
                   {DAY_LABELS[day]}
-                  {isToday && <span className="ml-1 text-[8px] text-cyan-500">TODAY</span>}
-                </div>
+                  {isToday && <span className="d-sched-today">TODAY</span>}
+                </span>
                 {editingSchedule ? (
                   <input
-                    type="text" value={val}
+                    type="text"
+                    className="d-sched-plan-input"
+                    value={val}
                     onChange={(e) => setEditSchedule({ ...editSchedule, [day]: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                    placeholder="—"
                   />
                 ) : (
-                  <div className={`text-xs ${isToday ? 'text-white font-medium' : 'text-slate-400'}`}>
-                    {val || '—'}
-                  </div>
+                  <span className="d-sched-plan">{val || '—'}</span>
                 )}
-              </div>
+                {!editingSchedule && canStart && (
+                  <button className="d-sched-start" onClick={launchTodaysPlan}>
+                    <Play size={9} fill="currentColor" /> Start
+                  </button>
+                )}
+              </li>
             );
           })}
+        </ul>
+      </article>
+
+      {/* ── Weight Update Modal ── */}
+      {editingWeight && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
+            <h3 className="text-xl font-bold text-white mb-4">Update Weight</h3>
+            <div className="relative mb-6">
+              <input
+                type="number"
+                value={newWeight}
+                onChange={(e) => setNewWeight(e.target.value)}
+                autoFocus
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-white text-lg focus:outline-none focus:border-cyan-500 transition-colors"
+                placeholder="Ex: 65.5"
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">kg</span>
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setEditingWeight(false)}
+                className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-400 font-bold hover:bg-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleWeightUpdate}
+                disabled={!newWeight}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold hover:shadow-lg hover:shadow-cyan-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Update
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
-
-
-      {/* Weight Update Modal */}
-      {
-        editingWeight && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
-              <h3 className="text-xl font-bold text-white mb-4">Update Body Weight</h3>
-              <div className="relative mb-6">
-                <input
-                  type="number"
-                  value={newWeight}
-                  onChange={(e) => setNewWeight(e.target.value)}
-                  autoFocus
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-white text-lg focus:outline-none focus:border-cyan-500 transition-colors"
-                  placeholder="Ex: 65.5"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">kg</span>
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setEditingWeight(false)}
-                  className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-400 font-bold hover:bg-slate-700 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleWeightUpdate}
-                  disabled={!newWeight}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold hover:shadow-lg hover:shadow-cyan-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Update
-                </button>
-              </div>
+      {/* ── Name Update Modal ── */}
+      {editingName && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
+            <h3 className="text-xl font-bold text-white mb-4">Update Name</h3>
+            <div className="relative mb-6">
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                autoFocus
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-white text-lg focus:outline-none focus:border-cyan-500 transition-colors"
+                placeholder="Enter your name"
+              />
+            </div>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setEditingName(false)}
+                className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-400 font-bold hover:bg-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleNameUpdate}
+                disabled={!newName}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold hover:shadow-lg hover:shadow-cyan-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save
+              </button>
             </div>
           </div>
-        )
-      }
-
-
-      {/* Name Update Modal */}
-      {
-        editingName && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
-              <h3 className="text-xl font-bold text-white mb-4">Update Name</h3>
-              <div className="relative mb-6">
-                <input
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  autoFocus
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-white text-lg focus:outline-none focus:border-cyan-500 transition-colors"
-                  placeholder="Enter your name"
-                />
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setEditingName(false)}
-                  className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-400 font-bold hover:bg-slate-700 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleNameUpdate}
-                  disabled={!newName}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold hover:shadow-lg hover:shadow-cyan-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        )
-      }
+        </div>
+      )}
     </div>
   );
 };

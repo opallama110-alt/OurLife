@@ -18,3 +18,6 @@ export type { RankBadgeProps, Rank, RankBadgeSize, RankBadgeVariant, RankTheme }
 
 export { default as SystemNotification } from './SystemNotification';
 export type { SystemNotificationProps, SystemNotificationTone, SystemNotificationMode } from './SystemNotification';
+
+export { default as BodyAnatomy, splitExhaustedByView } from './BodyAnatomy';
+export type { BodyAnatomyProps, BodyView, BodyGender } from './BodyAnatomy';

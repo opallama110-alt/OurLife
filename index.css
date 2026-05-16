@@ -1333,3 +1333,696 @@ input, select, textarea {
 }
 .sn-root.tone-red .sn-title,
 .sn-panel.tone-red .sn-title { text-shadow: 0 0 18px rgba(239, 68, 68, 0.7); }
+
+/* ============================================================
+   DASHBOARD SCREEN — ported from prototype dashboard.css
+   Scope: .dashboard outer container + .d-*, .body-anatomy*,
+   .card / .card-cyan / .card-head primitives.
+
+   Skipped from prototype:
+     - .proto / .tab-stub shells (OurLife uses Layout outlet)
+     - .d-scroll / .dashboard flex containers (Layout owns scrolling)
+     - .d-top* top bar (Layout owns it — Q3 deferred)
+     - .d-rankrow / .d-rankchip / .d-avatar-btn (A.2 layout cleanup)
+     - .d-card-plan / .d-card-repeat / .d-plan-* / .d-repeat-* (today's
+       plan + repeat last merged into Last Session + Weekly Schedule)
+     - .card-system / .d-sys-* (verdict uses SystemNotification — C1)
+     - .d-card-hunter / .d-hunter-* / .d-statbar-* (using StatusCard)
+     - .bn-* bottom nav (Layout owns it)
+   Adapted:
+     - .d-body-3d: dropped `transform-style: preserve-3d` per §6.8
+       (filter brightness on inline style — flat element + opacity
+       face-switch achieves the rotation effect safely)
+     - reveal stagger: --reveal-i set via inline style per section
+       instead of nth-of-type selectors (works regardless of wrapper)
+   ============================================================ */
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.dashboard > .reveal {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: dashboard-reveal-in 460ms var(--ease-out) forwards;
+  animation-delay: calc(var(--reveal-i, 0) * 70ms + 60ms);
+}
+@keyframes dashboard-reveal-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Greeting ─── */
+.d-greet { padding: 16px 0 4px; }
+.d-greet-date {
+  font-size: 10.5px;
+  letter-spacing: 0.22em;
+  color: var(--t-3);
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+.d-greet-hello {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--t-hi);
+}
+.d-greet-hello .fz-cyan { text-shadow: 0 0 14px rgba(34, 211, 238, 0.5); cursor: pointer; }
+.d-greet-weight {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 10px 4px 12px;
+  background: rgba(7, 12, 24, 0.6);
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.d-greet-weight .hud-label-sm { color: var(--t-3); letter-spacing: 0.16em; }
+.d-greet-weight-val { font-weight: 700; color: var(--t-hi); font-size: 13px; font-family: var(--font-mono); }
+.d-greet-unit { color: var(--t-3); font-weight: 500; font-size: 11px; }
+.d-greet-edit {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: rgba(34, 211, 238, 0.06);
+  border: 1px solid var(--line-cyan-soft);
+  color: var(--cyan);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  margin-left: 2px;
+}
+
+/* ─── Generic card ─── */
+.card {
+  position: relative;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-3, 14px);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0) 30%),
+    linear-gradient(180deg, var(--glass-1, rgba(20,28,48,0.55)), rgba(10, 14, 26, 0.75));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 10px 24px -16px rgba(0, 0, 0, 0.7);
+}
+.card-cyan {
+  border-color: var(--line-cyan-soft);
+  box-shadow:
+    inset 0 1px 0 rgba(34, 211, 238, 0.16),
+    0 0 0 1px rgba(34, 211, 238, 0.04),
+    0 14px 28px -18px rgba(0, 0, 0, 0.8),
+    0 0 26px -14px rgba(34, 211, 238, 0.5);
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.card-head-icon {
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(34, 211, 238, 0.06);
+  border: 1px solid var(--line-cyan-soft);
+  color: var(--cyan);
+  flex-shrink: 0;
+}
+.card-head .hud-label { color: var(--t-2); }
+
+/* ─── Last Session card ─── */
+.d-last-icon { background: rgba(34, 211, 238, 0.06); color: var(--cyan); }
+.d-last-pending {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  color: var(--orange);
+  background: rgba(251, 146, 60, 0.08);
+  border: 1px solid rgba(251, 146, 60, 0.3);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+}
+.d-last-title { font-size: 22px; font-weight: 700; color: var(--t-hi); margin-top: 4px; }
+.d-last-date { font-size: 13px; color: var(--t-3); margin-left: 4px; font-weight: 500; font-family: var(--font-mono); }
+.d-last-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px;
+  color: var(--t-2);
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: rgba(7, 12, 24, 0.5);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+}
+.d-last-row-icon { color: var(--cyan); display: inline-flex; }
+.d-last-row strong { color: var(--t-hi); font-weight: 600; }
+.d-last-foot {
+  display: flex; justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-soft);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  font-family: var(--font-mono);
+}
+.d-last-streak { display: inline-flex; align-items: center; gap: 6px; color: var(--t-3); }
+.d-last-streak svg { color: var(--cyan); }
+.d-last-xp {
+  color: var(--orange);
+  text-shadow: 0 0 8px rgba(251, 146, 60, 0.4);
+  font-weight: 700;
+}
+
+/* Repeat-last action button inside Last Session */
+.d-last-repeat {
+  margin-top: 12px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 12px;
+  background:
+    linear-gradient(90deg, rgba(34, 211, 238, 0.08), rgba(34, 211, 238, 0)),
+    rgba(7, 12, 24, 0.5);
+  border: 1px solid var(--line-cyan-soft);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  transition: border-color 160ms ease, box-shadow 200ms ease, transform 140ms ease;
+}
+.d-last-repeat:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 0 14px -4px rgba(34, 211, 238, 0.45), inset 0 0 18px rgba(34, 211, 238, 0.06);
+}
+.d-last-repeat:active { transform: scale(0.98); }
+.d-last-repeat:disabled { opacity: 0.45; cursor: not-allowed; }
+.d-last-repeat-ico {
+  width: 30px; height: 30px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid var(--line-cyan-soft);
+  color: var(--cyan);
+}
+.d-last-repeat-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.d-last-repeat-hud {
+  font-size: 10.5px;
+  letter-spacing: 0.22em;
+  color: var(--cyan);
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.d-last-repeat-sub {
+  font-size: 12.5px;
+  color: var(--t-2);
+}
+.d-last-repeat-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--bg-1, #04060D);
+  background: linear-gradient(135deg, #67E8F9, #22D3EE);
+  border: 0;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.5), 0 6px 14px -4px rgba(34, 211, 238, 0.5), inset 0 1px 0 rgba(255,255,255,0.4);
+  flex-shrink: 0;
+}
+
+/* ─── Daily Protocol card ─── */
+.d-proto-icon { background: rgba(251, 191, 36, 0.06); border-color: rgba(251, 191, 36, 0.25); color: var(--xp-1, #FBBF24); }
+.d-proto-pct {
+  margin-left: auto;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--t-hi);
+  font-family: var(--font-mono);
+}
+.d-proto-count {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--t-hi);
+  margin-top: 4px;
+}
+.d-proto-progress {
+  margin-top: 10px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(34, 211, 238, 0.06);
+  overflow: hidden;
+}
+.d-proto-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #FB923C, #EF4444);
+  box-shadow: 0 0 8px rgba(251, 146, 60, 0.5);
+  transition: width 700ms var(--ease-out);
+}
+.d-proto-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.d-proto-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(7, 12, 24, 0.5);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.d-proto-item:hover { border-color: var(--line-cyan-soft); }
+.d-proto-item.is-done { opacity: 0.55; }
+.d-proto-item.is-done .d-proto-item-text { text-decoration: line-through; color: var(--t-3); }
+.d-proto-item-check {
+  width: 18px; height: 18px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: transparent;
+  transition: all 160ms ease;
+}
+.d-proto-item.is-done .d-proto-item-check {
+  background: linear-gradient(135deg, #34D399, #10B981);
+  border-color: rgba(16, 185, 129, 0.7);
+  color: var(--bg-1, #04060D);
+}
+.d-proto-item-text { font-size: 13px; color: var(--t-1); flex: 1; min-width: 0; }
+.d-proto-item-streak { font-size: 10px; letter-spacing: 0.14em; color: var(--orange); font-family: var(--font-mono); }
+.d-proto-input {
+  display: flex; gap: 8px;
+  margin-top: 10px;
+}
+.d-proto-input input {
+  flex: 1;
+  height: 38px;
+  padding: 0 12px;
+  background: rgba(7, 12, 24, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--t-1);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.d-proto-input input::placeholder { color: var(--t-mute, var(--t-3)); }
+.d-proto-input input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1);
+}
+.d-proto-add {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #67E8F9, #22D3EE);
+  border: 0;
+  color: var(--bg-1, #04060D);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.4);
+  transition: opacity 200ms ease, transform 160ms var(--ease-spring);
+}
+.d-proto-add:disabled { opacity: 0.4; cursor: not-allowed; }
+.d-proto-add:not(:disabled):active { transform: scale(0.92); }
+
+/* ─── Muscle Recovery card ─── */
+.d-card-body .card-head-icon { background: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.25); color: var(--red); }
+.d-body-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  color: var(--t-3);
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  margin-bottom: 8px;
+}
+.d-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.d-legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.d-dot-exh { background: var(--red); box-shadow: 0 0 6px rgba(239, 68, 68, 0.7); }
+.d-dot-rest { background: var(--green-bright); box-shadow: 0 0 6px rgba(34, 197, 94, 0.6); }
+
+.d-body-stage {
+  position: relative;
+  padding: 12px 4px 14px;
+  border: 1px solid var(--line-cyan-soft);
+  border-radius: 12px;
+  background:
+    radial-gradient(closest-side at 50% 40%, rgba(34, 211, 238, 0.06), transparent 70%),
+    rgba(7, 12, 24, 0.55);
+  overflow: hidden;
+}
+.d-body-scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(180deg, rgba(34, 211, 238, 0.05) 0 1px, transparent 1px 4px);
+  mask-image: linear-gradient(180deg, transparent, black 20%, black 80%, transparent);
+  -webkit-mask-image: linear-gradient(180deg, transparent, black 20%, black 80%, transparent);
+  opacity: 0.5;
+}
+
+.d-body-toggle {
+  position: absolute;
+  top: 12px; right: 12px;
+  display: inline-flex;
+  padding: 3px;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  z-index: 2;
+}
+.d-body-toggle-opt {
+  padding: 5px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--t-3);
+  cursor: pointer;
+  border-radius: 999px;
+  transition: all 200ms ease;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+}
+.d-body-toggle-opt.is-on {
+  background: linear-gradient(135deg, #EF4444, #DC2626);
+  color: white;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.3);
+}
+
+.d-body-fig-wrap {
+  position: relative;
+  width: 100%;
+  height: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1200px;
+}
+.body-anatomy { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: #67E8F9; }
+.body-anatomy-svg { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.body-anatomy-svg > svg { width: auto; height: 100%; max-width: 100%; display: block; }
+.body-anatomy-loading { display: flex; align-items: center; justify-content: center; height: 100%; opacity: 0.6; }
+
+/* Default fills for the body SVG class layers.
+   The exported SVG uses .ba-0..ba-8 classes but ships NO style block defining
+   them — without these rules, every path defaults to fill=black and the user
+   sees a featureless silhouette.
+   Convention inferred from female SVG + the exhausted-tint selector in
+   BodyAnatomy.tsx (.ba-1/3/5/8 = muscle bodies; .ba-0/2/4/6/7 = silhouette
+   base + shading; .ba-line = anatomical separation strokes). */
+.body-anatomy [class^="ba-"] { fill: currentColor; }
+.body-anatomy .ba-0 { opacity: 0.18; }
+.body-anatomy .ba-2 { opacity: 0.22; }
+.body-anatomy .ba-4 { opacity: 0.22; }
+.body-anatomy .ba-6 { opacity: 0.28; }
+.body-anatomy .ba-7 { opacity: 0.20; }
+.body-anatomy .ba-1 { opacity: 0.78; }
+.body-anatomy .ba-3 { opacity: 0.65; }
+.body-anatomy .ba-5 { opacity: 0.70; }
+.body-anatomy .ba-8 { opacity: 0.80; }
+.body-anatomy .ba-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.6;
+  opacity: 0.35;
+}
+
+.d-body-active {
+  position: absolute;
+  bottom: 12px; left: 12px;
+  padding: 4px 10px;
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 4px;
+  z-index: 2;
+  font-family: var(--font-mono);
+}
+
+/* ─── Body 3D rotation ───
+   §6.8: NO `transform-style: preserve-3d` here because the inline style
+   on .d-body-3d uses `filter: brightness(...)`. The rotation works via
+   the parent's rotateY + scaleX compression + opacity face-switching
+   (showFront ? 1 : 0). Children render flat in the parent's plane,
+   which is what we want for opacity face toggle. */
+.d-body-3d {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-origin: center center;
+  will-change: transform;
+}
+.d-body-face-real {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 80ms linear;
+}
+.d-body-face-real > * { width: 100%; height: 100%; }
+.d-body-face-mirror { transform: scaleX(-1); }
+.d-body-face-real::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg,
+    rgba(0, 0, 0, 0.45) 0%,
+    rgba(0, 0, 0, 0.15) 25%,
+    transparent 50%,
+    rgba(0, 0, 0, 0.15) 75%,
+    rgba(0, 0, 0, 0.45) 100%);
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  opacity: var(--rotate-shade, 0);
+}
+.d-body-edge {
+  position: absolute;
+  top: 4%; bottom: 4%;
+  left: 50%;
+  width: 22px;
+  transform: translateX(-50%);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg,
+      rgba(34, 211, 238, 0.05) 0%,
+      rgba(34, 211, 238, 0.35) 20%,
+      rgba(103, 232, 249, 0.55) 50%,
+      rgba(34, 211, 238, 0.35) 80%,
+      rgba(34, 211, 238, 0.05) 100%),
+    linear-gradient(90deg,
+      rgba(7, 12, 24, 0.6),
+      rgba(34, 211, 238, 0.5) 50%,
+      rgba(7, 12, 24, 0.6));
+  box-shadow:
+    inset 0 0 22px rgba(34, 211, 238, 0.4),
+    0 0 24px rgba(34, 211, 238, 0.55),
+    0 0 50px rgba(34, 211, 238, 0.25);
+  filter: blur(0.6px);
+  pointer-events: none;
+  z-index: 3;
+}
+.d-body-edge::before {
+  content: "";
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(closest-side at 50% 10%, rgba(34, 211, 238, 0.6), transparent 60%),
+    radial-gradient(closest-side at 50% 26%, rgba(34, 211, 238, 0.7), transparent 50%),
+    radial-gradient(closest-side at 50% 70%, rgba(34, 211, 238, 0.55), transparent 55%);
+  mix-blend-mode: screen;
+  opacity: 0.85;
+}
+
+/* ─── Ready muscles chip list ─── */
+.d-body-ready {
+  margin-top: 12px;
+  padding: 12px 12px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(34, 197, 94, 0.04), rgba(34, 197, 94, 0) 60%),
+    rgba(7, 12, 24, 0.45);
+  box-shadow: inset 0 0 18px rgba(34, 197, 94, 0.05);
+}
+.d-body-ready-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.d-body-ready-count {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--t-3);
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.d-body-ready-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.d-body-ready-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 9px;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--green-bright);
+  background: rgba(34, 197, 94, 0.07);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 999px;
+}
+.d-body-ready-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green-bright);
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
+}
+
+/* ─── Weekly Schedule ─── */
+.d-sched-edit {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--t-2);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+.d-sched-edit:hover { color: var(--cyan); border-color: var(--line-cyan-soft); }
+
+.d-sched-list { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 4px; }
+.d-sched-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: rgba(7, 12, 24, 0.4);
+  overflow: hidden;
+}
+.d-sched-day {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--t-3);
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+.d-sched-today {
+  padding: 2px 6px;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--cyan);
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: 4px;
+}
+.d-sched-plan {
+  font-size: 13px;
+  color: var(--t-1);
+  font-weight: 500;
+}
+.d-sched-plan-input {
+  width: 100%;
+  background: rgba(7, 12, 24, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--t-1);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  outline: none;
+}
+.d-sched-plan-input:focus { border-color: var(--cyan); }
+.d-sched-row.is-rest .d-sched-plan { color: var(--t-3); font-style: italic; }
+.d-sched-row.is-today {
+  background:
+    linear-gradient(90deg, rgba(34, 211, 238, 0.08), rgba(34, 211, 238, 0)),
+    rgba(7, 12, 24, 0.6);
+  border-color: var(--line-cyan-soft);
+  box-shadow: inset 0 0 18px rgba(34, 211, 238, 0.08), 0 0 12px -6px rgba(34, 211, 238, 0.4);
+}
+.d-sched-row.is-today .d-sched-day { color: var(--cyan); }
+.d-sched-row.is-today .d-sched-plan { color: var(--t-hi); font-weight: 700; }
+.d-sched-glow {
+  position: absolute;
+  left: -10px; top: 50%;
+  transform: translateY(-50%);
+  width: 3px; height: 60%;
+  background: var(--cyan);
+  border-radius: 999px;
+  box-shadow: 0 0 12px rgba(34, 211, 238, 0.8);
+}
+.d-sched-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--bg-1, #04060D);
+  background: linear-gradient(135deg, #67E8F9, #22D3EE);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.5), 0 4px 10px -2px rgba(34, 211, 238, 0.5), inset 0 1px 0 rgba(255,255,255,0.45);
+  transition: transform 140ms var(--ease-spring), box-shadow 180ms ease;
+}
+.d-sched-start:active { transform: scale(0.94); }
+.d-sched-edit-actions { display: flex; gap: 6px; margin-left: auto; }
+.d-sched-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  cursor: pointer;
+  color: var(--t-2);
+  text-transform: uppercase;
+}
+.d-sched-edit-btn.is-primary { color: var(--green-bright); border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.06); }
+
+/* ─── Mobile scrollbar hide (Q3 — coarse pointer or narrow viewport) ─── */
+@media (pointer: coarse), (max-width: 768px) {
+  body { scrollbar-width: none; -ms-overflow-style: none; }
+  body::-webkit-scrollbar { width: 0; height: 0; display: none; }
+}

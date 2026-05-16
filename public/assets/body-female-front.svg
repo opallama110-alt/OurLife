@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 648">
+
+<defs>
+  <linearGradient id="fem-body" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#1B2D47"></stop>
+    <stop offset="100%" stop-color="#0E1828"></stop>
+  </linearGradient>
+</defs>
+
+<g id="Front_female_silhouette">
+  
+  <ellipse cx="216" cy="74" rx="40" ry="48" class="ba-0"></ellipse>
+  <path d="M198 118 Q200 138 196 152 Q208 162 216 162 Q224 162 236 152 Q232 138 234 118 Z" class="ba-0"></path>
+
+  
+  <path d="M132 154&#xA;           Q160 142 216 142&#xA;           Q272 142 300 154&#xA;           L302 196&#xA;           Q302 218 290 252&#xA;           Q294 280 282 310&#xA;           Q284 340 296 376&#xA;           Q302 396 296 416&#xA;           L268 426&#xA;           Q216 438 164 426&#xA;           L136 416&#xA;           Q130 396 136 376&#xA;           Q148 340 150 310&#xA;           Q138 280 142 252&#xA;           Q130 218 130 196 Z" class="ba-0"></path>
+
+  
+  <path d="M132 162&#xA;           Q108 192 100 246&#xA;           Q92 296 96 354&#xA;           Q102 366 112 358&#xA;           Q116 352 118 340&#xA;           Q124 296 130 246&#xA;           Q132 200 140 174 Z" class="ba-0"></path>
+  <path d="M300 162&#xA;           Q324 192 332 246&#xA;           Q340 296 336 354&#xA;           Q330 366 320 358&#xA;           Q316 352 314 340&#xA;           Q308 296 302 246&#xA;           Q300 200 292 174 Z" class="ba-0"></path>
+
+  
+  <path d="M98 358 Q92 370 94 384 Q102 390 110 384 Q116 372 112 358 Z" class="ba-0"></path>
+  <path d="M334 358 Q340 370 338 384 Q330 390 322 384 Q316 372 320 358 Z" class="ba-0"></path>
+
+  
+  <path d="M136 416 Q216 438 296 416 L290 480 Q260 494 216 494 Q172 494 142 480 Z" class="ba-0"></path>
+
+  
+  <path d="M148 480 Q156 492 200 492 L206 600 Q204 616 196 622 Q186 624 178 614 L174 596 Z" class="ba-0"></path>
+  <path d="M284 480 Q276 492 232 492 L226 600 Q228 616 236 622 Q246 624 254 614 L258 596 Z" class="ba-0"></path>
+
+  
+  <ellipse cx="186" cy="630" rx="14" ry="6" class="ba-0"></ellipse>
+  <ellipse cx="246" cy="630" rx="14" ry="6" class="ba-0"></ellipse>
+
+  
+  <path d="M170 220 Q216 232 262 220" class="ba-line" stroke-width="0.5" opacity="0.25"></path>
+  <path d="M180 410 Q216 418 252 410" class="ba-line" stroke-width="0.5" opacity="0.25"></path>
+</g>
+
+
+<g id="Front_traps">
+  <path d="M186 142 Q216 132 246 142 Q240 162 216 168 Q192 162 186 142 Z" class="ba-1"></path>
+  <path d="M216 142 L216 168" class="ba-line"></path>
+</g>
+
+
+<g id="Sternocleids">
+  <path d="M204 122 Q208 134 210 148 L208 158 Q204 156 202 144 Z" class="ba-1" opacity="0.45"></path>
+  <path d="M228 122 Q224 134 222 148 L224 158 Q228 156 230 144 Z" class="ba-1" opacity="0.45"></path>
+</g>
+
+
+<g id="Deltoids_front">
+  <path d="M132 156&#xA;           Q116 170 122 208&#xA;           Q140 212 156 198&#xA;           Q158 184 154 168&#xA;           Q146 156 138 152 Z" class="ba-1"></path>
+  <path d="M300 156&#xA;           Q316 170 310 208&#xA;           Q292 212 276 198&#xA;           Q274 184 278 168&#xA;           Q286 156 294 152 Z" class="ba-1"></path>
+  
+  <path d="M138 168 Q146 178 152 192" class="ba-line"></path>
+  <path d="M294 168 Q286 178 280 192" class="ba-line"></path>
+</g>
+
+
+<g id="Pecs">
+  <path d="M168 180&#xA;           Q196 174 212 198&#xA;           Q212 222 200 234&#xA;           Q180 232 168 218&#xA;           Q162 198 168 180 Z" class="ba-1"></path>
+  <path d="M264 180&#xA;           Q236 174 220 198&#xA;           Q220 222 232 234&#xA;           Q252 232 264 218&#xA;           Q270 198 264 180 Z" class="ba-1"></path>
+  
+  <path d="M216 178 L216 240" class="ba-line"></path>
+  <path d="M170 218 Q196 234 196 218" class="ba-line"></path>
+  <path d="M262 218 Q236 234 236 218" class="ba-line"></path>
+</g>
+
+
+<g id="Biceps_brachii">
+  <path d="M120 208 Q108 240 110 282&#xA;           Q124 286 132 258&#xA;           Q134 226 124 210 Z" class="ba-1"></path>
+  <path d="M312 208 Q324 240 322 282&#xA;           Q308 286 300 258&#xA;           Q298 226 308 210 Z" class="ba-1"></path>
+  <path d="M124 234 Q126 254 124 280" class="ba-line"></path>
+  <path d="M308 234 Q306 254 308 280" class="ba-line"></path>
+</g>
+
+
+<g id="Biceps_Brachialis">
+  <path d="M126 244 Q132 252 128 280 L120 280 Q122 252 126 244 Z" class="ba-2" opacity="0.55"></path>
+  <path d="M306 244 Q300 252 304 280 L312 280 Q310 252 306 244 Z" class="ba-2" opacity="0.55"></path>
+</g>
+
+
+<g id="fore_arm_upper">
+  <path d="M108 284&#xA;           Q98 322 102 360&#xA;           Q120 360 126 332&#xA;           Q128 304 122 288 Z" class="ba-1"></path>
+  <path d="M324 284&#xA;           Q334 322 330 360&#xA;           Q312 360 306 332&#xA;           Q304 304 310 288 Z" class="ba-1"></path>
+  <path d="M108 314 Q118 336 122 354" class="ba-line"></path>
+  <path d="M324 314 Q314 336 310 354" class="ba-line"></path>
+</g>
+
+
+<g id="Flexor_digitorium">
+  <path d="M104 318 Q108 348 112 360 L120 358 Q118 332 116 320 Z" class="ba-2" opacity="0.55"></path>
+  <path d="M328 318 Q324 348 320 360 L312 358 Q314 332 316 320 Z" class="ba-2" opacity="0.55"></path>
+</g>
+
+
+<g id="Upper_abs">
+  <path d="M204 226 Q216 224 228 226 L228 280 Q216 284 204 280 Z" class="ba-1"></path>
+  <path d="M204 246 L228 246" class="ba-line"></path>
+  <path d="M204 263 L228 263" class="ba-line"></path>
+  <path d="M216 226 L216 282" class="ba-line"></path>
+</g>
+
+
+<g id="Lower_abs">
+  <path d="M204 282 Q216 284 228 282 L228 340 Q216 348 204 340 Z" class="ba-1"></path>
+  <path d="M204 300 L228 300" class="ba-line"></path>
+  <path d="M216 282 L216 348" class="ba-line"></path>
+</g>
+
+
+<g id="Serratus_Anterior">
+  <path d="M186 218 Q196 230 200 252 L196 260 Q188 248 184 226 Z" class="ba-2" opacity="0.5"></path>
+  <path d="M246 218 Q236 230 232 252 L236 260 Q244 248 248 226 Z" class="ba-2" opacity="0.5"></path>
+</g>
+
+
+<g id="Obliques_external">
+  <path d="M174 240 Q188 240 204 248 L204 296 Q184 300 172 286 Q170 264 174 240 Z" class="ba-1"></path>
+  <path d="M258 240 Q244 240 228 248 L228 296 Q248 300 260 286 Q262 264 258 240 Z" class="ba-1"></path>
+  <path d="M178 264 Q190 274 200 280" class="ba-line"></path>
+  <path d="M254 264 Q242 274 232 280" class="ba-line"></path>
+</g>
+
+
+<g id="Outer_quads">
+  <path d="M148 492 Q166 488 184 494 L186 590 Q170 596 156 590 Q146 562 148 528 Z" class="ba-1"></path>
+  <path d="M284 492 Q266 488 248 494 L246 590 Q262 596 276 590 Q286 562 284 528 Z" class="ba-1"></path>
+  <path d="M154 540 Q170 550 184 552" class="ba-line"></path>
+  <path d="M278 540 Q262 550 248 552" class="ba-line"></path>
+</g>
+
+
+<g id="Inner_quads">
+  <path d="M186 494 Q198 492 214 496 L214 590 Q200 594 188 590 Z" class="ba-1"></path>
+  <path d="M246 494 Q234 492 218 496 L218 590 Q232 594 244 590 Z" class="ba-1"></path>
+  <path d="M198 540 L210 590" class="ba-line"></path>
+  <path d="M234 540 L222 590" class="ba-line"></path>
+</g>
+
+
+<g id="Mid_quad">
+  <path d="M198 502 L218 502 L218 580 L198 580 Z" class="ba-2" opacity="0.5"></path>
+  <path d="M208 502 L208 580" class="ba-line"></path>
+</g>
+
+
+<g id="Sartorius">
+  <path d="M188 494 Q204 520 212 568" stroke="currentColor" stroke-width="2" fill="none" opacity="0.5" stroke-linecap="round"></path>
+  <path d="M244 494 Q228 520 220 568" stroke="currentColor" stroke-width="2" fill="none" opacity="0.5" stroke-linecap="round"></path>
+</g>
+
+
+<g id="Pectinius">
+  <path d="M204 488 Q216 490 228 488 L228 504 L204 504 Z" class="ba-5" opacity="0.5"></path>
+</g>
+
+
+<g id="Soleus">
+  <path d="M174 592 Q186 590 200 592 L206 624 Q190 626 178 622 Q174 612 174 592 Z" class="ba-1"></path>
+  <path d="M258 592 Q246 590 232 592 L226 624 Q242 626 254 622 Q258 612 258 592 Z" class="ba-1"></path>
+</g>
+
+
+<g id="Peroneus_longus">
+  <path d="M170 594 Q168 612 172 622 L178 622 Q178 608 178 594 Z" class="ba-2" opacity="0.55"></path>
+  <path d="M262 594 Q264 612 260 622 L254 622 Q254 608 254 594 Z" class="ba-2" opacity="0.55"></path>
+</g>
+
+
+<g>
+  <path d="M178 582 Q200 588 210 580" class="ba-line"></path>
+  <path d="M254 582 Q232 588 222 580" class="ba-line"></path>
+</g>
+</svg>
