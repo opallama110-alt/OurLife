@@ -24,6 +24,7 @@ import { useAchievements } from '../context/AchievementContext';
 import { achievementService } from '../services/achievementService';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 import AnatomyViewer, { getViewForMuscle } from '../components/Anatomy/AnatomyViewer';
+import { RankBadge, rankFromTierName } from '../components/hud';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
 
 // ═══════════ INTERACTIVE INPUT ═══════════
@@ -134,7 +135,7 @@ const XPHeader: React.FC<{ profile: GymProfile }> = ({ profile }) => {
       <div className="absolute top-0 left-0 h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 transition-all duration-500" style={{ width: `${progress.percent}%` }} />
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <div className="text-3xl">{rank.emoji}</div>
+          <RankBadge rank={rankFromTierName(rank.name)} size="md" isCurrent />
           <div>
             <div className="flex items-center space-x-2">
               <span className={`text-sm font-bold ${rank.color}`}>{rank.name}</span>

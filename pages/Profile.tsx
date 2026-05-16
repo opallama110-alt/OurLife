@@ -16,6 +16,7 @@ import { calcBMI, bmiSliderStyle } from '../utils/bmi';
 import { calculateAge } from '../utils/dateUtils';
 import { DateOfBirthPicker } from '../components/DateOfBirthPicker';
 import { AchievementGallery } from '../components/AchievementGallery';
+import { RankBadge, rankFromTierName } from '../components/hud';
 
 type CompareUser = {
     id: string;
@@ -300,7 +301,7 @@ const HunterCard: React.FC<{ gymProfile: GymProfile; displayName: string }> = ({
                         <p className={`text-sm font-mono mt-0.5 ${title.color}`}>&ldquo;{title.title}&rdquo;</p>
                     </div>
                     <div className="flex flex-col items-center">
-                        <div className={`text-4xl ${rank.color}`}>{rank.emoji}</div>
+                        <RankBadge rank={rankFromTierName(rank.name)} size="lg" isCurrent />
                         <div className={`text-[11px] font-mono font-bold mt-1 ${rank.color}`}>{rank.name}</div>
                     </div>
                 </div>
@@ -434,9 +435,7 @@ const Penghargaan: React.FC<{ gymProfile: GymProfile }> = ({ gymProfile }) => {
                     {/* Current → Next emblem row */}
                     <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2 min-w-0">
-                            <span className={`text-2xl ${currentRank.color} drop-shadow-[0_0_6px_currentColor]`}>
-                                {currentRank.emoji}
-                            </span>
+                            <RankBadge rank={rankFromTierName(currentRank.name)} size="sm" isCurrent />
                             <div className="min-w-0">
                                 <div className={`text-xs font-bold font-mono ${currentRank.color} truncate`}>{currentRank.name}</div>
                                 <div className="text-[9px] font-mono text-slate-500">Lv {rankFloor}</div>
@@ -448,9 +447,7 @@ const Penghargaan: React.FC<{ gymProfile: GymProfile }> = ({ gymProfile }) => {
                                     <div className={`text-xs font-bold font-mono ${nextRank.color} truncate`}>{nextRank.name}</div>
                                     <div className="text-[9px] font-mono text-slate-500">Lv {nextRank.minLevel}</div>
                                 </div>
-                                <span className={`text-2xl ${nextRank.color} drop-shadow-[0_0_6px_currentColor] opacity-50`}>
-                                    {nextRank.emoji}
-                                </span>
+                                <RankBadge rank={rankFromTierName(nextRank.name)} size="sm" className="opacity-50" />
                             </div>
                         ) : (
                             <div className="text-right">

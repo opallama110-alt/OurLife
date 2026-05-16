@@ -3,6 +3,7 @@ import { Crown, Loader2 } from 'lucide-react';
 import { RANK_TIERS, getRankForLevel, generateLeaderboard } from '../services/gamificationService';
 import { GymProfile } from '../types';
 import { storageService } from '../services/storageService';
+import { RankBadge, rankFromTierName } from './hud';
 
 interface LeaderboardProps {
     profile: GymProfile;
@@ -71,7 +72,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ profile }) => {
                                 <div className="flex items-center space-x-3">
                                     <span className={`text-lg font-bold font-mono w-6 text-center ${i === 0 ? 'text-amber-400 drop-shadow-[0_0_5px_rgba(251,191,36,0.8)]' : i === 1 ? 'text-slate-300' : i === 2 ? 'text-amber-700' : 'text-slate-600'
                                         }`}>#{i + 1}</span>
-                                    <span className="text-lg">{e.emoji}</span>
+                                    <RankBadge rank={rankFromTierName(e.explicitRankName)} size="sm" isCurrent={isPlayer} />
                                     <div>
                                         <span className={`text-sm font-bold ${isPlayer ? 'text-cyan-300' : 'text-slate-200'}`}>
                                             {e.name} {isPlayer && <span className="text-[10px] text-cyan-500 ml-1">(YOU)</span>}
@@ -80,7 +81,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ profile }) => {
                                             <span className="text-[10px] text-slate-500 font-mono">Lv.{e.level || 1}</span>
                                             <span className="text-[10px] text-slate-600">•</span>
                                             <span className={`text-[10px] font-bold font-mono ${e.explicitRankColor}`}>
-                                                {e.explicitRankEmoji} {e.explicitRankName}
+                                                {e.explicitRankName}
                                             </span>
                                         </div>
                                     </div>
@@ -100,9 +101,12 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ profile }) => {
                 <div className="text-[10px] text-slate-500 font-mono uppercase mb-2 tracking-widest">Rank Boundaries</div>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                     {RANK_TIERS.map(r => (
-                        <div key={r.name} className="flex flex-col text-[10px] bg-slate-900/50 p-2 rounded-lg border border-slate-800/80 hover:border-slate-700 transition-colors">
-                            <span className={`font-bold ${r.color} text-xs mb-0.5`}>{r.emoji} {r.name}</span>
-                            <span className="text-slate-500 font-mono tracking-tight">Lv.{r.minLevel} - {r.maxLevel === Infinity ? '∞' : `Lv.${r.maxLevel}`}</span>
+                        <div key={r.name} className="flex items-center gap-2 text-[10px] bg-slate-900/50 p-2 rounded-lg border border-slate-800/80 hover:border-slate-700 transition-colors">
+                            <RankBadge rank={rankFromTierName(r.name)} size="sm" />
+                            <div className="flex flex-col min-w-0">
+                                <span className={`font-bold ${r.color} text-xs truncate`}>{r.name}</span>
+                                <span className="text-slate-500 font-mono tracking-tight">Lv.{r.minLevel} - {r.maxLevel === Infinity ? '∞' : `Lv.${r.maxLevel}`}</span>
+                            </div>
                         </div>
                     ))}
                 </div>
