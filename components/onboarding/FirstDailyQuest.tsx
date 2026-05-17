@@ -39,6 +39,7 @@ export const FirstDailyQuest: React.FC<Props> = ({ open, onClose, onAccept }) =>
     onClose={onClose}
     closable={true}
     title="Informasi Quest"
+    subtitle="quest harian — persiapan menjadi yang terkuat"
     footer={
       <div className="sn-btn-row">
         <button type="button" className="sn-btn sn-btn-ghost" onClick={onClose}>Nanti</button>
@@ -49,10 +50,6 @@ export const FirstDailyQuest: React.FC<Props> = ({ open, onClose, onAccept }) =>
       </div>
     }
   >
-    <div style={{ animation: 'sn-fade-in 420ms 560ms var(--ease-out) forwards', opacity: 0,
-                  fontSize: 14, color: 'var(--t-2)', marginBottom: 12 }}>
-      Quest Harian — Persiapan Menjadi yang Terkuat
-    </div>
     <div className="sn-target-label">Target</div>
     <div className="sn-target-list">
       - Push Up <span style={{ fontFamily: 'var(--font-mono)' }}>[0/100]</span><br />

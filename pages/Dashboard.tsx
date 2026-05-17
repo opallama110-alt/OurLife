@@ -392,23 +392,20 @@ export const Dashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* ── 2. SYSTEM VERDICT (inline SystemNotification — C1) ── */}
+      {/* ── 2. SYSTEM VERDICT (inline .sys-frame) ──
+          title + subtitle now come from the component's own .sys-head;
+          body is just the verdict text. */}
       {systemMessage && (
         <div className="reveal" style={{ '--reveal-i': 1 } as React.CSSProperties}>
           <SystemNotification
             mode="inline"
             tone="cyan"
             closable
+            title="The System"
+            subtitle="latest verdict"
             onClose={() => { storageService.saveLastSystemMessage(''); setSystemMessage(''); }}
           >
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <Sparkles size={12} className="text-orange-400" />
-              <span className="text-[10px] font-mono uppercase tracking-[0.25em] font-bold text-orange-400">
-                The System
-              </span>
-              <span className="text-[10px] font-mono text-slate-500">latest verdict</span>
-            </div>
-            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line glitch-in">
+            <p className="whitespace-pre-line glitch-in" style={{ margin: 0 }}>
               {systemMessage}
             </p>
           </SystemNotification>

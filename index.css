@@ -1085,254 +1085,388 @@ input, select, textarea {
 }
 
 /* ============================================================
-   SYSTEM NOTIFICATION — ornate Solo-Leveling frame for major
-   System pronouncements. Two modes:
-     - .sn-root (modal): full-viewport backdrop + centered panel
-     - .sn-panel.sn-inline: panel only, sits in document flow
-   Visual ornamentation (corner filigree, crown, glow border,
-   sn-materialize entrance) is shared between modes via the
-   .sn-panel selectors.
+   THE SYSTEM FRAME (.sys-frame) — Solo-Leveling ornate panel.
+   Ported wholesale from .design-reference/system-notification-frame.html.
+   Replaces the legacy .sn-* block. Used by both:
+     - <SystemNotification mode="inline">  → bare .sys-frame in flow
+     - <SystemNotification mode="modal">   → wrapped in .sys-modal-root
+   Corner filigree resolves via <use href="#sys-filigree"/> against
+   the SystemFrameDefs SVG mounted once in <Layout/>.
+
+   NEW TOKENS added (lighter / whiter cyan ramp matching reference HTML;
+   distinct from the existing --cyan / --cyan-bright / --cyan-dim used
+   elsewhere):
+     --sys-cyan-1  #7DD9F5  primary ornament stroke / border
+     --sys-cyan-2  #5DC8E8  gradient mid-stop
+     --sys-cyan-3  #A5EAF8  highlight / spec
+     --sys-ink     #E8F4FB  body text on dark
+     --sys-ink-dim rgba ink at 65% — subtitle / meta
    ============================================================ */
-.sn-root {
-  position: fixed;
-  inset: 0;
+:root {
+  --sys-cyan-1: #7DD9F5;
+  --sys-cyan-2: #5DC8E8;
+  --sys-cyan-3: #A5EAF8;
+  --sys-ink:    #E8F4FB;
+  --sys-ink-dim: rgba(232, 244, 251, 0.65);
+}
+
+/* ─── Modal wrapper (backdrop + centering) ─── */
+.sys-modal-root {
+  position: fixed; inset: 0;
   z-index: 350;
   pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   padding: 18px;
 }
-.sn-backdrop {
+.sys-modal-backdrop {
   position: absolute; inset: 0;
   background: rgba(2, 4, 9, 0);
   backdrop-filter: blur(0px);
   transition: background 320ms ease, backdrop-filter 320ms ease;
   pointer-events: none;
 }
-.sn-root.is-open .sn-backdrop {
+.sys-modal-root.is-open .sys-modal-backdrop {
   background:
-    radial-gradient(closest-side, rgba(34, 211, 238, 0.06), transparent 60%),
+    radial-gradient(closest-side, rgba(125, 217, 245, 0.06), transparent 60%),
     rgba(2, 4, 9, 0.82);
   backdrop-filter: blur(10px);
   pointer-events: auto;
 }
+.sys-modal-root .sys-frame { pointer-events: auto; }
 
-/* Panel — shared between modal and inline. Modal hides until .is-open. */
-.sn-panel {
+/* ─── The frame itself ─── */
+.sys-frame {
   position: relative;
-  width: 100%;
-  max-width: 340px;
-  padding: 36px 22px 22px;
-  border-radius: 4px;
+  padding: 30px 28px 28px;
   background:
-    radial-gradient(closest-side at 50% 0%, rgba(34, 211, 238, 0.18), transparent 65%),
-    linear-gradient(180deg, #14245A 0%, #0B1530 60%, #050A1C 100%);
-  border: 2px solid rgba(103, 232, 249, 0.6);
+    radial-gradient(120% 90% at 50% 0%,  rgba(125, 217, 245, 0.07) 0%, transparent 55%),
+    radial-gradient(140% 100% at 50% 110%, rgba(35, 70, 130, 0.45) 0%, transparent 60%),
+    linear-gradient(180deg, #0A1428 0%, #060B1A 45%, #03060F 100%);
+  /* Double-border via 1px outer + inset gap + inset thicker inner line */
+  border: 1px solid rgba(125, 217, 245, 0.85);
   box-shadow:
-    inset 0 0 0 1px rgba(34, 211, 238, 0.35),
-    inset 0 0 40px rgba(34, 211, 238, 0.15),
-    0 0 28px rgba(34, 211, 238, 0.45),
-    0 0 60px rgba(34, 211, 238, 0.25),
-    0 30px 80px -20px rgba(0, 0, 0, 0.9);
-  pointer-events: auto;
+    /* outer halo */
+    0 0 32px rgba(125, 217, 245, 0.30),
+    0 0 70px rgba(80, 180, 230, 0.18),
+    /* gap (creates the inset-from-the-outer-line look) */
+    inset 0 0 0 4px rgba(2, 6, 14, 0.95),
+    /* inner thicker line */
+    inset 0 0 0 6px rgba(125, 217, 245, 0.55),
+    /* inner soft glow */
+    inset 0 0 30px rgba(125, 217, 245, 0.10),
+    /* deep inner vignette */
+    inset 0 0 80px rgba(0, 0, 0, 0.55);
+  animation: sysFramePulse 4s ease-in-out infinite;
 }
-/* Modal-only entrance — hidden until parent .sn-root is open. */
-.sn-root .sn-panel {
+/* Modal-mode entrance — hidden until .sys-modal-root is open. */
+.sys-frame-modal {
+  width: 100%;
+  max-width: 420px;
   opacity: 0;
-  transform: translateY(6px) scale(0.92);
+  transform: translateY(6px) scale(0.96);
   filter: blur(2px);
 }
-.sn-root.is-open .sn-panel {
-  animation: sn-materialize 540ms var(--ease-out) forwards;
+.sys-modal-root.is-open .sys-frame-modal {
+  animation: sysFramePulse 4s ease-in-out infinite, sysFrameMaterialize 540ms var(--ease-out) forwards;
 }
-/* Inline-mode panel — full width, animates on mount. */
-.sn-panel.sn-inline {
-  max-width: 100%;
-  animation: sn-materialize 540ms var(--ease-out) both;
+/* Inline frames animate-in once on mount. */
+.sys-frame:not(.sys-frame-modal) {
+  animation: sysFramePulse 4s ease-in-out infinite, sysFrameMaterialize 540ms var(--ease-out) both;
 }
-@keyframes sn-materialize {
-  0%   { opacity: 0; transform: translateY(6px) scale(0.92); filter: blur(2px); }
-  18%  { opacity: 0.8; transform: translate(-2px, 0) scale(1); filter: blur(0.6px); }
+@keyframes sysFrameMaterialize {
+  0%   { opacity: 0;   transform: translateY(6px) scale(0.96); filter: blur(2px); }
+  18%  { opacity: 0.8; transform: translate(-2px, 0) scale(1);  filter: blur(0.6px); }
   22%  { transform: translate(3px, 0); }
   28%  { transform: translate(-1px, 0); }
-  60%  { opacity: 1; transform: translate(0, 0); filter: none; }
-  100% { opacity: 1; transform: translate(0, 0); filter: none; }
+  60%  { opacity: 1;   transform: translate(0, 0); filter: none; }
+  100% { opacity: 1;   transform: translate(0, 0); filter: none; }
+}
+@keyframes sysFramePulse {
+  0%, 100% {
+    box-shadow:
+      0 0 26px rgba(125, 217, 245, 0.26),
+      0 0 60px rgba(80, 180, 230, 0.14),
+      inset 0 0 0 4px rgba(2, 6, 14, 0.95),
+      inset 0 0 0 6px rgba(125, 217, 245, 0.48),
+      inset 0 0 30px rgba(125, 217, 245, 0.08),
+      inset 0 0 80px rgba(0, 0, 0, 0.55);
+  }
+  50% {
+    box-shadow:
+      0 0 36px rgba(125, 217, 245, 0.36),
+      0 0 80px rgba(80, 180, 230, 0.22),
+      inset 0 0 0 4px rgba(2, 6, 14, 0.95),
+      inset 0 0 0 6px rgba(125, 217, 245, 0.62),
+      inset 0 0 36px rgba(125, 217, 245, 0.14),
+      inset 0 0 80px rgba(0, 0, 0, 0.55);
+  }
 }
 
-/* Inner second-frame ornament */
-.sn-panel::before {
+/* Subtle scanline overlay.
+   NOTE §6.8: uses mix-blend-mode, so .sys-frame must NEVER contain a
+   transform-style: preserve-3d child (flip cards). Confirmed safe in
+   current call-sites (Dashboard verdict, IntroSequence popups,
+   FirstDailyQuest, Habit cards — none nest 3D flips). */
+.sys-frame::after {
   content: "";
-  position: absolute;
-  inset: 4px;
-  border: 1px solid rgba(34, 211, 238, 0.22);
-  border-radius: 2px;
+  position: absolute; inset: 0;
   pointer-events: none;
+  background-image: repeating-linear-gradient(
+    180deg,
+    rgba(125, 217, 245, 0.025) 0px,
+    rgba(125, 217, 245, 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: screen;
+  opacity: 0.6;
 }
 
-/* Corner filigree — animates in regardless of mode */
-.sn-corner {
+/* ─── Corner ornaments (use href="#sys-filigree") ─── */
+.sys-corner {
   position: absolute;
-  width: 44px; height: 44px;
-  filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.55));
-  opacity: 0;
-  animation: sn-corner-in 520ms 240ms var(--ease-out) forwards;
+  width: 56px; height: 56px;
+  pointer-events: none;
+  filter:
+    drop-shadow(0 0 4px rgba(125, 217, 245, 0.75))
+    drop-shadow(0 0 10px rgba(125, 217, 245, 0.35));
+  z-index: 3;
 }
-.sn-corner-tl { top: -6px; left: -6px; }
-.sn-corner-tr { top: -6px; right: -6px; }
-.sn-corner-bl { bottom: -6px; left: -6px; }
-.sn-corner-br { bottom: -6px; right: -6px; }
-@keyframes sn-corner-in {
-  from { opacity: 0; transform: scale(0.6); }
-  to   { opacity: 1; transform: scale(1); }
-}
+.sys-corner svg { width: 100%; height: 100%; display: block; }
+.sys-corner-tl { top: -10px; left: -10px;   transform: rotate(0deg); }
+.sys-corner-tr { top: -10px; right: -10px;  transform: rotate(90deg); }
+.sys-corner-br { bottom: -10px; right: -10px; transform: rotate(180deg); }
+.sys-corner-bl { bottom: -10px; left: -10px;  transform: rotate(270deg); }
 
-/* Crown ornament — sits above panel center */
-.sn-crown-wrap {
+/* ─── Close button ─── */
+.sys-close {
   position: absolute;
-  top: -14px;
-  left: 50%;
-  transform: translateX(-50%);
-  filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.6));
-  opacity: 0;
-  animation: sn-crown-in 600ms 320ms var(--ease-out) forwards;
-}
-@keyframes sn-crown-in {
-  0%   { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.85); }
-  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-}
-.sn-crown { display: block; }
-
-.sn-close {
-  position: absolute;
-  top: 14px; right: 14px;
-  width: 24px; height: 24px;
-  background: transparent;
-  border: 1px solid rgba(34, 211, 238, 0.4);
-  color: rgba(167, 243, 252, 0.8);
+  top: 16px; right: 16px;
+  width: 26px; height: 26px;
   border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  background: rgba(8, 18, 38, 0.65);
+  border: 1px solid rgba(125, 217, 245, 0.45);
+  color: var(--sys-cyan-1);
+  display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
   z-index: 4;
+  transition: background 160ms ease, color 160ms ease, transform 140ms ease;
 }
-.sn-close:hover { color: var(--cyan); border-color: var(--cyan); }
+.sys-close:hover  { background: rgba(125, 217, 245, 0.18); color: #FFFFFF; }
+.sys-close:active { transform: scale(0.92); }
 
-.sn-body {
+/* ─── Header (title-wrap + optional cta) ─── */
+.sys-head {
   position: relative;
   z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px 12px;
   text-align: center;
+  margin-bottom: 18px;
 }
-.sn-title {
+.sys-title-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sys-title {
   margin: 0;
-  font-size: 26px;
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  font-size: 22px;
   font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
   color: #FFFFFF;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
   text-shadow:
-    0 0 18px rgba(167, 243, 252, 0.7),
-    0 0 28px rgba(34, 211, 238, 0.4);
-  opacity: 0;
-  animation: sn-fade-in 520ms 360ms var(--ease-out) forwards;
+    0 0 12px rgba(165, 234, 248, 0.75),
+    0 0 24px rgba(80, 180, 230, 0.40);
+  line-height: 1.15;
+}
+.sys-subtitle {
+  margin: 0;
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  font-style: italic;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--sys-ink-dim);
+  text-transform: lowercase;
 }
 
-.sn-divider {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  margin: 14px auto;
-  width: 80%;
-  opacity: 0;
-  animation: sn-fade-in 420ms 460ms var(--ease-out) forwards;
+/* ─── CTA pill (Variant B — "Evaluate Now" style) ─── */
+.sys-cta {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px;
+  background:
+    linear-gradient(180deg, rgba(125, 217, 245, 0.22), rgba(80, 180, 230, 0.10));
+  border: 1px solid rgba(125, 217, 245, 0.75);
+  border-radius: 999px;
+  color: #F0FAFF;
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-shadow: 0 0 6px rgba(165, 234, 248, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0 14px rgba(125, 217, 245, 0.40),
+    0 0 24px rgba(80, 180, 230, 0.25);
+  transition: transform 160ms ease, box-shadow 200ms ease, background 200ms ease, opacity 200ms ease;
 }
-.sn-divider-line {
+.sys-cta:hover {
+  background: linear-gradient(180deg, rgba(125, 217, 245, 0.32), rgba(80, 180, 230, 0.18));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 0 18px rgba(125, 217, 245, 0.55),
+    0 0 30px rgba(80, 180, 230, 0.30);
+}
+.sys-cta:active   { transform: scale(0.96); }
+.sys-cta:disabled { opacity: 0.55; cursor: wait; }
+.sys-cta-bolt {
+  color: #FBE38A;
+  text-shadow: 0 0 6px rgba(251, 227, 138, 0.7);
+  font-size: 13px;
+}
+
+/* ─── Gem divider ─── */
+.sys-divider {
+  position: relative;
+  z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 4px 22px;
+  height: 14px;
+}
+.sys-divider-line {
   flex: 1;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(103, 232, 249, 0.95), transparent);
-  box-shadow: 0 0 4px rgba(34, 211, 238, 0.6);
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(125, 217, 245, 0.15) 25%,
+    rgba(125, 217, 245, 0.95) 50%,
+    rgba(125, 217, 245, 0.15) 75%,
+    transparent 100%);
+  box-shadow: 0 0 6px rgba(125, 217, 245, 0.55);
 }
-.sn-divider-bead {
-  width: 18px; height: 6px;
+.sys-gem {
+  width: 12px; height: 12px;
   margin: 0 -2px;
-  background:
-    radial-gradient(closest-side, #FFFFFF, rgba(167, 243, 252, 0.8) 30%, transparent 65%);
-  filter: blur(0.4px);
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #FFFFFF 0%, #B7E8F8 40%, var(--sys-cyan-2) 100%);
+  transform: rotate(45deg);
+  box-shadow:
+    0 0 8px rgba(165, 234, 248, 0.85),
+    0 0 16px rgba(125, 217, 245, 0.55),
+    inset 0 0 4px rgba(255, 255, 255, 0.7);
+  position: relative;
+}
+.sys-gem::after {
+  content: "";
+  position: absolute; inset: 2px;
+  border: 0.5px solid rgba(255, 255, 255, 0.45);
 }
 
-.sn-subtitle {
-  margin: 0 0 14px;
-  font-size: 17px;
-  font-weight: 600;
-  color: #E0F2FE;
-  line-height: 1.4;
-  opacity: 0;
-  animation: sn-fade-in 420ms 560ms var(--ease-out) forwards;
+/* ─── Body ─── */
+.sys-body {
+  position: relative;
+  z-index: 2;
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--sys-ink);
+  text-align: left;
+  padding: 0 2px;
 }
+.sys-body p { margin: 0; }
 
-.sn-content {
-  font-size: 14.5px;
-  color: #CBD5E1;
-  line-height: 1.55;
-  opacity: 0;
-  animation: sn-fade-in 420ms 620ms var(--ease-out) forwards;
-}
-
-.sn-footer {
+.sys-footer {
+  position: relative;
+  z-index: 2;
   margin-top: 18px;
-  opacity: 0;
-  animation: sn-fade-in 380ms 760ms var(--ease-out) forwards;
 }
 
-@keyframes sn-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* ─── Tone variants — apply to both modal parent and inline panel ─── */
-.sn-root.tone-gold .sn-panel,
-.sn-panel.tone-gold {
+/* ─── Tone variants ─── */
+.sys-frame.tone-gold {
   background:
-    radial-gradient(closest-side at 50% 0%, rgba(251, 191, 36, 0.20), transparent 65%),
-    linear-gradient(180deg, #3A2A12 0%, #1A1308 60%, #0A0703 100%);
-  border-color: rgba(251, 191, 36, 0.6);
+    radial-gradient(120% 90% at 50% 0%,   rgba(251, 191, 36, 0.08) 0%, transparent 55%),
+    radial-gradient(140% 100% at 50% 110%, rgba(120, 80, 20, 0.45) 0%, transparent 60%),
+    linear-gradient(180deg, #2A1F0A 0%, #1A1308 45%, #0A0703 100%);
+  border-color: rgba(251, 191, 36, 0.85);
+}
+.sys-frame.tone-gold .sys-corner { filter:
+  drop-shadow(0 0 4px rgba(251, 191, 36, 0.75))
+  drop-shadow(0 0 10px rgba(251, 191, 36, 0.35)); }
+.sys-frame.tone-gold .sys-close { color: var(--xp-1, #FBBF24); border-color: rgba(251, 191, 36, 0.5); }
+.sys-frame.tone-gold .sys-title { text-shadow:
+  0 0 12px rgba(252, 211, 77, 0.75),
+  0 0 24px rgba(180, 130, 30, 0.40); }
+.sys-frame.tone-gold .sys-divider-line {
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(251, 191, 36, 0.15) 25%,
+    rgba(251, 191, 36, 0.95) 50%,
+    rgba(251, 191, 36, 0.15) 75%,
+    transparent 100%);
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.55);
+}
+.sys-frame.tone-gold .sys-gem {
+  background: linear-gradient(135deg, #FFFFFF 0%, #FDE68A 40%, #F59E0B 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(251, 191, 36, 0.35),
-    inset 0 0 40px rgba(251, 146, 60, 0.18),
-    0 0 28px rgba(251, 146, 60, 0.5),
-    0 30px 80px -20px rgba(0, 0, 0, 0.9);
+    0 0 8px rgba(252, 211, 77, 0.85),
+    0 0 16px rgba(251, 191, 36, 0.55),
+    inset 0 0 4px rgba(255, 255, 255, 0.7);
 }
-.sn-root.tone-gold .sn-panel::before,
-.sn-panel.tone-gold::before { border-color: rgba(251, 191, 36, 0.22); }
-.sn-root.tone-gold .sn-divider-line,
-.sn-panel.tone-gold .sn-divider-line {
-  background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.95), transparent);
-}
-.sn-root.tone-gold .sn-title,
-.sn-panel.tone-gold .sn-title { text-shadow: 0 0 18px rgba(251, 191, 36, 0.7); }
 
-.sn-root.tone-red .sn-panel,
-.sn-panel.tone-red {
+.sys-frame.tone-red {
   background:
-    radial-gradient(closest-side at 50% 0%, rgba(239, 68, 68, 0.20), transparent 65%),
-    linear-gradient(180deg, #3A0E14 0%, #1F0810 60%, #0A0408 100%);
-  border-color: rgba(239, 68, 68, 0.6);
+    radial-gradient(120% 90% at 50% 0%,   rgba(239, 68, 68, 0.08) 0%, transparent 55%),
+    radial-gradient(140% 100% at 50% 110%, rgba(130, 30, 30, 0.45) 0%, transparent 60%),
+    linear-gradient(180deg, #2A0E14 0%, #1F0810 45%, #0A0408 100%);
+  border-color: rgba(239, 68, 68, 0.85);
+}
+.sys-frame.tone-red .sys-corner { filter:
+  drop-shadow(0 0 4px rgba(239, 68, 68, 0.75))
+  drop-shadow(0 0 10px rgba(239, 68, 68, 0.35)); }
+.sys-frame.tone-red .sys-close { color: #FCA5A5; border-color: rgba(239, 68, 68, 0.5); }
+.sys-frame.tone-red .sys-title { text-shadow:
+  0 0 12px rgba(252, 165, 165, 0.75),
+  0 0 24px rgba(180, 50, 50, 0.40); }
+.sys-frame.tone-red .sys-divider-line {
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(239, 68, 68, 0.15) 25%,
+    rgba(252, 165, 165, 0.95) 50%,
+    rgba(239, 68, 68, 0.15) 75%,
+    transparent 100%);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.55);
+}
+.sys-frame.tone-red .sys-gem {
+  background: linear-gradient(135deg, #FFFFFF 0%, #FECACA 40%, #EF4444 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(239, 68, 68, 0.35),
-    inset 0 0 40px rgba(239, 68, 68, 0.15),
-    0 0 28px rgba(239, 68, 68, 0.45),
-    0 30px 80px -20px rgba(0, 0, 0, 0.9);
+    0 0 8px rgba(252, 165, 165, 0.85),
+    0 0 16px rgba(239, 68, 68, 0.55),
+    inset 0 0 4px rgba(255, 255, 255, 0.7);
 }
-.sn-root.tone-red .sn-panel::before,
-.sn-panel.tone-red::before { border-color: rgba(239, 68, 68, 0.22); }
-.sn-root.tone-red .sn-divider-line,
-.sn-panel.tone-red .sn-divider-line {
-  background: linear-gradient(90deg, transparent, rgba(252, 165, 165, 0.9), transparent);
+
+/* ─── Responsive — keeps ornaments clean at 380px ─── */
+@media (max-width: 420px) {
+  .sys-frame { padding: 26px 20px 24px; }
+  .sys-corner { width: 46px; height: 46px; }
+  .sys-corner-tl, .sys-corner-bl { left: -8px; }
+  .sys-corner-tr, .sys-corner-br { right: -8px; }
+  .sys-corner-tl, .sys-corner-tr { top: -8px; }
+  .sys-corner-bl, .sys-corner-br { bottom: -8px; }
+  .sys-title { font-size: 19px; letter-spacing: 0.18em; }
+  .sys-body  { font-size: 14.5px; }
+  .sys-head  { flex-direction: column; align-items: stretch; }
+  .sys-head .sys-cta { align-self: center; }
 }
-.sn-root.tone-red .sn-title,
-.sn-panel.tone-red .sn-title { text-shadow: 0 0 18px rgba(239, 68, 68, 0.7); }
 
 /* ============================================================
    DASHBOARD SCREEN — ported from prototype dashboard.css

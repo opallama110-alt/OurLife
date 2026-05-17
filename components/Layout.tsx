@@ -4,7 +4,7 @@ import { LogOut } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { useAuth } from '../context/AuthContext';
 import { SystemChat } from './SystemChat';
-import { BottomNav, BottomNavTab } from './hud';
+import { BottomNav, BottomNavTab, SystemFrameDefs } from './hud';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Layout — minimal top bar + content outlet + notched bottom nav + bot.
@@ -58,6 +58,11 @@ export const Layout: React.FC = () => {
 
     return (
         <div className="ol-shell font-sans">
+            {/* Invisible SVG <defs> for the .sys-frame corner ornaments.
+                Every SystemNotification across the app resolves its corner
+                filigree via <use href="#sys-filigree" /> against this. */}
+            <SystemFrameDefs />
+
             {/* Top bar — minimal: logo + wordmark left, red logout right */}
             <header className="ol-top">
                 <div className="ol-top-brand">
