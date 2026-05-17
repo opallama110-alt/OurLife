@@ -67,12 +67,22 @@ const FirstDailyQuestGate: React.FC = () => {
   const handleAccept = (quest: FirstQuestHabit) => {
     try {
       const existing = storageService.getHabits();
+      // Carry quest sub-tasks (with user-adjusted targets) into the new
+      // Habit shape so the user lands on the Habits page with per-task
+      // ticking already wired up. completedSubTasks starts empty —
+      // the user will tick them as they actually complete each step.
       const habit = {
         id: Date.now().toString(),
         name: quest.title,
         cue: quest.description || undefined,
         streak: 0,
         completedDates: [] as string[],
+        subTasks: quest.subTasks.map(st => ({
+          id: st.id,
+          label: st.label,
+          target: st.target,
+        })),
+        completedSubTasks: {} as Record<string, string[]>,
       };
       storageService.saveHabits([...existing, habit]);
     } catch (e) { console.error('[FirstDailyQuest] save habit:', e); }
