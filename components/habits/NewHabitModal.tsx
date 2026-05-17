@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Check, X } from 'lucide-react';
+import { Check, Plus, Trash2, X } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════
 // NewHabitModal — slide-up panel for creating habits.
@@ -24,6 +24,13 @@ const FREQ_OPTIONS = [
 
 const DAY_LABELS = ['SEN', 'SEL', 'RAB', 'KAM', 'JUM', 'SAB', 'MIN'];
 
+export type NewHabitSubTask = {
+  /** Stable id used in Habit.completedSubTasks[date]. */
+  id: string;
+  label: string;
+  target?: number;
+};
+
 export type NewHabitPayload = {
   title: string;
   description: string;
@@ -31,6 +38,8 @@ export type NewHabitPayload = {
   frequency: typeof FREQ_OPTIONS[number]['key'];
   days: number[];          // 0-6 (Mon..Sun)
   xpReward: number;
+  /** Empty array = single-toggle habit (legacy behavior). */
+  subTasks: NewHabitSubTask[];
 };
 
 interface Props {
@@ -47,6 +56,9 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
   const [cat, setCat] = useState<typeof HABIT_CATEGORIES[number]['key']>('fitness');
   const [freq, setFreq] = useState<typeof FREQ_OPTIONS[number]['key']>('daily');
   const [customDays, setCustomDays] = useState<Set<number>>(() => new Set([0, 2, 4]));
+  // Sub-tasks: locally tracked as a list with stable id; pushed to onCreate
+  // as NewHabitSubTask[]. Empty list = single-toggle habit.
+  const [subTasks, setSubTasks] = useState<NewHabitSubTask[]>([]);
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -77,6 +89,20 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
   const reset = () => {
     setTitle(''); setDesc(''); setCat('fitness'); setFreq('daily');
     setCustomDays(new Set([0, 2, 4]));
+    setSubTasks([]);
+  };
+
+  const addSubTask = () => {
+    setSubTasks(prev => [
+      ...prev,
+      { id: `st_${Date.now()}_${prev.length}`, label: '', target: undefined },
+    ]);
+  };
+  const updateSubTask = (id: string, patch: Partial<NewHabitSubTask>) => {
+    setSubTasks(prev => prev.map(st => (st.id === id ? { ...st, ...patch } : st)));
+  };
+  const removeSubTask = (id: string) => {
+    setSubTasks(prev => prev.filter(st => st.id !== id));
   };
 
   const submit = () => {
@@ -89,6 +115,11 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
       customDays.forEach((d) => days.push(d));
       days.sort((a, b) => a - b);
     }
+    // Strip empty-label sub-tasks before persisting — gives the user room
+    // to add a row then abandon it without polluting the habit definition.
+    const cleanSubTasks = subTasks
+      .map(st => ({ ...st, label: st.label.trim() }))
+      .filter(st => st.label.length > 0);
     onCreate({
       title: title.trim(),
       description: desc.trim(),
@@ -96,6 +127,7 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
       frequency: freq,
       days,
       xpReward,
+      subTasks: cleanSubTasks,
     });
     reset();
     onClose();
@@ -171,6 +203,59 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
                   onClick={() => toggleDay(i)}>
                   {d}
                 </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Sub-tasks editor — optional. Empty list = single-toggle habit.
+            When populated, the habit card shows a per-row checklist and
+            auto-completes the parent only after every sub-task is checked. */}
+        <div className="nh-field">
+          <div className="nh-subtasks-head">
+            <span className="nh-field-lbl">
+              Sub-task <span style={{ color: 'var(--t-3)' }}>(opsional)</span>
+            </span>
+            <button type="button" className="nh-subtasks-add" onClick={addSubTask}>
+              <Plus size={12} /> Tambah sub-task
+            </button>
+          </div>
+          {subTasks.length === 0 ? (
+            <p className="nh-subtasks-hint">
+              Habit dengan beberapa bagian (mis. push-up + sit-up + lari)
+              bisa di-centang per bagian. Kosongkan untuk single-toggle.
+            </p>
+          ) : (
+            <div className="nh-subtasks-list">
+              {subTasks.map(st => (
+                <div key={st.id} className="nh-subtask-row">
+                  <input
+                    type="text"
+                    className="nh-input nh-subtask-label"
+                    placeholder="cth: Push Up"
+                    value={st.label}
+                    onChange={(e) => updateSubTask(st.id, { label: e.target.value })}
+                  />
+                  <input
+                    type="number"
+                    className="nh-input nh-subtask-target"
+                    placeholder="100"
+                    min={1}
+                    value={st.target ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      updateSubTask(st.id, { target: v === '' ? undefined : Number(v) });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="nh-subtask-del"
+                    onClick={() => removeSubTask(st.id)}
+                    aria-label="Hapus sub-task"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
               ))}
             </div>
           )}

@@ -111,12 +111,37 @@ export interface Investment {
   lastUpdated: string;
 }
 
+/**
+ * Single check-off step inside a multi-part habit (e.g., "100 push-ups").
+ * Optional `target` is for UI display (e.g., shows "[0/100]"); marking
+ * the subtask done is a single boolean per day. We don't track counter
+ * progress per-subtask — habits are about consistency, not rep counts.
+ */
+export interface HabitSubTask {
+  id: string;
+  label: string;
+  target?: number;
+}
+
 export interface Habit {
   id: string;
   name: string;
   cue?: string;
   streak: number;
+  /** Dates (YYYY-MM-DD) the parent habit is fully complete. */
   completedDates: string[];
+  /**
+   * Optional sub-tasks. When present, the parent is auto-completed for
+   * a given date once every subTask id appears in completedSubTasks[date].
+   * Legacy habits without this field behave as single-toggle (the
+   * existing completedDates flow handles them unchanged).
+   */
+  subTasks?: HabitSubTask[];
+  /**
+   * date (YYYY-MM-DD) -> subTask ids checked off that day.
+   * Sparse — only days where at least one subtask was touched have entries.
+   */
+  completedSubTasks?: Record<string, string[]>;
 }
 
 export type ExperienceLevel = 'Pemula' | 'Menengah' | 'Lanjut';

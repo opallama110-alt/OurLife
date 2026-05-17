@@ -4698,6 +4698,167 @@ input, select, textarea {
   text-transform: none;
 }
 
+/* ─── Habit card as .sys-frame variant ─────────────────────────────────
+   Tightens padding so habit cards don't feel oversized at list density,
+   and surfaces the delete button + cue row inside .sys-body.
+   Title is auto-uppercase via .sys-title's text-transform; the habit
+   name takes that letter-spacing treatment which is fine since habits
+   are short labels ("Push Up", "Lari Pagi", etc.). */
+.sys-frame.sys-frame-habit {
+  padding: 22px 22px 20px;
+}
+.sys-frame.sys-frame-habit .sys-title {
+  font-size: 17px;
+  letter-spacing: 0.14em;
+}
+.sys-frame.sys-frame-habit .sys-head {
+  margin-bottom: 12px;
+}
+.sys-frame.sys-frame-habit .sys-divider { margin-bottom: 14px; }
+.sys-frame.sys-frame-habit .sys-body { font-style: normal; }
+
+/* Spacing between successive habit cards in the list. */
+.h-list > .reveal + .reveal { margin-top: 10px; }
+
+/* ─── Sub-task list (.h-subtasks*) ──────────────────────────────────── */
+.h-subtasks { margin-top: 14px; }
+.h-subtasks-head {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--sys-ink-dim);
+  text-transform: uppercase;
+}
+.h-subtasks-flame { color: var(--orange); }
+.h-subtasks-count {
+  margin-left: auto;
+  color: var(--sys-cyan-1);
+  font-weight: 700;
+}
+.h-subtask-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.h-subtask {
+  width: 100%;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  background: rgba(7, 12, 24, 0.45);
+  border: 1px solid rgba(125, 217, 245, 0.18);
+  border-radius: 10px;
+  color: var(--sys-ink);
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+.h-subtask:hover { border-color: rgba(125, 217, 245, 0.45); }
+.h-subtask.is-on {
+  border-color: rgba(34, 197, 94, 0.45);
+  background:
+    linear-gradient(90deg, rgba(34, 197, 94, 0.08), transparent 65%),
+    rgba(7, 12, 24, 0.55);
+}
+.h-subtask.is-on .h-subtask-label {
+  color: var(--green-bright);
+  text-decoration: line-through;
+  text-decoration-color: rgba(34, 197, 94, 0.45);
+  opacity: 0.85;
+}
+.h-subtask-box {
+  flex-shrink: 0;
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(125, 217, 245, 0.45);
+  background: rgba(7, 12, 24, 0.55);
+  color: transparent;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: all 180ms var(--ease-spring);
+}
+.h-subtask-box.is-on {
+  background: var(--green-bright);
+  border-color: var(--green-bright);
+  color: var(--bg-1, #04060D);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.55);
+  animation: h-check-pop 320ms var(--ease-spring);
+}
+.h-subtask-label { flex: 1; }
+.h-subtask-target {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--sys-ink-dim);
+  letter-spacing: 0.05em;
+}
+.h-subtask.is-on .h-subtask-target { color: var(--green-bright); opacity: 0.8; }
+
+/* Single-habit cue row (legacy habits without sub-tasks) */
+.h-cue-row {
+  margin-top: 10px;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px;
+  color: var(--sys-ink-dim);
+}
+.h-cue-ico { color: var(--orange); }
+
+/* ─── Sub-task editor inside NewHabitModal (.nh-*) ──────────────────── */
+.nh-subtasks-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px;
+}
+.nh-subtasks-add {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px;
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid var(--line-cyan-soft);
+  border-radius: 999px;
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+.nh-subtasks-add:hover { background: rgba(34, 211, 238, 0.14); }
+.nh-subtasks-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--t-3);
+}
+.nh-subtasks-list {
+  display: flex; flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.nh-subtask-row {
+  display: grid;
+  grid-template-columns: 1fr 64px 28px;
+  gap: 6px;
+  align-items: center;
+}
+.nh-subtask-label { padding: 8px 12px; font-size: 13px; }
+.nh-subtask-target {
+  padding: 8px 10px;
+  font-size: 13px;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.nh-subtask-target::-webkit-outer-spin-button,
+.nh-subtask-target::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.nh-subtask-del {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  color: var(--t-mute);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+.nh-subtask-del:hover { color: var(--red); border-color: rgba(239, 68, 68, 0.4); }
+
 /* ============================================================
    NEW HABIT MODAL — slide-up panel (.nh-*)
    ============================================================ */
