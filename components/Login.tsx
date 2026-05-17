@@ -1,274 +1,303 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Mail, Lock, LogIn, UserPlus, User as UserIcon, MailCheck, ArrowLeft, Loader2 } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, MailCheck, ArrowLeft, Loader2, Eye, EyeOff } from 'lucide-react';
 import { notificationService } from '../services/notificationService';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Login — wholesale port to prototype .au-* styling.
+// Three modes (login / register / forgot) all share the .au-card shell
+// (gradient grid backdrop, corner filigree, ornate cyan-glow card).
+// All auth handlers (signInWithEmail, signUpWithEmail, signInWithGoogle,
+// sendPasswordReset, friendlyAuthError) are preserved end-to-end.
+// ═══════════════════════════════════════════════════════════════════════════
 
 type Mode = 'login' | 'register' | 'forgot';
 
 const friendlyAuthError = (raw: string): string => {
-    if (!raw) return 'Authentication failed. Please try again.';
-    const code = raw.match(/auth\/[a-z-]+/i)?.[0] || '';
-    switch (code) {
-        case 'auth/invalid-email': return 'That email address looks invalid.';
-        case 'auth/user-not-found': return 'No account exists for that email.';
-        case 'auth/wrong-password':
-        case 'auth/invalid-credential': return 'Incorrect email or password.';
-        case 'auth/email-already-in-use': return 'An account with that email already exists.';
-        case 'auth/weak-password': return 'Password too weak — use at least 6 characters.';
-        case 'auth/too-many-requests': return 'Too many attempts. Please wait a moment and try again.';
-        case 'auth/network-request-failed': return 'Network error. Check your connection and retry.';
-        default: return raw.replace('Firebase: ', '');
-    }
+  if (!raw) return 'Authentication failed. Please try again.';
+  const code = raw.match(/auth\/[a-z-]+/i)?.[0] || '';
+  switch (code) {
+    case 'auth/invalid-email': return 'Format email tidak valid.';
+    case 'auth/user-not-found': return 'Belum ada akun untuk email tersebut.';
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential': return 'Email atau kata sandi salah.';
+    case 'auth/email-already-in-use': return 'Email ini sudah terdaftar.';
+    case 'auth/weak-password': return 'Kata sandi terlalu lemah — minimum 6 karakter.';
+    case 'auth/too-many-requests': return 'Terlalu banyak percobaan. Coba lagi sebentar.';
+    case 'auth/network-request-failed': return 'Koneksi gagal. Periksa jaringanmu.';
+    default: return raw.replace('Firebase: ', '');
+  }
 };
 
+const AuthCornerFiligree: React.FC = () => (
+  <>
+    <svg className="au-corner au-corner-tl" viewBox="0 0 36 36" width="36" height="36">
+      <path d="M2 18 V2 H18 M6 18 Q6 14 10 12 M10 18 Q14 14 18 14 M14 4 Q14 8 18 8"
+        stroke="rgba(34,211,238,0.4)" strokeWidth="1" fill="none" strokeLinecap="round" />
+    </svg>
+    <svg className="au-corner au-corner-br" viewBox="0 0 36 36" width="36" height="36">
+      <path d="M34 18 V34 H18 M30 18 Q30 22 26 24 M26 18 Q22 22 18 22 M22 32 Q22 28 18 28"
+        stroke="rgba(34,211,238,0.4)" strokeWidth="1" fill="none" strokeLinecap="round" />
+    </svg>
+  </>
+);
+
+const AuthLogo: React.FC<{ subtitle: string }> = ({ subtitle }) => (
+  <div className="au-logo">
+    <div className="au-logo-mark">
+      <svg viewBox="0 0 28 28" width="40" height="40" fill="none">
+        <path d="M4 18 C 4 12, 10 6, 14 14 C 18 22, 24 16, 24 10"
+          stroke="url(#au-grad)" strokeWidth="2.6" strokeLinecap="round" fill="none" />
+        <path d="M21.5 7 L24 10 L21 12" stroke="url(#au-grad)" strokeWidth="2.6"
+          strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <defs>
+          <linearGradient id="au-grad" x1="0" y1="0" x2="28" y2="28">
+            <stop offset="0%" stopColor="#67E8F9" />
+            <stop offset="100%" stopColor="#3B82F6" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+    <div className="au-logo-name">OurLife</div>
+    <div className="au-logo-tag">{subtitle}</div>
+  </div>
+);
+
 export const Login: React.FC = () => {
-    const { signInWithGoogle, signInWithEmail, signUpWithEmail, sendPasswordReset } = useAuth();
-    const [mode, setMode] = useState<Mode>('login');
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [postRegister, setPostRegister] = useState(false);
-    const [resetSent, setResetSent] = useState(false);
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, sendPasswordReset } = useAuth();
+  const [mode, setMode] = useState<Mode>('login');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [agree, setAgree] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [postRegister, setPostRegister] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
-    const handleGoogleLogin = async () => {
-        try {
-            setError('');
-            setLoading(true);
-            await signInWithGoogle();
-            await notificationService.requestPermission();
-        } catch (err: any) {
-            setError(friendlyAuthError(err?.message || ''));
-        } finally {
-            setLoading(false);
-        }
-    };
+  const handleGoogleLogin = async () => {
+    try {
+      setError('');
+      setLoading(true);
+      await signInWithGoogle();
+      await notificationService.requestPermission();
+    } catch (err) {
+      setError(friendlyAuthError((err as Error)?.message || ''));
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const handleEmailSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-
-        if (!email.trim()) { setError('Please enter your email.'); return; }
-        if (mode !== 'forgot' && password.length < 6) {
-            setError('Password must be at least 6 characters.');
-            return;
-        }
-        if (mode === 'register' && password !== confirmPassword) {
-            setError('Passwords do not match.');
-            return;
-        }
-
-        try {
-            setLoading(true);
-            if (mode === 'login') {
-                await signInWithEmail(email, password);
-                await notificationService.requestPermission();
-            } else if (mode === 'register') {
-                await signUpWithEmail(email, password, name);
-                setPostRegister(true);
-            } else if (mode === 'forgot') {
-                await sendPasswordReset(email);
-                setResetSent(true);
-            }
-        } catch (err: any) {
-            setError(friendlyAuthError(err?.message || ''));
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // ── Post-registration verification screen ──
-    if (postRegister) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
-                <div className="bg-slate-900 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-cyan-500/30">
-                    <div className="flex justify-center mb-4">
-                        <div className="w-16 h-16 rounded-full bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-                            <MailCheck className="w-8 h-8 text-cyan-400" />
-                        </div>
-                    </div>
-                    <h1 className="text-2xl font-bold text-white text-center mb-2">Check Your Inbox</h1>
-                    <p className="text-slate-400 text-center text-sm mb-6">
-                        We sent a verification link to <span className="text-cyan-400 font-mono">{email}</span>. Click the link to activate your account, then sign in.
-                    </p>
-                    <p className="text-xs text-slate-500 text-center mb-6">
-                        Don't see it? Check your Spam/Promotions folder.
-                    </p>
-                    <button
-                        onClick={() => { setPostRegister(false); setMode('login'); setPassword(''); setConfirmPassword(''); }}
-                        className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold py-3 rounded-xl hover:shadow-lg hover:shadow-cyan-500/20 transition-all"
-                    >
-                        Continue to Sign In
-                    </button>
-                </div>
-            </div>
-        );
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!email.trim()) { setError('Mohon isi emailmu.'); return; }
+    if (mode !== 'forgot' && password.length < 6) {
+      setError('Kata sandi minimum 6 karakter.');
+      return;
+    }
+    if (mode === 'register') {
+      if (password !== confirmPassword) {
+        setError('Kata sandi tidak cocok.');
+        return;
+      }
+      if (!agree) {
+        setError('Setujui Syarat & Ketentuan terlebih dahulu.');
+        return;
+      }
     }
 
+    try {
+      setLoading(true);
+      if (mode === 'login') {
+        await signInWithEmail(email, password);
+        await notificationService.requestPermission();
+      } else if (mode === 'register') {
+        await signUpWithEmail(email, password, name);
+        setPostRegister(true);
+      } else if (mode === 'forgot') {
+        await sendPasswordReset(email);
+        setResetSent(true);
+      }
+    } catch (err) {
+      setError(friendlyAuthError((err as Error)?.message || ''));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Post-registration verification screen ──
+  if (postRegister) {
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4">
-            <div className="bg-slate-900 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-800">
-                <div className="text-center mb-8">
-                    <div className="flex justify-center mb-4">
-                        <img src="/ourlife-logo.png" alt="OurLife" className="w-14 h-14 rounded-2xl shadow-lg shadow-cyan-500/20 object-cover" />
-                    </div>
-                    <h1 className="text-3xl font-bold text-white mb-2">
-                        {mode === 'login' ? 'Welcome Back' : mode === 'register' ? 'Create Account' : 'Reset Password'}
-                    </h1>
-                    <p className="text-slate-400 text-sm">
-                        {mode === 'login' && 'Sign in to continue your journey'}
-                        {mode === 'register' && 'Begin your fitness journey today'}
-                        {mode === 'forgot' && "We'll email you a reset link"}
-                    </p>
-                </div>
-
-                {error && (
-                    <div className="bg-red-500/10 border border-red-500/40 text-red-400 p-3 rounded-lg mb-4 text-sm">
-                        {error}
-                    </div>
-                )}
-
-                {resetSent && mode === 'forgot' && (
-                    <div className="bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 p-3 rounded-lg mb-4 text-sm">
-                        Reset link sent. Check your inbox.
-                    </div>
-                )}
-
-                {mode !== 'forgot' && (
-                    <>
-                        <button
-                            onClick={handleGoogleLogin}
-                            disabled={loading}
-                            className="w-full bg-white hover:bg-gray-100 text-gray-900 font-semibold py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-3 mb-6 disabled:opacity-60"
-                        >
-                            <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-                            {loading ? 'Connecting…' : `${mode === 'login' ? 'Sign in' : 'Sign up'} with Google`}
-                        </button>
-
-                        <div className="relative mb-6">
-                            <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-slate-700"></div>
-                            </div>
-                            <div className="relative flex justify-center text-sm">
-                                <span className="px-2 bg-slate-900 text-slate-400">Or continue with email</span>
-                            </div>
-                        </div>
-                    </>
-                )}
-
-                <form className="space-y-4" onSubmit={handleEmailSubmit}>
-                    {mode === 'register' && (
-                        <div className="relative">
-                            <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
-                            <input
-                                type="text"
-                                placeholder="Display name"
-                                autoComplete="name"
-                                className="w-full bg-slate-800/60 border border-slate-700 text-white pl-10 pr-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors placeholder-slate-500"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
-                            />
-                        </div>
-                    )}
-
-                    <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
-                        <input
-                            type="email"
-                            placeholder="Email address"
-                            autoComplete="email"
-                            required
-                            className="w-full bg-slate-800/60 border border-slate-700 text-white pl-10 pr-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors placeholder-slate-500"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                        />
-                    </div>
-
-                    {mode !== 'forgot' && (
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
-                            <input
-                                type="password"
-                                placeholder="Password"
-                                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-                                required
-                                minLength={6}
-                                className="w-full bg-slate-800/60 border border-slate-700 text-white pl-10 pr-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors placeholder-slate-500"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                            />
-                        </div>
-                    )}
-
-                    {mode === 'register' && (
-                        <div className="relative">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
-                            <input
-                                type="password"
-                                placeholder="Confirm password"
-                                autoComplete="new-password"
-                                required
-                                minLength={6}
-                                className="w-full bg-slate-800/60 border border-slate-700 text-white pl-10 pr-4 py-3 rounded-xl focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors placeholder-slate-500"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                            />
-                        </div>
-                    )}
-
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold py-3 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? (
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                        ) : mode === 'register' ? (
-                            <><UserPlus className="w-5 h-5" /> Create Account</>
-                        ) : mode === 'forgot' ? (
-                            <>Send Reset Link</>
-                        ) : (
-                            <><LogIn className="w-5 h-5" /> Sign in</>
-                        )}
-                    </button>
-                </form>
-
-                <div className="mt-6 text-center text-sm text-slate-400 space-y-2">
-                    {mode === 'login' && (
-                        <>
-                            <p>
-                                Don't have an account?{' '}
-                                <button onClick={() => { setMode('register'); setError(''); }} className="text-cyan-400 font-semibold hover:text-cyan-300">
-                                    Sign up
-                                </button>
-                            </p>
-                            <p>
-                                <button onClick={() => { setMode('forgot'); setError(''); setResetSent(false); }} className="text-slate-500 hover:text-slate-300 text-xs">
-                                    Forgot password?
-                                </button>
-                            </p>
-                        </>
-                    )}
-                    {mode === 'register' && (
-                        <p>
-                            Already have an account?{' '}
-                            <button onClick={() => { setMode('login'); setError(''); }} className="text-cyan-400 font-semibold hover:text-cyan-300">
-                                Sign in
-                            </button>
-                        </p>
-                    )}
-                    {mode === 'forgot' && (
-                        <button
-                            onClick={() => { setMode('login'); setError(''); setResetSent(false); }}
-                            className="inline-flex items-center gap-1 text-cyan-400 font-semibold hover:text-cyan-300"
-                        >
-                            <ArrowLeft className="w-4 h-4" /> Back to sign in
-                        </button>
-                    )}
-                </div>
+      <div className="au-screen">
+        <div className="au-bg-grid" />
+        <div className="au-bg-glow" />
+        <AuthCornerFiligree />
+        <div className="au-card" style={{ textAlign: 'center' }}>
+          <div className="au-logo">
+            <div className="au-logo-mark" style={{ background: 'rgba(34, 211, 238, 0.12)' }}>
+              <MailCheck size={32} color="#67E8F9" />
             </div>
+          </div>
+          <h1 className="au-title">Cek Inbox Email</h1>
+          <p className="au-sub" style={{ marginBottom: 14 }}>
+            Link verifikasi sudah dikirim ke{' '}
+            <span style={{ color: 'var(--cyan)', fontFamily: 'var(--font-mono)' }}>{email}</span>.
+            Klik link untuk mengaktifkan akun, lalu masuk.
+          </p>
+          <p className="au-sub" style={{ color: 'var(--t-mute)', fontSize: 11, marginBottom: 14 }}>
+            Tidak terlihat? Cek folder Spam/Promosi.
+          </p>
+          <button type="button" className="au-cta"
+            onClick={() => { setPostRegister(false); setMode('login'); setPassword(''); setConfirmPassword(''); }}>
+            <span>Lanjut ke Sign In</span>
+            <span className="au-cta-arr">→</span>
+          </button>
         </div>
+      </div>
     );
+  }
+
+  const isRegister = mode === 'register';
+  const isForgot = mode === 'forgot';
+  const ready = isForgot
+    ? email.trim().length > 3
+    : isRegister
+      ? name.trim().length > 0 && email.includes('@') && password.length >= 6 && password === confirmPassword && agree
+      : email.trim().length > 3 && password.length > 0;
+
+  return (
+    <div className="au-screen">
+      <div className="au-bg-grid" />
+      <div className="au-bg-glow" />
+      <AuthCornerFiligree />
+
+      <div className="au-card">
+        <AuthLogo subtitle="SOLO GROWTH PROTOCOL · v1.0" />
+        <div className="au-hero">
+          <h1 className="au-title">
+            {mode === 'login' ? 'Selamat Datang Kembali' : isRegister ? 'Daftar Sebagai Hunter' : 'Reset Kata Sandi'}
+          </h1>
+          <p className="au-sub">
+            {mode === 'login' && 'Masuk untuk lanjutkan perjalananmu, Hunter.'}
+            {isRegister && 'System sedang menunggu Player baru.'}
+            {isForgot && 'Kami akan kirim link reset ke emailmu.'}
+          </p>
+        </div>
+
+        {error && <div className="au-alert au-alert-err">{error}</div>}
+        {resetSent && isForgot && (
+          <div className="au-alert au-alert-ok">Link reset sudah dikirim. Cek inbox.</div>
+        )}
+
+        <form className="au-form" onSubmit={handleEmailSubmit}>
+          {isRegister && (
+            <label className="au-field">
+              <span className="au-field-ico"><UserIcon size={16} /></span>
+              <input className="au-input" type="text" placeholder="Nama Panggilan"
+                autoComplete="name"
+                value={name} onChange={(e) => setName(e.target.value)} />
+            </label>
+          )}
+
+          <label className="au-field">
+            <span className="au-field-ico"><Mail size={16} /></span>
+            <input className="au-input" type="email" placeholder="Email"
+              autoComplete="email" required
+              value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+
+          {!isForgot && (
+            <label className="au-field">
+              <span className="au-field-ico"><Lock size={16} /></span>
+              <input className="au-input"
+                type={showPwd ? 'text' : 'password'}
+                placeholder="Kata Sandi"
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
+                required minLength={6}
+                value={password} onChange={(e) => setPassword(e.target.value)} />
+              <button type="button" className="au-field-toggle"
+                onClick={() => setShowPwd((v) => !v)}
+                aria-label={showPwd ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}>
+                {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </label>
+          )}
+
+          {isRegister && (
+            <label className="au-field">
+              <span className="au-field-ico"><Lock size={16} /></span>
+              <input className="au-input" type="password" placeholder="Konfirmasi Kata Sandi"
+                autoComplete="new-password" required minLength={6}
+                value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+            </label>
+          )}
+
+          {isRegister && password && password !== confirmPassword && (
+            <div className="au-err">! KATA SANDI TIDAK COCOK</div>
+          )}
+
+          {isRegister && (
+            <label className="au-check">
+              <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+              <span className="au-check-box">
+                {agree && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+                    <path d="M5 12 L10 17 L19 8" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </span>
+              <span>Saya setuju dengan <a>Syarat &amp; Ketentuan</a></span>
+            </label>
+          )}
+
+          {mode === 'login' && (
+            <button type="button" className="au-forgot"
+              onClick={() => { setMode('forgot'); setError(''); setResetSent(false); }}>
+              Lupa kata sandi?
+            </button>
+          )}
+
+          <button type="submit"
+            className={`au-cta ${ready ? '' : 'is-disabled'}`}
+            disabled={!ready || loading}>
+            {loading
+              ? <Loader2 size={16} className="animate-spin" />
+              : <>
+                  <span>{isForgot ? 'Kirim Link Reset' : isRegister ? 'Buat Akun' : 'Masuk'}</span>
+                  <span className="au-cta-arr">→</span>
+                </>}
+          </button>
+        </form>
+
+        {!isForgot && (
+          <>
+            <div className="au-divider"><span>atau</span></div>
+            <button type="button" className="au-google" onClick={handleGoogleLogin} disabled={loading}>
+              <img src="https://www.google.com/favicon.ico" alt="" />
+              <span>{loading ? 'Connecting…' : `Lanjut dengan Google`}</span>
+            </button>
+          </>
+        )}
+
+        <div className="au-foot">
+          {mode === 'login' && (
+            <>Belum punya akun? <button type="button" onClick={() => { setMode('register'); setError(''); }}>Daftar di sini</button></>
+          )}
+          {isRegister && (
+            <>Sudah punya akun? <button type="button" onClick={() => { setMode('login'); setError(''); }}>Masuk</button></>
+          )}
+          {isForgot && (
+            <button type="button"
+              onClick={() => { setMode('login'); setError(''); setResetSent(false); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <ArrowLeft size={14} /> Kembali ke Sign In
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 };

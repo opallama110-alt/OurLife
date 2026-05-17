@@ -5073,3 +5073,454 @@ input, select, textarea {
 .am-tier.is-reached { border-color: rgba(34, 211, 238, 0.3); background: rgba(34, 211, 238, 0.03); }
 .am-tier-name { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; font-family: var(--font-mono); }
 .am-tier-req { font-size: 10px; color: var(--t-mute); letter-spacing: 0.04em; font-family: var(--font-mono); }
+
+/* ============================================================
+   SYSTEM NOTIFICATION extras (sn-btn / sn-timer / sn-target / sn-warn)
+   Ported from prototype system-notif.css — used by IntroSequence +
+   FirstDailyQuest.
+   ============================================================ */
+.sn-btn-row { display: flex; gap: 8px; justify-content: center; }
+.sn-btn {
+  min-width: 100px;
+  padding: 11px 18px;
+  font-family: var(--font-sans);
+  font-size: 14px; font-weight: 700;
+  letter-spacing: 0.01em;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 140ms var(--ease-spring), opacity 200ms ease;
+}
+.sn-btn-primary {
+  background: linear-gradient(180deg, #67E8F9, #22D3EE 50%, #3B82F6);
+  color: #02061A;
+  border: 1px solid rgba(167, 243, 252, 0.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 0 18px rgba(34, 211, 238, 0.55);
+}
+.sn-btn-ghost {
+  background: rgba(7, 12, 24, 0.4);
+  color: #94A3B8;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+.sn-btn-danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: #FCA5A5;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+}
+.sn-btn:active { transform: scale(0.97); }
+
+.sn-timer {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  margin: 14px auto 0;
+  width: 76px; height: 76px;
+}
+.sn-timer svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.sn-timer-track { stroke: rgba(34, 211, 238, 0.15); }
+.sn-timer-bar {
+  stroke: url(#sn-timer-grad);
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.55));
+  transition: stroke-dashoffset 200ms linear;
+}
+.sn-timer-num {
+  position: relative; z-index: 2;
+  font-family: var(--font-mono);
+  font-size: 22px; font-weight: 700;
+  color: #FFFFFF;
+  text-shadow: 0 0 8px rgba(34, 211, 238, 0.55);
+}
+.sn-timer-num-sub {
+  display: block;
+  font-size: 8px; letter-spacing: 0.2em;
+  color: rgba(167, 243, 252, 0.7);
+  margin-top: 1px;
+}
+.sn-target-label {
+  color: #22C55E;
+  font-size: 22px; font-weight: 700;
+  margin-bottom: 6px;
+  text-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}
+.sn-target-list {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  color: #E0F2FE;
+  line-height: 1.7;
+}
+.sn-warn {
+  display: block;
+  margin-top: 14px;
+  font-size: 14.5px;
+  color: #CBD5E1;
+  line-height: 1.55;
+}
+.sn-warn b {
+  color: #EF4444;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+/* ============================================================
+   ANATOMICAL HEART (.ah-*) — used in IntroSequence Heart Awakening
+   ============================================================ */
+.ah-wrap {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  z-index: 2;
+}
+.ah-halo {
+  position: absolute; inset: -16%;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, rgba(251, 146, 60, 0.55), transparent 65%),
+    radial-gradient(closest-side, rgba(251, 191, 36, 0.30) 30%, transparent 65%);
+  filter: blur(3px);
+  z-index: 0; pointer-events: none;
+  animation: ah-halo-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ah-halo-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.08); }
+}
+.ah-glow {
+  position: absolute; inset: -26%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(251, 146, 60, 0.30), transparent 70%);
+  filter: blur(6px);
+  z-index: 0; pointer-events: none;
+  animation: ah-halo-pulse 1.6s 0.2s ease-in-out infinite;
+}
+.ah-svg {
+  position: relative; z-index: 2;
+  filter:
+    drop-shadow(0 0 12px rgba(251, 146, 60, 0.65))
+    drop-shadow(0 0 28px rgba(251, 191, 36, 0.45));
+  transform-origin: 50% 70%;
+  animation: ah-beat var(--ah-beat, 1.4s) ease-in-out infinite;
+  transform: scale(var(--ah-scale, 1));
+}
+@keyframes ah-beat {
+  0%, 60%, 100% { transform: scale(1); }
+  8%            { transform: scale(1.10); }
+  18%           { transform: scale(1); }
+  28%           { transform: scale(1.07); }
+  38%           { transform: scale(1); }
+}
+.ah-sparks { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.ah-spark {
+  position: absolute;
+  width: 2px; height: 2px;
+  background: #FBBF24;
+  border-radius: 50%;
+  box-shadow: 0 0 4px #FBBF24, 0 0 8px rgba(251, 191, 36, 0.7);
+  opacity: 0;
+  animation: ah-spark 2.4s ease-out infinite;
+}
+@keyframes ah-spark {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.5); }
+  15%  { opacity: 1; transform: translate(0, -4px) scale(1); }
+  60%  { opacity: 0.6; transform: translate(2px, -16px) scale(0.8); }
+  100% { opacity: 0; transform: translate(4px, -28px) scale(0.3); }
+}
+.ah-tier-1 .ah-halo, .ah-tier-1 .ah-glow { opacity: 0.45; }
+.ah-tier-4 .ah-glow, .ah-tier-5 .ah-glow { inset: -34%; }
+.ah-halo-extra {
+  position: absolute; inset: -42%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(245, 197, 24, 0.22), transparent 75%);
+  filter: blur(10px);
+  pointer-events: none;
+  animation: ah-halo-pulse 1.6s 0.4s ease-in-out infinite;
+}
+.ah-flames {
+  position: absolute; inset: 0;
+  pointer-events: none; z-index: 1;
+  filter:
+    drop-shadow(0 0 6px rgba(251, 146, 60, 0.6))
+    drop-shadow(0 0 14px rgba(239, 68, 68, 0.35));
+}
+.ah-flame { transform-origin: 50% 100%; animation: ah-flame-flick 1.6s ease-in-out infinite; }
+.ah-flame-a { animation-delay: 0s; }
+.ah-flame-b { animation-delay: 0.4s; }
+.ah-flame-c { animation-delay: 0.2s; }
+@keyframes ah-flame-flick {
+  0%, 100% { transform: scaleY(1) scaleX(1); opacity: 0.78; }
+  50%      { transform: scaleY(1.15) scaleX(0.92); opacity: 1; }
+}
+.ah-orbit { position: absolute; inset: -8%; z-index: 0; pointer-events: none; }
+.ah-orbit svg { width: 100%; height: 100%; }
+.ah-orbit-a { animation: ah-orbit-spin 5s linear infinite; transform: rotate(-8deg); }
+.ah-orbit-b { animation: ah-orbit-spin-rev 7s linear infinite; transform: rotate(22deg); }
+@keyframes ah-orbit-spin     { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+@keyframes ah-orbit-spin-rev { from { transform: rotate(360deg); } to { transform: rotate(0); } }
+.ah-crown {
+  position: absolute; inset: -22%;
+  z-index: 0; pointer-events: none;
+  filter:
+    drop-shadow(0 0 8px rgba(245, 197, 24, 0.7))
+    drop-shadow(0 0 14px rgba(245, 197, 24, 0.45));
+  animation: ah-crown-spin 18s linear infinite, ah-crown-pulse 1.4s ease-in-out infinite;
+  transform-origin: center;
+}
+.ah-crown svg { width: 100%; height: 100%; }
+@keyframes ah-crown-spin  { to { transform: rotate(360deg); } }
+@keyframes ah-crown-pulse {
+  0%, 100% { opacity: 0.8; }
+  10%      { opacity: 1; }
+  30%      { opacity: 0.95; }
+}
+.ah-lightning {
+  animation: ah-lightning 1.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 3px rgba(167, 243, 252, 0.7));
+}
+@keyframes ah-lightning {
+  0%, 60%, 100% { opacity: 0.4; }
+  10%, 30%      { opacity: 1; }
+}
+
+/* ============================================================
+   HEART AWAKENING cinematic — full-screen (.ha-*)
+   ============================================================ */
+.ha-stage {
+  position: fixed; inset: 0;
+  z-index: 360;
+  background: radial-gradient(closest-side at 50% 50%, rgba(15, 23, 42, 0.6), #02040A 70%);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 22px;
+  overflow: hidden;
+  animation: ha-fade-in 600ms var(--ease-out);
+}
+@keyframes ha-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.ha-void {
+  position: absolute; inset: 0;
+  background-image:
+    radial-gradient(2px 2px at 20% 30%, rgba(251, 191, 36, 0.3) 50%, transparent),
+    radial-gradient(1.5px 1.5px at 70% 25%, rgba(167, 243, 252, 0.3) 50%, transparent),
+    radial-gradient(2.5px 2.5px at 85% 70%, rgba(251, 146, 60, 0.25) 50%, transparent),
+    radial-gradient(1.2px 1.2px at 15% 80%, rgba(167, 243, 252, 0.3) 50%, transparent);
+  background-size: 600px 600px;
+  pointer-events: none;
+  animation: ha-stars 12s linear infinite;
+}
+@keyframes ha-stars { to { background-position: 100px 100px, -120px 80px, 160px -90px, -80px 110px; } }
+.ha-caption {
+  text-align: center;
+  z-index: 2;
+  animation: ha-cap-in 800ms 600ms var(--ease-out) both;
+}
+@keyframes ha-cap-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ha-caption-text {
+  font-size: 18px; font-weight: 700;
+  color: #E0F2FE;
+  margin-top: 6px;
+  letter-spacing: 0.01em;
+  text-shadow: 0 0 12px rgba(34, 211, 238, 0.4);
+}
+
+/* ============================================================
+   AUTH SCREENS (.au-*) — login + register port
+   ============================================================ */
+.au-screen {
+  position: relative;
+  min-height: 100vh;
+  display: flex; flex-direction: column;
+  justify-content: center;
+  padding: 18px;
+  overflow: hidden;
+  background: var(--bg-1, #04060D);
+}
+.au-bg-grid {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(34, 211, 238, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 0%, transparent 80%);
+          mask-image: radial-gradient(ellipse at 50% 50%, black 0%, transparent 80%);
+}
+.au-bg-glow {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(420px 280px at 30% 20%, rgba(34, 211, 238, 0.12), transparent 60%),
+    radial-gradient(360px 240px at 80% 80%, rgba(59, 130, 246, 0.10), transparent 60%);
+}
+.au-corner {
+  position: absolute;
+  filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.5));
+  z-index: 1;
+}
+.au-corner-tl { top: 8px; left: 8px; }
+.au-corner-br { bottom: 8px; right: 8px; }
+.au-card {
+  position: relative; z-index: 2;
+  padding: 24px 20px 22px;
+  border-radius: 16px;
+  max-width: 420px;
+  width: 100%;
+  margin: 0 auto;
+  background:
+    radial-gradient(closest-side at 50% 0%, rgba(34, 211, 238, 0.08), transparent 50%),
+    linear-gradient(180deg, rgba(15, 21, 37, 0.7), rgba(7, 11, 22, 0.85));
+  border: 1px solid var(--line-cyan-soft);
+  box-shadow:
+    inset 0 1px 0 rgba(34, 211, 238, 0.18),
+    0 0 0 1px rgba(34, 211, 238, 0.05),
+    0 28px 60px -16px rgba(0, 0, 0, 0.85),
+    0 0 50px -16px rgba(34, 211, 238, 0.35);
+}
+.au-logo { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 14px; }
+.au-logo-mark {
+  width: 56px; height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.12), rgba(59, 130, 246, 0.04));
+  border: 1px solid var(--line-cyan-soft);
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: inset 0 0 12px rgba(34, 211, 238, 0.18), 0 0 14px -4px rgba(34, 211, 238, 0.45);
+  overflow: hidden;
+}
+.au-logo-mark img { width: 40px; height: 40px; object-fit: contain; }
+.au-logo-name {
+  font-size: 18px; font-weight: 700;
+  color: var(--cyan);
+  letter-spacing: -0.01em;
+  text-shadow: 0 0 12px rgba(34, 211, 238, 0.4);
+}
+.au-logo-tag { font-size: 9px; letter-spacing: 0.22em; color: var(--t-mute); text-transform: uppercase; font-family: var(--font-mono); }
+.au-hero { text-align: center; margin-bottom: 16px; }
+.au-title { margin: 0; font-size: 22px; font-weight: 800; color: var(--t-hi); letter-spacing: -0.01em; }
+.au-sub { margin: 4px 0 0; font-size: 12.5px; color: var(--t-3); }
+.au-form { display: flex; flex-direction: column; gap: 10px; }
+.au-field {
+  display: flex; align-items: center; gap: 10px;
+  height: 44px;
+  padding: 0 14px;
+  background: rgba(7, 12, 24, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--t-3);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.au-field:focus-within { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.1); color: var(--cyan); }
+.au-field-ico { display: inline-flex; }
+.au-input {
+  flex: 1;
+  background: transparent;
+  border: 0; outline: 0;
+  color: var(--t-1);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  min-width: 0;
+}
+.au-input::placeholder { color: var(--t-mute); }
+.au-field-toggle {
+  width: 28px; height: 28px;
+  background: transparent;
+  border: 0;
+  color: var(--t-3);
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.au-field-toggle:hover { color: var(--cyan); }
+.au-forgot {
+  align-self: flex-end;
+  padding: 4px 6px;
+  background: transparent;
+  border: 0;
+  color: var(--cyan);
+  font-size: 12px;
+  cursor: pointer;
+}
+.au-err {
+  font-size: 10px; letter-spacing: 0.16em;
+  color: var(--red);
+  padding: 0 4px;
+  font-family: var(--font-mono);
+}
+.au-cta {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 46px;
+  margin-top: 6px;
+  background: linear-gradient(135deg, #67E8F9, #22D3EE 50%, #3B82F6);
+  color: var(--bg-1, #04060D);
+  border: 0;
+  border-radius: 12px;
+  font-size: 14px; font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow:
+    0 0 0 1px rgba(34, 211, 238, 0.45),
+    0 14px 28px -10px rgba(34, 211, 238, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: transform 160ms var(--ease-spring), opacity 200ms ease;
+}
+.au-cta:active { transform: scale(0.98); }
+.au-cta:disabled, .au-cta.is-disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+.au-cta-arr { font-size: 16px; }
+.au-divider {
+  display: flex; align-items: center; gap: 10px;
+  margin: 14px 0 10px;
+  color: var(--t-mute);
+  font-size: 10px; letter-spacing: 0.18em;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+.au-divider::before, .au-divider::after {
+  content: ""; flex: 1; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+}
+.au-google {
+  height: 42px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  background: rgba(7, 12, 24, 0.6);
+  color: var(--t-1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: border-color 160ms ease;
+}
+.au-google:hover { border-color: var(--line-cyan-soft); }
+.au-google:disabled { opacity: 0.6; cursor: wait; }
+.au-google img { width: 16px; height: 16px; }
+.au-foot {
+  margin-top: 14px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--t-3);
+}
+.au-foot button {
+  background: transparent;
+  border: 0;
+  color: var(--cyan);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0 4px;
+}
+.au-foot button:hover { text-decoration: underline; }
+.au-alert {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.01em;
+}
+.au-alert-err {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #FCA5A5;
+}
+.au-alert-ok {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: var(--green-bright);
+}

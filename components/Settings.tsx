@@ -681,6 +681,28 @@ const AppSettingsTab: React.FC = () => {
         </div>
       </section>
 
+      {/* ═══════════ EXPERIENCE ═══════════ */}
+      <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
+        <h2 className="text-sm font-bold text-white flex items-center">
+          <Sparkles size={16} className="mr-2 text-cyan-400" />Experience
+        </h2>
+        <button
+          type="button"
+          onClick={() => {
+            // Clear the intro-done flag and bounce to /onboarding so the
+            // cinematic Player Invitation + Heart Awakening plays again.
+            try { localStorage.removeItem('ol_intro_done'); } catch { /* */ }
+            navigate('/onboarding');
+          }}
+          className="w-full py-3 bg-slate-800 border border-cyan-500/30 rounded-xl text-cyan-200 hover:bg-cyan-500/10 transition-all flex items-center justify-center space-x-2"
+        >
+          <Sparkles size={14} /><span className="text-sm font-bold">Replay Intro Cinematic</span>
+        </button>
+        <p className="text-[10px] text-slate-500 font-mono">
+          Memutar ulang Informasi Sistem · Heart Awakening · Player Welcome.
+        </p>
+      </section>
+
       {/* ═══════════ SESSION ═══════════ */}
       <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
         <h2 className="text-sm font-bold text-white">Session</h2>
