@@ -8,13 +8,14 @@ import {
   Loader2, Check, AlertTriangle, UserCircle, Settings as SettingsIcon, Target,
   Upload, ImagePlus, Bell, Lock, Mail, KeyRound, Shield, Palette, Languages,
   Type, Download, Database, Info, FileText, HelpCircle, MessageCircle,
-  Sparkles, Clock, ChevronRight,
+  Sparkles, Clock, ChevronRight, Smartphone,
 } from 'lucide-react';
 import { db, storage } from '../firebase-config';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
 import { Profile } from '../pages/Profile';
 import { TokenDisplay } from './TokenDisplay';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SETTINGS — 3-tab redesign
@@ -71,37 +72,32 @@ export const Settings: React.FC = () => {
     { key: 'app', label: 'App Settings', icon: SettingsIcon },
   ];
 
-  return (
-    <div className="space-y-6 pb-24 animate-slide-up">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
-        <p className="text-xs text-slate-500 font-mono mt-1">
-          Profile, goals, and app preferences — all in one place.
-        </p>
-      </div>
+  const tabIdx = TABS.findIndex(t => t.key === activeTab);
 
-      {/* Tab Bar */}
-      <div className="jarvis-card p-1.5 rounded-2xl border border-slate-800 flex gap-1 overflow-x-auto no-scrollbar">
+  return (
+    <div className="pb-24">
+      <header className="s-header">
+        <h1 className="s-title">Settings</h1>
+        <p className="s-subtitle">Profile, goals, and app preferences — all in one place.</p>
+      </header>
+
+      {/* Tab Bar (prototype settings.css .s-tabs port) */}
+      <div className="s-tabs">
+        <div className="s-tabs-indicator" style={{ transform: `translateX(${tabIdx * 100}%)` }} />
         {TABS.map(tab => {
           const active = activeTab === tab.key;
           return (
-            <button
-              key={tab.key}
+            <button key={tab.key} type="button"
               onClick={() => setActiveTab(tab.key)}
-              className={`flex-1 min-w-[110px] flex items-center justify-center space-x-2 px-3 py-2.5 rounded-xl text-xs font-bold transition-all ${active
-                ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/10 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.15)] border border-cyan-500/30'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60 border border-transparent'
-                }`}
-            >
-              <tab.icon size={14} className="shrink-0" />
-              <span className="truncate">{tab.label}</span>
+              className={`s-tab ${active ? 'is-on' : ''}`}>
+              <tab.icon size={14} />
+              <span>{tab.label}</span>
             </button>
           );
         })}
       </div>
 
-      {/* Tab Panels */}
-      <div>
+      <div className="s-pane-wrap">
         {activeTab === 'profile' && <MyProfileTab />}
         {activeTab === 'goals' && <GoalsTrackingTab />}
         {activeTab === 'app' && <AppSettingsTab />}
@@ -555,6 +551,7 @@ const PrefRow: React.FC<{
 const AppSettingsTab: React.FC = () => {
   const { logout, deleteAccount } = useAuth();
   const navigate = useNavigate();
+  const { isInstallable, install } = usePWAInstall();
 
   const [notifs, setNotifs] = useState({
     workouts: true,
@@ -566,6 +563,11 @@ const AppSettingsTab: React.FC = () => {
 
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // navigator.standalone exists on iOS Safari; otherwise display-mode media query
+  const isInstalled = typeof window !== 'undefined' &&
+    (window.matchMedia?.('(display-mode: standalone)').matches ||
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window.navigator as any).standalone === true);
 
   const handleLogout = async () => {
     await logout();
@@ -596,6 +598,30 @@ const AppSettingsTab: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto animate-fade-in">
+      {/* ═══════════ INSTALL APP (PWA) ═══════════ */}
+      {(isInstallable || isInstalled) && (
+        <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
+          <h2 className="text-sm font-bold text-white flex items-center">
+            <Smartphone size={16} className="mr-2 text-cyan-400" />Install App
+          </h2>
+          <div className="s-pwa-card">
+            <div className="s-pwa-card-info">
+              <div className="s-pwa-card-title">OurLife Hunter</div>
+              <div className="s-pwa-card-sub">
+                {isInstalled
+                  ? 'Sudah terpasang — buka langsung dari home screen.'
+                  : 'Pasang ke home screen untuk akses lebih cepat dan tampilan layar penuh.'}
+              </div>
+            </div>
+            {isInstalled
+              ? <span className="s-pwa-card-installed"><Check size={12} /> TERPASANG</span>
+              : <button type="button" className="s-cta s-cta-cyan" style={{ width: 'auto', padding: '0 16px' }} onClick={install}>
+                  <Smartphone size={14} /> Pasang
+                </button>}
+          </div>
+        </section>
+      )}
+
       {/* ═══════════ NOTIFICATIONS ═══════════ */}
       <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-2">
         <h2 className="text-sm font-bold text-white flex items-center mb-2">
