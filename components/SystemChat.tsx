@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { X, Send, Loader2 } from 'lucide-react';
+import { Send, Loader2 } from 'lucide-react';
 import { aiService } from '../services/aiService';
 import { storageService } from '../services/storageService';
 import { SystemPet, PetEmotion } from './SystemPet';
+import { SystemNotification } from './hud';
 
 type ChatMsg = {
   id: string;
@@ -11,12 +12,16 @@ type ChatMsg = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SYSTEM CHAT — slide-up sheet (controlled).
-// Open state is owned by the parent (Layout) so the bottom-nav bot mascot
-// can toggle the chat. The internal SystemPet FAB block was removed when
-// the Layout shell wholesale restyle landed; SystemPet.tsx is still imported
-// for the in-sheet header avatar (and the file is preserved for rollback
-// safety per the same restyle commit).
+// SYSTEM CHAT — wrapped in the .sys-frame modal chrome from
+// SystemNotification. The chat-specific layout (messages list +
+// textarea + send button) lives in the .sys-body; the header carries
+// the level chip as the .sys-head cta slot, and "Powered by Llama 3.3"
+// rides the SystemNotification footer prop.
+//
+// The previous inline gradient + red border + glow chrome was dropped
+// (it duplicated chrome the .sys-frame already provides). Bot avatar
+// (SystemPet) stays in the empty-state body — that emotion mapping is
+// part of the System's personality.
 // ═══════════════════════════════════════════════════════════════════════════
 export interface SystemChatProps {
   open: boolean;
@@ -147,125 +152,98 @@ export const SystemChat: React.FC<SystemChatProps> = ({ open, onClose }) => {
     }
   };
 
-  // FAB removed when the Layout shell wholesale restyle landed — the chat
-  // is now opened by the center bot mascot in the BottomNav (Layout.tsx
-  // owns `open` state and passes it as a prop). `emotion` is still computed
-  // and surfaced inside the sheet header avatar / empty state.
+  // Compact level chip rendered in .sys-head cta slot.
+  const levelChip = (
+    <span className="sys-chat-chip">
+      <span className="sys-chat-chip-lv">Lv.{profile.level ?? 1}</span>
+      <span className="sys-chat-chip-sep">·</span>
+      <span>{(profile.totalXP ?? 0).toLocaleString()} XP</span>
+      {(profile.currentStreak ?? 0) > 0 && (
+        <>
+          <span className="sys-chat-chip-sep">·</span>
+          <span className="sys-chat-chip-flame">{profile.currentStreak}🔥</span>
+        </>
+      )}
+    </span>
+  );
+
   return (
-    <>
-      {/* ── Slide-up Sheet (controlled by parent) ── */}
-      {open && (
-        <div className="fixed inset-0 z-[70] flex items-end md:items-center justify-center md:p-4">
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fade-in"
-            onClick={onClose}
-          />
-          <div className="relative w-full md:max-w-lg md:rounded-2xl rounded-t-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-t md:border border-red-500/40 shadow-[0_-10px_60px_rgba(239,68,68,0.3)] md:shadow-[0_0_60px_rgba(239,68,68,0.3)] flex flex-col max-h-[90vh] md:max-h-[80vh] animate-slide-up overflow-hidden">
-            {/* Decorative glow */}
-            <div className="absolute -top-20 -right-20 w-60 h-60 bg-red-500/20 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+    <SystemNotification
+      open={open}
+      mode="modal"
+      tone="cyan"
+      closable
+      onClose={onClose}
+      title="THE SYSTEM"
+      subtitle="awaiting your transmission"
+      cta={levelChip}
+      className="sys-frame-chat"
+      footer={
+        <p className="sys-chat-footnote">
+          Powered by Llama 3.3 · The System may grant XP or apply penalties
+        </p>
+      }
+    >
+      {/* Messages list */}
+      <div ref={scrollRef} className="sys-chat-messages">
+        {messages.length === 0 && !loading && (
+          <div className="sys-chat-empty">
+            <SystemPet emotion={emotion} size="lg" className="mb-4" />
+            <p className="sys-chat-empty-title">The System is listening.</p>
+            <p className="sys-chat-empty-sub">
+              Report a missed session, request a quest, or ask for guidance.
+              The System can grant XP and apply penalties directly.
+            </p>
+          </div>
+        )}
 
-            {/* Header */}
-            <div className="relative z-10 flex items-center justify-between p-4 border-b border-slate-800/80">
-              <div className="flex items-center space-x-3">
-                <SystemPet emotion={emotion} size="sm" />
-                <div>
-                  <h2 className="text-sm font-bold uppercase tracking-widest text-white font-mono">The System</h2>
-                  <p className="text-[10px] text-slate-500 font-mono">
-                    Lv.{profile.level} · {(profile.totalXP ?? 0).toLocaleString()} XP
-                    {(profile.currentStreak ?? 0) > 0 && (
-                      <span className="text-orange-400"> · {profile.currentStreak}🔥</span>
-                    )}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={onClose}
-                className="p-2 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
-                aria-label="Close System chat"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Messages */}
-            <div ref={scrollRef} className="relative z-10 flex-1 overflow-y-auto px-4 py-4 space-y-3 custom-scrollbar">
-              {messages.length === 0 && !loading && (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <SystemPet emotion={emotion} size="lg" className="mb-4" />
-                  <p className="text-sm text-slate-300 font-medium mb-1">The System is listening.</p>
-                  <p className="text-xs text-slate-500 max-w-[260px]">
-                    Report a missed session, request a quest, or ask for guidance. The System can grant XP and apply penalties directly.
-                  </p>
-                </div>
+        {messages.map(m => (
+          <div key={m.id} className={`sys-chat-row ${m.role === 'user' ? 'is-user' : 'is-system'}`}>
+            <div className={`sys-chat-bubble ${m.role === 'user' ? 'is-user' : 'is-system'}`}>
+              {m.role === 'system' && (
+                <div className="sys-chat-bubble-label">The System</div>
               )}
-
-              {messages.map(m => (
-                <div
-                  key={m.id}
-                  className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-line ${m.role === 'user'
-                      ? 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-br-sm shadow-lg shadow-cyan-500/20'
-                      : 'bg-slate-800/80 border border-red-500/20 text-slate-100 rounded-bl-sm shadow-lg'
-                      }`}
-                  >
-                    {m.role === 'system' && (
-                      <div className="text-[10px] font-mono uppercase tracking-widest text-red-400 mb-1">The System</div>
-                    )}
-                    {m.text}
-                  </div>
-                </div>
-              ))}
-
-              {loading && (
-                <div className="flex justify-start">
-                  <div className="bg-slate-800/80 border border-red-500/20 px-4 py-2.5 rounded-2xl rounded-bl-sm flex items-center space-x-2">
-                    <Loader2 size={14} className="text-red-400 animate-spin" />
-                    <span className="text-xs text-slate-400 font-mono">The System is deliberating...</span>
-                  </div>
-                </div>
-              )}
-
-              {error && (
-                <div className="px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-300">
-                  {error}
-                </div>
-              )}
-            </div>
-
-            {/* Input */}
-            <div className="relative z-10 p-3 border-t border-slate-800/80 bg-slate-950/50">
-              <div className="flex items-end space-x-2">
-                <textarea
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleKey}
-                  placeholder="Speak to the System..."
-                  rows={1}
-                  className="flex-1 resize-none bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-red-500/60 focus:ring-1 focus:ring-red-500/30 transition-all max-h-32"
-                />
-                <button
-                  onClick={send}
-                  disabled={!input.trim() || loading}
-                  className="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-amber-500 hover:from-red-400 hover:to-amber-400 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-lg shadow-red-500/30 transition-all active:scale-95"
-                  aria-label="Send message to System"
-                >
-                  {loading ? (
-                    <Loader2 size={16} className="text-white animate-spin" />
-                  ) : (
-                    <Send size={16} className="text-white" />
-                  )}
-                </button>
-              </div>
-              <p className="text-[10px] text-slate-600 font-mono mt-2 px-1">
-                Powered by Llama 3.3 · The System may grant XP or apply penalties
-              </p>
+              {m.text}
             </div>
           </div>
-        </div>
-      )}
-    </>
+        ))}
+
+        {loading && (
+          <div className="sys-chat-row is-system">
+            <div className="sys-chat-bubble is-system sys-chat-bubble-loading">
+              <Loader2 size={14} className="animate-spin" />
+              <span>The System is deliberating…</span>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="sys-chat-error">{error}</div>
+        )}
+      </div>
+
+      {/* Input bar */}
+      <div className="sys-chat-input">
+        <textarea
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKey}
+          placeholder="Speak to the System..."
+          rows={1}
+          className="sys-chat-textarea"
+        />
+        <button
+          type="button"
+          onClick={send}
+          disabled={!input.trim() || loading}
+          className="sys-chat-send"
+          aria-label="Send message to System"
+        >
+          {loading
+            ? <Loader2 size={16} className="animate-spin" />
+            : <Send size={16} />}
+        </button>
+      </div>
+    </SystemNotification>
   );
 };

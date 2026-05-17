@@ -1508,6 +1508,191 @@ input, select, textarea {
   border-color: rgba(125, 217, 245, 0.6);
 }
 
+/* ─── SystemChat modal variant (.sys-frame-chat) ───────────────────────
+   Wider than default .sys-frame-modal (520px vs 420px) to fit message
+   bubbles + textarea, and locks max-height so long conversations scroll
+   inside the .sys-chat-messages list without bleeding the panel. */
+.sys-frame.sys-frame-chat {
+  max-width: 520px;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+.sys-frame.sys-frame-chat .sys-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Compact level chip inside .sys-head cta slot */
+.sys-chat-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px;
+  background: rgba(7, 12, 24, 0.55);
+  border: 1px solid rgba(125, 217, 245, 0.45);
+  border-radius: 999px;
+  color: var(--sys-cyan-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.sys-chat-chip-lv  { color: var(--sys-cyan-1); font-weight: 700; }
+.sys-chat-chip-sep { color: rgba(165, 234, 248, 0.4); }
+.sys-chat-chip-flame { color: var(--orange); }
+
+/* Messages list — scrollable column inside .sys-body */
+.sys-chat-messages {
+  flex: 1 1 0;
+  min-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px; /* leave gutter for scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(125, 217, 245, 0.4) transparent;
+}
+.sys-chat-messages::-webkit-scrollbar { width: 6px; }
+.sys-chat-messages::-webkit-scrollbar-thumb { background: rgba(125, 217, 245, 0.4); border-radius: 3px; }
+.sys-chat-messages::-webkit-scrollbar-track { background: transparent; }
+
+.sys-chat-empty {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px 12px;
+  text-align: center;
+}
+.sys-chat-empty-title {
+  margin: 4px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sys-ink);
+}
+.sys-chat-empty-sub {
+  margin: 0;
+  font-size: 12px;
+  color: var(--sys-ink-dim);
+  max-width: 280px;
+  line-height: 1.5;
+  font-style: normal;
+}
+
+.sys-chat-row {
+  display: flex;
+  width: 100%;
+}
+.sys-chat-row.is-user   { justify-content: flex-end; }
+.sys-chat-row.is-system { justify-content: flex-start; }
+
+.sys-chat-bubble {
+  max-width: 85%;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-line;
+  font-style: normal; /* .sys-body italic-by-verdict-modifier doesn't apply here */
+}
+.sys-chat-bubble.is-user {
+  background: linear-gradient(135deg, #67E8F9 0%, #22D3EE 50%, #3B82F6 100%);
+  color: #02061A;
+  border-radius: 14px 14px 4px 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 6px 16px -6px rgba(34, 211, 238, 0.55);
+}
+.sys-chat-bubble.is-system {
+  background: rgba(7, 12, 24, 0.55);
+  border: 1px solid rgba(125, 217, 245, 0.3);
+  color: var(--sys-ink);
+  border-radius: 14px 14px 14px 4px;
+}
+.sys-chat-bubble-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--sys-cyan-1);
+  margin-bottom: 4px;
+}
+.sys-chat-bubble-loading {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: var(--sys-ink-dim);
+  font-size: 12px;
+}
+.sys-chat-bubble-loading svg { color: var(--sys-cyan-1); }
+
+.sys-chat-error {
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.10);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 8px;
+  color: #FCA5A5;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+/* Input bar */
+.sys-chat-input {
+  display: flex; align-items: flex-end; gap: 8px;
+  padding-top: 4px;
+}
+.sys-chat-textarea {
+  flex: 1;
+  resize: none;
+  padding: 12px 14px;
+  background: rgba(7, 12, 24, 0.6);
+  border: 1px solid rgba(125, 217, 245, 0.25);
+  border-radius: 12px;
+  color: var(--sys-ink);
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  font-size: 14px;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+  max-height: 128px;
+  min-height: 44px;
+}
+.sys-chat-textarea::placeholder { color: var(--sys-ink-dim); }
+.sys-chat-textarea:focus {
+  border-color: var(--sys-cyan-1);
+  box-shadow: 0 0 0 3px rgba(125, 217, 245, 0.12);
+}
+.sys-chat-send {
+  flex-shrink: 0;
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #67E8F9 0%, #22D3EE 50%, #3B82F6 100%);
+  color: #02061A;
+  border: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 8px 20px -8px rgba(34, 211, 238, 0.55);
+  transition: transform 140ms var(--ease-spring), opacity 200ms ease;
+}
+.sys-chat-send:active { transform: scale(0.95); }
+.sys-chat-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.sys-chat-footnote {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--sys-ink-dim);
+  font-style: normal;
+}
+
 /* ─── Responsive — keeps ornaments clean at 380px ─── */
 @media (max-width: 420px) {
   .sys-frame { padding: 26px 20px 24px; }
