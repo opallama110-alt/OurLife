@@ -1,3 +1,37 @@
+/**
+ * @deprecated Reverted to client-side direct Groq call.
+ *
+ * This file is the original Tier 0.1 server-side AI proxy. It is NOT
+ * deployed in current production — the project is on the Firebase
+ * Spark (free) plan, which gates both Secret Manager (needed for the
+ * GROQ_API_KEY binding) and Cloud Functions runtime.
+ *
+ * Live AI traffic now goes through `services/aiService.ts`, which
+ * calls Groq directly from the browser with `dangerouslyAllowBrowser:
+ * true`. The trade-off is documented in CLAUDE.md §6.5 and accepted
+ * by the user for the personal-PWA + free-tier use case.
+ *
+ * This file is preserved as a working reference for a future Tier 6
+ * multi-user migration:
+ *   - TOOLS schema (execute_penalty + mark_quest_complete) is in sync
+ *     with the client copy in aiService.ts. Keep both updated together
+ *     if either tool's signature changes.
+ *   - classifyGroqError + handler skeleton + size limits + auth gate
+ *     are battle-tested; the next migration shouldn't have to rewrite
+ *     them, just rewire the callable export and redeploy.
+ *
+ * Last commit that landed it as the live AI path:
+ *   bbbd87e refactor(security): move Groq AI to server-side Cloud
+ *           Function (Tier 0.1)
+ *
+ * Reverted in commit:
+ *   aa53485 revert(security): aiService back to direct Groq SDK call
+ *
+ * DO NOT delete this file. DO NOT redeploy without first re-enabling
+ * Blaze + re-binding GROQ_API_KEY via `firebase functions:secrets:set
+ * GROQ_API_KEY`, and updating CLAUDE.md to reverse the policy.
+ */
+
 import {
   onCall,
   HttpsError,
