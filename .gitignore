@@ -48,3 +48,7 @@ Thumbs.db
 functions/lib/
 functions/node_modules/
 functions/.env
+
+# Scratch / design-prompt drafts kept at the repo root for convenience
+PROMPT_*.md
+*-frame.html

@@ -27,44 +27,52 @@ import AnatomyViewer, { getViewForMuscle } from '../components/Anatomy/AnatomyVi
 import { RankBadge, rankFromTierName } from '../components/hud';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
 
-// ═══════════ INTERACTIVE INPUT ═══════════
-const InteractiveInput: React.FC<{
+// ═══════════ STEPPER SLIDER (workout.css .ae-step port) ═══════════
+const StepperSlider: React.FC<{
   label: string; value: number; onChange: (v: number) => void;
-  min?: number; max?: number; step?: number;
-}> = ({ label, value, onChange, min = 0, max = 200, step = 1 }) => (
-  <div className="bg-slate-900 p-3 rounded-xl border border-slate-700 w-full">
-    <div className="flex justify-between items-center mb-2">
-      <span className="text-xs text-slate-400 font-mono uppercase">{label}</span>
-      <input
-        type="number" value={value}
-        onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(v); }}
-        min={min} max={max} step={step} inputMode="decimal"
-        className="bg-transparent text-xl font-bold text-white font-mono text-right w-24 focus:outline-none focus:border-b focus:border-cyan-500 transition-all appearance-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-      />
+  min?: number; max?: number; step?: number; unit?: string;
+}> = ({ label, value, onChange, min = 1, max = 30, step = 1, unit }) => {
+  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
+  const dec = useCallback(() => onChange(Math.max(min, parseFloat((value - step).toFixed(2)))), [onChange, value, min, step]);
+  const inc = useCallback(() => onChange(Math.min(max, parseFloat((value + step).toFixed(2)))), [onChange, value, max, step]);
+  return (
+    <div className="ae-step">
+      <div className="ae-step-top">
+        <span className="ae-step-label">{label}</span>
+        <span className="ae-step-val">
+          {value}
+          {unit && <span className="ae-step-unit">{unit}</span>}
+        </span>
+      </div>
+      <div className="ae-step-row">
+        <button className="ae-step-btn" onClick={dec} aria-label="Kurang" type="button">
+          <Minus size={14} />
+        </button>
+        <div className="ae-step-track">
+          <div className="ae-step-fill" style={{ width: `${pct}%` }} />
+          <input type="range" min={min} max={max} step={step} value={value}
+            onChange={(e) => onChange(parseFloat(e.target.value))}
+            className="ae-step-input" />
+          <div className="ae-step-thumb" style={{ left: `${pct}%` }} />
+        </div>
+        <button className="ae-step-btn" onClick={inc} aria-label="Tambah" type="button">
+          <Plus size={14} />
+        </button>
+      </div>
     </div>
-    <div className="flex items-center space-x-3">
-      <button onClick={() => onChange(Math.max(min, parseFloat((value - step).toFixed(2))))}
-        className="w-8 h-8 flex items-center justify-center bg-slate-800 rounded-full text-slate-300 hover:bg-slate-700 active:scale-95 transition-all flex-shrink-0"><Minus size={14} /></button>
-      <input type="range" min={min} max={max} step={step} value={value}
-        onChange={e => onChange(parseFloat(e.target.value))}
-        className="flex-1 h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-jarvis-accent min-w-0" />
-      <button onClick={() => onChange(Math.min(max, parseFloat((value + step).toFixed(2))))}
-        className="w-8 h-8 flex items-center justify-center bg-jarvis-accent/20 rounded-full text-jarvis-accent hover:bg-jarvis-accent/30 active:scale-95 transition-all flex-shrink-0"><Plus size={14} /></button>
-    </div>
-  </div>
-);
+  );
+};
 
-// ═══════════ REST TIMER ═══════════
-const RestTimer: React.FC<{ trigger?: boolean; defaultTime?: number; onTimerEnd?: () => void }> = ({
+// ═══════════ REST TIMER RING (workout.css .ae-timer port) ═══════════
+// Circular SVG countdown with preset chips. The `trigger` prop kicks off a
+// new countdown — used by the "Log & Next" handler to auto-start rest.
+const RestTimerRing: React.FC<{ trigger?: boolean; defaultTime?: number; onTimerEnd?: () => void }> = ({
   trigger = false, defaultTime = 60, onTimerEnd,
 }) => {
-  const [seconds, setSeconds] = useState(0);
-  const [maxS, setMaxS] = useState(defaultTime);
-  const [active, setActive] = useState(false);
-  const intervalRef = useRef<number | null>(null);
+  const [target, setTarget] = useState(defaultTime);
+  const [remaining, setRemaining] = useState(defaultTime);
+  const [running, setRunning] = useState(false);
   const audioCtx = useRef<AudioContext | null>(null);
-
-  useEffect(() => { if (trigger) start(defaultTime); }, [trigger, defaultTime]);
 
   const beep = useCallback(() => {
     try {
@@ -74,48 +82,92 @@ const RestTimer: React.FC<{ trigger?: boolean; defaultTime?: number; onTimerEnd?
       osc.connect(gain); gain.connect(audioCtx.current.destination);
       osc.frequency.value = 880; gain.gain.value = 0.3;
       osc.start(); osc.stop(audioCtx.current.currentTime + 0.2);
-    } catch { }
+    } catch { /* AudioContext may be blocked pre-interaction */ }
   }, []);
 
+  // Auto-start when trigger flips true
   useEffect(() => {
-    if (active && seconds > 0) {
-      intervalRef.current = window.setInterval(() => setSeconds(s => s - 1), 1000);
-    } else if (seconds === 0 && active) {
-      setActive(false); beep(); if (onTimerEnd) onTimerEnd();
+    if (trigger) {
+      setTarget(defaultTime);
+      setRemaining(defaultTime);
+      setRunning(true);
     }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [active, seconds, beep, onTimerEnd]);
+  }, [trigger, defaultTime]);
 
-  const start = (s: number) => { setMaxS(s); setSeconds(s); setActive(true); };
-  const stop = () => { setActive(false); setSeconds(0); };
-  const pct = maxS > 0 ? ((maxS - seconds) / maxS) * 100 : 0;
-  const r = 36; const circ = 2 * Math.PI * r;
+  useEffect(() => {
+    if (!running) return;
+    let raf = 0;
+    let prev = performance.now();
+    const tick = (t: number) => {
+      const dt = (t - prev) / 1000;
+      prev = t;
+      setRemaining((r) => {
+        const next = r - dt;
+        if (next <= 0) {
+          setRunning(false);
+          beep();
+          onTimerEnd?.();
+          return 0;
+        }
+        return next;
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [running, beep, onTimerEnd]);
 
-  if (!active && !trigger) return null;
+  const setPreset = (sec: number) => { setTarget(sec); setRemaining(sec); setRunning(true); };
+  const addTen = () => { setTarget((t) => t + 10); setRemaining((r) => r + 10); setRunning(true); };
+  const reset = () => { setRemaining(target); setRunning(false); };
+
+  const SIZE = 110;
+  const R = 47;
+  const C = 2 * Math.PI * R;
+  const pct = target > 0 ? Math.max(0, Math.min(1, remaining / target)) : 0;
+  const dash = C * pct;
+  const displaySec = Math.ceil(remaining);
+
   return (
-    <div className={`jarvis-card p-4 rounded-xl mb-4 transition-all duration-300 ${active ? 'opacity-100 scale-100' : 'opacity-0 scale-95 hidden'}`}>
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-mono text-slate-400 uppercase flex items-center"><Timer size={12} className="mr-1" />Rest Timer</span>
-        <button onClick={stop} className="text-xs text-slate-500 hover:text-white"><X size={12} /></button>
+    <section className="ae-timer">
+      <div className="ae-timer-head">
+        <span className="ae-step-label"><Timer size={11} style={{ display: 'inline', marginRight: 4 }} />REST TIMER</span>
+        <button className="ae-timer-close" onClick={reset} aria-label="Reset" type="button">
+          <X size={12} />
+        </button>
       </div>
-      <div className="flex items-center space-x-4">
-        <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
-          <svg width="80" height="80" className="-rotate-90">
-            <circle cx="40" cy="40" r={r} stroke="#1e293b" strokeWidth="5" fill="none" />
-            <circle cx="40" cy="40" r={r} stroke={seconds > 0 ? '#06b6d4' : '#334155'} strokeWidth="5" fill="none"
-              strokeDasharray={circ} strokeDashoffset={circ - (circ * pct / 100)} strokeLinecap="round" className="transition-all duration-1000" />
+      <div className="ae-timer-body">
+        <div className="ae-timer-ring">
+          <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+            <defs>
+              <linearGradient id="rt-grad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#67E8F9" />
+                <stop offset="100%" stopColor="#3B82F6" />
+              </linearGradient>
+            </defs>
+            <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="rgba(34, 211, 238, 0.1)" strokeWidth="6" />
+            <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="url(#rt-grad)" strokeWidth="6"
+              strokeLinecap="round"
+              strokeDasharray={`${dash} ${C}`}
+              transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
+              style={{ filter: 'drop-shadow(0 0 6px rgba(34, 211, 238, 0.55))', transition: 'stroke-dasharray 200ms linear' }} />
           </svg>
-          <span className="absolute text-lg font-bold text-white font-mono">{seconds}s</span>
+          <div className="ae-timer-center">
+            <div className="ae-timer-sec">{displaySec}</div>
+            <div className="ae-timer-unit">SEC</div>
+          </div>
+          {running && <div className="ae-timer-pulse" />}
         </div>
-        <div className="flex flex-wrap gap-2 flex-1">
-          {[30, 60, 90, 120].map(s => (
-            <button key={s} onClick={() => start(s)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex-1 min-w-[60px] ${active && maxS === s ? 'bg-cyan-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>{s}s</button>
+        <div className="ae-timer-presets">
+          {[30, 60, 90, 120].map((s) => (
+            <button key={s} type="button"
+              className={`ae-timer-preset ${target === s ? 'is-on' : ''}`}
+              onClick={() => setPreset(s)}>{s}s</button>
           ))}
-          <button onClick={() => start(maxS + 10)} className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-slate-800 text-slate-400 hover:bg-slate-700 active:scale-95 flex-1 min-w-[60px]">+10s</button>
+          <button type="button" className="ae-timer-preset ae-timer-add" onClick={addTen}>+10s</button>
         </div>
       </div>
-    </div>
+    </section>
   );
 };
 
@@ -126,78 +178,84 @@ const DifficultyStars: React.FC<{ d: number }> = ({ d }) => (
   ))}</div>
 );
 
-// ═══════════ XP HEADER ═══════════
+// ═══════════ WORKOUT.CSS STARS (wf-stars — gold, 1-5) ═══════════
+const WfStars: React.FC<{ value: number }> = ({ value }) => (
+  <span className="wf-stars">
+    {[1, 2, 3, 4, 5].map((i) => (
+      <svg key={i} width="11" height="11" viewBox="0 0 24 24" className={i <= value ? 'on' : 'off'}>
+        <path d="M12 2 L14.9 8.5 L22 9.3 L16.6 14 L18.1 21 L12 17.5 L5.9 21 L7.4 14 L2 9.3 L9.1 8.5 Z" fill="currentColor" />
+      </svg>
+    ))}
+  </span>
+);
+
+// ═══════════ XP HEADER (gym.css .g-rank-card port) ═══════════
 const XPHeader: React.FC<{ profile: GymProfile }> = ({ profile }) => {
   const progress = getXPProgress(profile.totalXP);
   const rank = getRankForLevel(profile.level);
   return (
-    <div className="jarvis-card rounded-xl p-4 md:p-5 border border-slate-700/50 relative overflow-hidden">
-      <div className="absolute top-0 left-0 h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 transition-all duration-500" style={{ width: `${progress.percent}%` }} />
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
+    <div className="g-rank-card">
+      <div className="g-rank-progress-bar" style={{ width: `${progress.percent}%` }} />
+      <div className="g-rank-body">
+        <div className="g-rank-medal">
           <RankBadge rank={rankFromTierName(rank.name)} size="md" isCurrent />
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className={`text-sm font-bold ${rank.color}`}>{rank.name}</span>
-              <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full font-mono">Lv.{profile?.level || 1}</span>
-            </div>
-            <div className="text-[10px] text-slate-500 font-mono mt-0.5">{(profile?.totalXP || 0).toLocaleString()} XP total</div>
-          </div>
         </div>
-        <div className="text-right">
-          <div className="text-xs text-slate-400 mb-1">{progress.current} / {progress.needed} XP</div>
-          <div className="w-32 h-2 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all duration-500" style={{ width: `${progress.percent}%` }} />
+        <div className="g-rank-info">
+          <div className="g-rank-line">
+            <span className={`g-rank-rank ${rank.color}`}>{rank.name}</span>
+            <span className="g-rank-lv">Lv.{profile?.level || 1}</span>
+          </div>
+          <div className="g-rank-xp-total">{(profile?.totalXP || 0).toLocaleString()} XP total</div>
+        </div>
+        <div className="g-rank-right">
+          <div className="g-rank-xp">{progress.current} / {progress.needed} XP</div>
+          <div className="g-rank-bar">
+            <div className="g-rank-bar-fill" style={{ width: `${progress.percent}%` }} />
           </div>
         </div>
       </div>
-      <div className="flex items-center space-x-4 mt-3 text-[10px] text-slate-500 font-mono">
-        <span>🏋️ {profile?.workoutsCompleted || 0} workouts</span>
-        <span>💪 {profile?.totalSetsCompleted || 0} sets</span>
+      <div className="g-rank-stats">
+        <span className="g-rank-stat"><span style={{ color: 'var(--orange)' }}>⚔</span> {profile?.workoutsCompleted || 0} workouts</span>
+        <span className="g-rank-stat"><span style={{ color: 'var(--orange)' }}>💪</span> {profile?.totalSetsCompleted || 0} sets</span>
       </div>
     </div>
   );
 };
 
-// ═══════════ MUSCLE GROUP PICKER ═══════════
+// ═══════════ MUSCLE GROUP PICKER (workout.css .wf-mcard port) ═══════════
 const MuscleGroupPicker: React.FC<{
   selected: MuscleGroup[]; onToggle: (m: MuscleGroup) => void;
 }> = ({ selected, onToggle }) => {
-  const categories = ['Push', 'Pull', 'Core', 'Legs'];
+  // PUSH / PULL / CORE / LEGS — order matches prototype MUSCLE_CATALOG.
+  const categories: ('Push' | 'Pull' | 'Core' | 'Legs')[] = ['Push', 'Pull', 'Core', 'Legs'];
   const allMuscles = Object.entries(MUSCLE_GROUP_CONFIG) as [MuscleGroup, typeof MUSCLE_GROUP_CONFIG[MuscleGroup]][];
   return (
-    <div className="space-y-6 animate-slide-up">
+    <div className="wf-body">
       {categories.map(cat => {
         const muscles = allMuscles.filter(([, v]) => v.category === cat);
         if (muscles.length === 0) return null;
         return (
-          <div key={cat} className="space-y-3">
-            <div className="flex items-center space-x-2">
-              <div className="h-px bg-slate-800 flex-1" />
-              <h3 className="text-xs font-mono font-bold text-slate-500 tracking-[0.2em] uppercase">{cat}</h3>
-              <div className="h-px bg-slate-800 flex-1" />
+          <div key={cat} className="wf-section">
+            <div className="wf-section-head">
+              <span className="wf-section-line" />
+              <span className="wf-section-cat">{cat.toUpperCase()}</span>
+              <span className="wf-section-line" />
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="wf-mgrid">
               {muscles.map(([key, cfg]) => {
                 const isSelected = selected?.includes(key);
                 return (
-                  <button key={key} onClick={() => onToggle(key)}
-                    className={`relative flex flex-col items-center justify-center p-4 rounded-2xl border transition-all duration-300 group overflow-hidden ${isSelected
-                      ? 'bg-gradient-to-br from-cyan-900/40 to-blue-900/20 border-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.15)] ring-1 ring-cyan-500/30'
-                      : 'bg-slate-900/60 border-slate-800/80 hover:bg-slate-800 hover:border-slate-600'}`}>
-                    {isSelected && <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen" />}
-                    {isSelected && <div className="absolute top-0 w-1/2 h-px bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />}
-                    <div className="relative w-16 h-16 mb-3 transition-transform duration-300 group-hover:scale-110">
-                      <img src={`/assets/muscles/${key}.webp`} alt={cfg.label}
-                        className={`w-full h-full object-contain filter transition-all duration-500 ${isSelected ? 'drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] brightness-125 saturate-150' : 'opacity-70 grayscale-[30%]'}`}
+                  <button key={key} type="button" onClick={() => onToggle(key)}
+                    className={`wf-mcard ${isSelected ? 'is-selected' : ''}`}>
+                    <div className="wf-mcard-fig">
+                      <img src={`/assets/muscles/${key}.webp`} alt={cfg.label} className="wf-mcard-img"
                         onError={e => { e.currentTarget.style.display = 'none'; }} />
                     </div>
-                    <div className="text-center z-10">
-                      <h4 className={`text-sm font-bold tracking-wide transition-colors ${isSelected ? 'text-cyan-300' : 'text-slate-300'}`}>{cfg.label}</h4>
-                      <p className={`text-[10px] font-mono mt-1 ${isSelected ? 'text-cyan-500/70' : 'text-slate-500'}`}>
-                        {isSelected ? '✓ Selected' : 'Firestore'}
-                      </p>
-                    </div>
+                    <div className="wf-mcard-label">{cfg.label}</div>
+                    {isSelected
+                      ? <div className="wf-mcard-check">✓ Dipilih</div>
+                      : <div className="wf-mcard-store">Firestore</div>}
+                    {isSelected && <div className="wf-mcard-corner" />}
                   </button>
                 );
               })}
@@ -396,168 +454,142 @@ const ExerciseBrowser: React.FC<{
   }
 
   return (
-    <div className="space-y-4">
-      {/* ── Live search bar (Project Chimera Phase 3) ─────────────────── */}
-      <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+    <div className="wf-body">
+      {/* Live search bar — preserves 300ms debounce from prior implementation */}
+      <div className="wf-search">
+        <Search size={14} />
         <input
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Cari latihan… (contoh: bench press, squat, barbell)"
-          className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-9 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/60 focus:ring-1 focus:ring-cyan-500/30 transition-all"
+          placeholder="Cari latihan… (cth: bench press, squat)"
         />
         {search && (
-          <button
-            onClick={() => setSearch('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
-            aria-label="Clear search"
-          >
+          <button onClick={() => setSearch('')} aria-label="Clear search" type="button"
+            style={{ background: 'transparent', border: 0, color: 'var(--t-3)', cursor: 'pointer' }}>
             <X size={14} />
           </button>
         )}
       </div>
 
       {(!userEquipment || userEquipment.length === 0) && (
-        <div className="text-[10px] font-mono text-amber-400/80 bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2">
-          ⚠ Set your equipment in <span className="underline">Settings → Profile</span> to filter exercises you can actually perform.
+        <div className="wf-equip-hint">
+          <span className="wf-equip-hint-ico">⚠</span>
+          <span>
+            Set <strong>peralatan kamu</strong> di Settings → Profile untuk memfilter latihan yang bisa kamu lakukan.
+          </span>
         </div>
       )}
 
-      <div className="space-y-5 max-h-[60vh] overflow-y-auto custom-scrollbar pr-1">
-        {muscles.map(muscle => {
-          const cfg = MUSCLE_GROUP_CONFIG[muscle];
-          const exercises = filteredByMuscle[muscle] || [];
-          const isLoading = loadingState[muscle] ?? true;
-          const page = pageByMuscle[muscle] || 0;
-          const pageCount = Math.max(1, Math.ceil(exercises.length / EXERCISE_PAGE_SIZE));
-          const safePage = Math.min(page, pageCount - 1);
-          const start = safePage * EXERCISE_PAGE_SIZE;
-          const visible = exercises.slice(start, start + EXERCISE_PAGE_SIZE);
+      {muscles.map(muscle => {
+        const cfg = MUSCLE_GROUP_CONFIG[muscle];
+        const exercises = filteredByMuscle[muscle] || [];
+        const isLoading = loadingState[muscle] ?? true;
+        const page = pageByMuscle[muscle] || 0;
+        const pageCount = Math.max(1, Math.ceil(exercises.length / EXERCISE_PAGE_SIZE));
+        const safePage = Math.min(page, pageCount - 1);
+        const start = safePage * EXERCISE_PAGE_SIZE;
+        const visible = exercises.slice(start, start + EXERCISE_PAGE_SIZE);
 
-          const setPage = (next: number) =>
-            setPageByMuscle(prev => ({ ...prev, [muscle]: Math.max(0, Math.min(pageCount - 1, next)) }));
+        const setPage = (next: number) =>
+          setPageByMuscle(prev => ({ ...prev, [muscle]: Math.max(0, Math.min(pageCount - 1, next)) }));
 
-          return (
-            <div key={muscle}>
-              {/* Muscle Group Header */}
-              <div className="flex items-center space-x-2 py-1.5 sticky top-0 bg-slate-950 z-10 border-b border-slate-800 mb-2">
-                <div className="w-5 h-5 flex-shrink-0">
-                  <img src={`/assets/muscles/${muscle}.webp`} alt={cfg.label}
-                    className="w-full h-full object-contain opacity-80 mix-blend-screen"
-                    onError={e => { e.currentTarget.style.display = 'none'; }} />
-                </div>
-                <span className="text-xs font-bold text-slate-300 flex-1">{cfg.label}</span>
+        return (
+          <div key={muscle} className="wf-ex-section">
+            <div className="wf-ex-section-head">
+              <span className="wf-ex-section-icon">
+                <img src={`/assets/muscles/${muscle}.webp`} alt={cfg.label}
+                  onError={e => { e.currentTarget.style.display = 'none'; }} />
+              </span>
+              <span className="wf-ex-section-label">{cfg.label.toUpperCase()}</span>
+              <span className="wf-ex-section-count">
                 {isLoading
-                  ? <span className="text-[9px] text-cyan-500 font-mono flex items-center gap-1"><Loader2 size={10} className="animate-spin" />Loading...</span>
-                  : <span className="text-[9px] text-slate-600 font-mono">
-                      {exercises.length === 0
-                        ? 'no matches'
-                        : `${start + 1}–${Math.min(start + EXERCISE_PAGE_SIZE, exercises.length)} of ${exercises.length}`}
-                    </span>
-                }
+                  ? <><Loader2 size={9} className="animate-spin" style={{ marginRight: 4 }} />LOADING…</>
+                  : exercises.length === 0
+                    ? 'NO MATCHES'
+                    : `${start + 1}–${Math.min(start + EXERCISE_PAGE_SIZE, exercises.length)} dari ${exercises.length}`}
+              </span>
+            </div>
+
+            {isLoading && (
+              <div className="wf-ex-list">
+                {[1, 2, 3].map(i => <div key={i} className="wf-skeleton" />)}
               </div>
+            )}
 
-              {/* Skeleton */}
-              {isLoading && (
-                <div className="space-y-2">
-                  {[1, 2, 3].map(i => (
-                    <div key={i} className="h-14 bg-slate-800/50 rounded-xl animate-pulse" />
-                  ))}
-                </div>
-              )}
+            {!isLoading && exercises.length === 0 && (
+              <div className="wf-ex-empty">
+                {debouncedSearch.trim()
+                  ? `Tidak ada hasil "${debouncedSearch.trim()}" di ${cfg.label}.`
+                  : userEquipment && userEquipment.length > 0
+                    ? `Tidak ada latihan ${cfg.label} yang cocok dengan peralatanmu.`
+                    : `Belum ada latihan ${cfg.label} di database.`}
+              </div>
+            )}
 
-              {/* Empty */}
-              {!isLoading && exercises.length === 0 && (
-                <div className="py-4 text-center text-slate-600 text-xs font-mono">
-                  {debouncedSearch.trim()
-                    ? `No "${debouncedSearch.trim()}" matches in ${cfg.label}.`
-                    : userEquipment && userEquipment.length > 0
-                      ? `No ${cfg.label} exercises match your equipment.`
-                      : `No exercises found in database for ${cfg.label}.`}
-                </div>
-              )}
-
-              {/* Exercise List (capped at EXERCISE_PAGE_SIZE) */}
-              {!isLoading && visible.length > 0 && (
-                <div className="space-y-1.5">
-                  {visible.map(ex => {
-                    const isSel = selectedIds.has(ex.id);
-                    const exDiff = calculateDifficulty(ex);
-                    const exXP = exDiff * 10;
-                    const allMuscles = [ex.targetMuscle, ...(ex.secondaryMuscles || [])].filter(Boolean);
-                    const bestView = getViewForMuscle(ex.targetMuscle || muscle);
-                    const usedCount = historyCount.get((ex.name || '').toLowerCase().trim()) || 0;
-                    return (
-                      <div key={ex.id}
-                        className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all duration-200 ${isSel
-                          ? 'bg-cyan-500/10 border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.1)]'
-                          : 'bg-slate-900 border-slate-800 hover:border-slate-600 hover:bg-slate-800/80'}`}
-                        onClick={() => handleSelect(ex, muscle)}>
-                        {/* Premium SVG Anatomy Thumbnail */}
-                        <div className="shrink-0 mr-2 w-12 h-[4.5rem] rounded-lg overflow-hidden bg-slate-950/50 border border-slate-800/50">
+            {!isLoading && visible.length > 0 && (
+              <div className="wf-ex-list">
+                {visible.map(ex => {
+                  const isSel = selectedIds.has(ex.id);
+                  const exDiff = calculateDifficulty(ex);
+                  const exXP = exDiff * 10;
+                  const allMuscles = [ex.targetMuscle, ...(ex.secondaryMuscles || [])].filter(Boolean);
+                  const bestView = getViewForMuscle(ex.targetMuscle || muscle);
+                  const usedCount = historyCount.get((ex.name || '').toLowerCase().trim()) || 0;
+                  return (
+                    <article key={ex.id} className={`wf-ex ${isSel ? 'is-selected' : ''}`}
+                      onClick={() => handleSelect(ex, muscle)}>
+                      <div className="wf-ex-thumb">
+                        <div className="wf-ex-thumb-body">
                           <AnatomyViewer
                             trainedMuscles={getTrainedMuscleIds(allMuscles)}
                             defaultView={bestView}
                             minimal
                           />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <div className={`text-sm font-medium truncate ${isSel ? 'text-cyan-300' : 'text-slate-200'}`}>{ex.name}</div>
-                            {usedCount > 0 && (
-                              <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1 rounded shrink-0">
-                                ×{usedCount}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center space-x-2 mt-0.5">
-                            <DifficultyStars d={exDiff} />
-                            <span className="text-[10px] text-slate-500 truncate">{ex.equipment}</span>
-                          </div>
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded mt-1 inline-block capitalize ${isSel ? 'bg-cyan-500/20 text-cyan-400' : 'bg-slate-800 text-slate-500'}`}>
-                            {ex.targetMuscle}
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-2 shrink-0 ml-2">
-                          <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-mono font-bold">+{exXP}xp</span>
-                          {isSel
-                            ? <div className="w-6 h-6 rounded-full bg-cyan-500 flex items-center justify-center"><X size={12} className="text-black" /></div>
-                            : <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center"><Plus size={12} className="text-slate-300" /></div>
-                          }
-                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                      <div className="wf-ex-info">
+                        <div className="wf-ex-title">
+                          <span className="wf-ex-title-text">{ex.name}</span>
+                          {usedCount > 0 && <span className="wf-ex-used">×{usedCount}</span>}
+                        </div>
+                        <div className="wf-ex-meta">
+                          <WfStars value={exDiff} />
+                          <span className="wf-ex-equip">{ex.equipment}</span>
+                        </div>
+                        <span className="wf-ex-tag">{ex.targetMuscle}</span>
+                      </div>
+                      <div className="wf-ex-right">
+                        <span className="wf-ex-xp">+{exXP}xp</span>
+                        <button type="button"
+                          className={`wf-ex-btn ${isSel ? 'is-on' : ''}`}
+                          onClick={(e) => { e.stopPropagation(); handleSelect(ex, muscle); }}
+                          aria-label={isSel ? 'Hapus' : 'Tambah'}>
+                          {isSel ? <X size={14} /> : <Plus size={14} />}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
 
-              {/* Pager — appears only when there's more than one page */}
-              {!isLoading && pageCount > 1 && (
-                <div className="flex items-center justify-between mt-2 px-1">
-                  <button
-                    onClick={() => setPage(safePage - 1)}
-                    disabled={safePage === 0}
-                    className="flex items-center gap-1 text-[10px] font-mono text-slate-400 disabled:text-slate-700 disabled:cursor-not-allowed hover:text-cyan-400 transition-colors"
-                  >
-                    <ChevronLeft size={12} /> Prev
-                  </button>
-                  <span className="text-[10px] font-mono text-slate-500">
-                    Page {safePage + 1} / {pageCount}
-                  </span>
-                  <button
-                    onClick={() => setPage(safePage + 1)}
-                    disabled={safePage >= pageCount - 1}
-                    className="flex items-center gap-1 text-[10px] font-mono text-slate-400 disabled:text-slate-700 disabled:cursor-not-allowed hover:text-cyan-400 transition-colors"
-                  >
-                    Next <ChevronRight size={12} />
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+            {!isLoading && pageCount > 1 && (
+              <div className="wf-pager">
+                <button type="button" className="wf-pager-btn"
+                  onClick={() => setPage(safePage - 1)} disabled={safePage === 0}>
+                  <ChevronLeft size={12} /> PREV
+                </button>
+                <span className="wf-pager-info">PAGE {safePage + 1} / {pageCount}</span>
+                <button type="button" className="wf-pager-btn"
+                  onClick={() => setPage(safePage + 1)} disabled={safePage >= pageCount - 1}>
+                  NEXT <ChevronRight size={12} />
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -576,6 +608,208 @@ const sortRoutinesByFocus = (routines: WorkoutRoutine[], focus?: FocusArea): Wor
   const target = new Set(FOCUS_TO_MUSCLES[focus] || []);
   const score = (r: WorkoutRoutine) => r.muscleGroups.filter(m => target.has(m)).length;
   return [...routines].sort((a, b) => score(b) - score(a));
+};
+
+// ═══════════ ANALYTICS — HEART-FIRE STREAK (prototype Analytics.jsx port) ═══════════
+// 5-tier evolution: ember → flame → blaze → phoenix → eternal. Animations are
+// driven entirely by CSS classes (`.hf-tier-N`) — JS just toggles the tier.
+type StreakTier = { tier: 1 | 2 | 3 | 4 | 5; name: string; min: number; color: string; sub: string };
+const STREAK_TIERS: StreakTier[] = [
+  { tier: 1, name: 'EMBER',   min: 1,   color: '#FB923C', sub: 'Bara' },
+  { tier: 2, name: 'FLAME',   min: 7,   color: '#F97316', sub: 'Nyala' },
+  { tier: 3, name: 'BLAZE',   min: 30,  color: '#EF4444', sub: 'Membara' },
+  { tier: 4, name: 'PHOENIX', min: 180, color: '#A855F7', sub: 'Phoenix' },
+  { tier: 5, name: 'ETERNAL', min: 365, color: '#F5C518', sub: 'Abadi' },
+];
+const tierFromDays = (d: number): StreakTier => {
+  let t = STREAK_TIERS[0];
+  STREAK_TIERS.forEach((x) => { if (d >= x.min) t = x; });
+  return t;
+};
+const nextTier = (current: StreakTier): StreakTier | null =>
+  STREAK_TIERS.find((t) => t.tier === ((current.tier + 1) as StreakTier['tier'])) || null;
+
+/** Anatomical heart fused with flame; lub-dub beat. Layers scale by tier. */
+const HeartFire: React.FC<{ tier?: 1 | 2 | 3 | 4 | 5; size?: number }> = ({ tier = 1, size = 150 }) => {
+  const auraTongues = useMemo(() => {
+    const out: { x: number; y: number; rot: number; delay: number }[] = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (i * 60 - 90) * Math.PI / 180;
+      out.push({
+        x: 70 + Math.cos(a) * 64,
+        y: 96 + Math.sin(a) * 64,
+        rot: i * 60,
+        delay: i * 0.18,
+      });
+    }
+    return out;
+  }, []);
+  return (
+    <div className={`an-hf-wrap hf-tier-${tier}`} style={{ width: size, height: size * 1.05 }}>
+      <div className="an-hf-haze" />
+      <div className="an-hf-halo" />
+      <div className="an-hf-pulsehalo" />
+
+      {tier >= 4 && (
+        <>
+          <div className="an-hf-orbit an-hf-orbit-1">
+            <svg viewBox="-100 -100 200 200" width="100%" height="100%">
+              <ellipse cx="0" cy="0" rx="90" ry="38" fill="none" stroke="#A855F7" strokeWidth="1.4" strokeDasharray="4 6" opacity="0.65" />
+              <circle cx="90" cy="0" r="3" fill="#C4B5FD" />
+              <circle cx="-90" cy="0" r="2" fill="#A855F7" opacity="0.7" />
+            </svg>
+          </div>
+          <div className="an-hf-orbit an-hf-orbit-2">
+            <svg viewBox="-100 -100 200 200" width="100%" height="100%">
+              <ellipse cx="0" cy="0" rx="92" ry="38" fill="none" stroke="#F5C518" strokeWidth="1.2" strokeDasharray="2 5" opacity="0.55" />
+              <circle cx="0" cy="38" r="2.5" fill="#FBBF24" />
+            </svg>
+          </div>
+        </>
+      )}
+
+      {tier >= 5 && (
+        <div className="an-hf-rays">
+          <svg viewBox="-100 -100 200 200" width="100%" height="100%">
+            {Array.from({ length: 12 }).map((_, i) => {
+              const a = (i * 30 - 90) * Math.PI / 180;
+              const r1 = 70, r2 = i % 2 === 0 ? 96 : 84;
+              return (
+                <line key={i}
+                  x1={Math.cos(a) * r1} y1={Math.sin(a) * r1}
+                  x2={Math.cos(a) * r2} y2={Math.sin(a) * r2}
+                  stroke="#F5C518"
+                  strokeWidth={i % 2 === 0 ? 2.4 : 1.4}
+                  strokeLinecap="round"
+                  opacity={i % 2 === 0 ? 0.9 : 0.55} />
+              );
+            })}
+          </svg>
+        </div>
+      )}
+
+      {tier >= 3 && (
+        <div className="an-hf-flame-aura">
+          <svg viewBox="0 0 140 160" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <linearGradient id="hf-aura-flame" x1="0" y1="1" x2="0" y2="0">
+                <stop offset="0%" stopColor="#EF4444" />
+                <stop offset="50%" stopColor="#FB923C" />
+                <stop offset="100%" stopColor="#FEF3C7" stopOpacity="0.85" />
+              </linearGradient>
+            </defs>
+            {auraTongues.map((t, i) => (
+              <g key={i} className="hf-aura-tongue"
+                 style={{ transformOrigin: `${t.x}px ${t.y}px`, animationDelay: `${t.delay}s` }}
+                 transform={`rotate(${t.rot}, ${t.x}, ${t.y})`}>
+                <path
+                  d={`M ${t.x - 6} ${t.y + 10} Q ${t.x} ${t.y - 18} ${t.x + 6} ${t.y + 10} Q ${t.x} ${t.y + 4} ${t.x - 6} ${t.y + 10} Z`}
+                  fill="url(#hf-aura-flame)" opacity="0.75" />
+              </g>
+            ))}
+          </svg>
+        </div>
+      )}
+
+      <svg className="an-hf-svg" viewBox="0 0 140 160" width={size} height={size * 1.05} aria-hidden="true">
+        <defs>
+          <radialGradient id="hf-heart" cx="50%" cy="80%" r="65%">
+            <stop offset="0%"   stopColor="#FBBF24" />
+            <stop offset="30%"  stopColor="#FB923C" />
+            <stop offset="70%"  stopColor="#DC2626" />
+            <stop offset="100%" stopColor="#7F1D1D" />
+          </radialGradient>
+          <linearGradient id="hf-flame" x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0%"   stopColor="#FB923C" stopOpacity="0.95" />
+            <stop offset="50%"  stopColor="#FBBF24" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="#FEF3C7" stopOpacity="0.8" />
+          </linearGradient>
+          <radialGradient id="hf-core" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stopColor="#FFF7ED" stopOpacity="0.95" />
+            <stop offset="55%"  stopColor="#FBBF24" stopOpacity="0.5" />
+            <stop offset="100%" stopColor="#F97316" stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id="hf-rim" cx="50%" cy="40%" r="60%">
+            <stop offset="0%"   stopColor="#7F1D1D" stopOpacity="0" />
+            <stop offset="80%"  stopColor="#7F1D1D" stopOpacity="0" />
+            <stop offset="100%" stopColor="#450A0A" stopOpacity="0.6" />
+          </radialGradient>
+          <filter id="hf-glow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="2.2" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <filter id="hf-soft" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="3" />
+          </filter>
+        </defs>
+
+        <ellipse cx="70" cy="100" rx="58" ry="62" fill="url(#hf-core)" filter="url(#hf-soft)" opacity="0.7" />
+
+        <g className="hf-flame-group" filter="url(#hf-glow)">
+          <path d="M 40 56 C 28 44, 22 26, 32 12 C 36 22, 42 18, 44 28 C 50 34, 52 46, 50 56 Z" fill="url(#hf-flame)" opacity="0.88" />
+          <path d="M 60 50 C 56 32, 60 14, 72 -4 C 80 12, 82 30, 80 48 C 78 54, 74 56, 70 56 C 66 56, 62 54, 60 50 Z" fill="url(#hf-flame)" opacity="0.95" />
+          <path d="M 100 56 C 112 44, 118 26, 108 12 C 104 22, 98 18, 96 28 C 90 34, 88 46, 90 56 Z" fill="url(#hf-flame)" opacity="0.88" />
+        </g>
+
+        <g className="hf-heart-group">
+          <path d="M 70 142 C 30 118, 8 92, 18 64 C 24 48, 38 42, 50 50 C 58 54, 64 60, 70 66 C 76 60, 82 54, 90 50 C 102 42, 116 48, 122 64 C 132 92, 110 118, 70 142 Z"
+            fill="url(#hf-heart)" stroke="#7F1D1D" strokeWidth="1.2" filter="url(#hf-glow)" />
+          <path d="M 70 142 C 30 118, 8 92, 18 64 C 24 48, 38 42, 50 50 C 58 54, 64 60, 70 66 C 76 60, 82 54, 90 50 C 102 42, 116 48, 122 64 C 132 92, 110 118, 70 142 Z"
+            fill="url(#hf-rim)" />
+          <path d="M 72 60 Q 78 52, 82 48 Q 88 42, 92 50" stroke="#450A0A" strokeWidth="2" fill="none" opacity="0.55" strokeLinecap="round" />
+          <path d="M 50 80 Q 56 90, 58 100 M 50 80 Q 44 88, 42 100" stroke="#7F1D1D" strokeWidth="1.2" fill="none" opacity="0.7" strokeLinecap="round" />
+          <path d="M 90 82 Q 96 92, 96 102 M 90 82 Q 86 94, 84 105" stroke="#7F1D1D" strokeWidth="1.2" fill="none" opacity="0.6" strokeLinecap="round" />
+          <ellipse cx="60" cy="85" rx="14" ry="22" fill="url(#hf-core)" opacity="0.85" />
+          <ellipse cx="50" cy="74" rx="7" ry="11" fill="white" opacity="0.32" />
+          <ellipse cx="48" cy="70" rx="3" ry="5" fill="white" opacity="0.55" />
+        </g>
+
+        <g className="hf-embers">
+          <circle className="hf-ember hf-ember-1" cx="50" cy="40" r="1.5" fill="#FBBF24" />
+          <circle className="hf-ember hf-ember-2" cx="90" cy="38" r="1.2" fill="#FB923C" />
+          <circle className="hf-ember hf-ember-3" cx="70" cy="30" r="1.8" fill="#FFF7ED" />
+          {tier >= 3 && <circle className="hf-ember hf-ember-4" cx="40" cy="60" r="1.3" fill="#FBBF24" />}
+          {tier >= 3 && <circle className="hf-ember hf-ember-5" cx="100" cy="62" r="1.6" fill="#FB923C" />}
+          {tier >= 4 && <circle className="hf-ember hf-ember-6" cx="35" cy="100" r="1.4" fill="#C4B5FD" />}
+          {tier >= 4 && <circle className="hf-ember hf-ember-7" cx="105" cy="105" r="1.5" fill="#A855F7" />}
+        </g>
+      </svg>
+    </div>
+  );
+};
+
+/** Continuously scrolling ECG waveform behind the heart-fire. */
+const ECGLine: React.FC = () => {
+  const wave = (offset: number) => `
+    M ${offset + 0} 30   L ${offset + 60} 30
+    L ${offset + 75} 28  L ${offset + 85} 24
+    L ${offset + 95} 28  L ${offset + 110} 30
+    L ${offset + 125} 30 L ${offset + 132} 36
+    L ${offset + 138} 6  L ${offset + 144} 50
+    L ${offset + 150} 30 L ${offset + 170} 30
+    L ${offset + 182} 26 L ${offset + 192} 30
+    L ${offset + 280} 30
+  `;
+  const d = wave(0) + ' ' + wave(280);
+  return (
+    <div className="an-ecg">
+      <div className="an-ecg-grid" />
+      <svg className="an-ecg-svg" viewBox="0 0 280 60" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="ecg-fade" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%"   stopColor="#22D3EE" stopOpacity="0" />
+            <stop offset="20%"  stopColor="#22D3EE" stopOpacity="0.4" />
+            <stop offset="80%"  stopColor="#22D3EE" stopOpacity="1" />
+            <stop offset="100%" stopColor="#67E8F9" stopOpacity="1" />
+          </linearGradient>
+        </defs>
+        <g className="an-ecg-track">
+          <path d={d} fill="none" stroke="url(#ecg-fade)" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+        </g>
+      </svg>
+      <div className="an-ecg-dot" />
+    </div>
+  );
 };
 
 // ═══════════ MAIN GYMTRACKER ═══════════
@@ -597,6 +831,16 @@ export const GymTracker: React.FC = () => {
   const [triggerTimer, setTriggerTimer] = useState(false);
   const [userEquipment, setUserEquipment] = useState<string[]>([]);
   const [userEnvironment, setUserEnvironment] = useState<'Home' | 'Gym' | null>(null);
+  // Body-anatomy front/back toggle for the active exercise stage. Lives on the
+  // root so it survives between exercises in a session.
+  const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
+  // Heart-Fire tier preview (Analytics streak). Defaults to the user's current tier,
+  // user can tap any tier in the roadmap to simulate visuals at that level.
+  const [previewTier, setPreviewTier] = useState<1 | 2 | 3 | 4 | 5>(1);
+  // Sync previewTier whenever the actual streak crosses a tier boundary.
+  useEffect(() => {
+    setPreviewTier(tierFromDays(profile.currentStreak ?? 0).tier);
+  }, [profile.currentStreak]);
 
   useEffect(() => {
     try {
@@ -911,98 +1155,130 @@ export const GymTracker: React.FC = () => {
     <div className="space-y-6 pb-24 animate-slide-up">
       <XPHeader profile={profile} />
 
-      {/* Tab Navigation */}
-      <div className="flex space-x-1 bg-slate-900 p-1 rounded-xl">
-        {[{ key: 'workout', label: 'Workout', icon: Dumbbell }, { key: 'analytics', label: 'Analytics', icon: BarChart3 }].map(t => (
-          <button key={t.key} onClick={() => setViewMode(t.key as any)}
-            className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 transition-all ${viewMode === t.key ? 'bg-jarvis-card text-white shadow-md' : 'text-slate-500 hover:text-slate-300'}`}>
-            <t.icon size={14} /><span>{t.label}</span>
-          </button>
-        ))}
+      {/* Tab Navigation (prototype gym.css .g-tabs port) */}
+      <div className="g-tabs">
+        <button type="button" className={`g-tab ${viewMode === 'workout' ? 'is-on' : ''}`}
+          onClick={() => setViewMode('workout')}>
+          <Dumbbell size={14} /><span>Workout</span>
+        </button>
+        <button type="button" className={`g-tab ${viewMode === 'analytics' ? 'is-on' : ''}`}
+          onClick={() => setViewMode('analytics')}>
+          <BarChart3 size={14} /><span>Analytics</span>
+        </button>
+        <div className="g-tab-indicator"
+          style={{ transform: `translateX(${viewMode === 'analytics' ? '100%' : '0%'})` }} />
       </div>
 
-      {/* ═══ IDLE VIEW ═══ */}
+      {/* ═══ IDLE VIEW (prototype gym.css port) ═══ */}
       {viewMode === 'workout' && flowStep === 'idle' && (
-        <div className="space-y-6">
-          <button onClick={() => setFlowStep('selectMuscles')}
-            className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-white font-bold text-lg shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30 transition-all active:scale-[0.98] flex items-center justify-center space-x-2">
-            <Dumbbell size={20} /><span>Start Custom Workout</span><Zap size={16} className="text-amber-300" />
+        <div className="space-y-4">
+          <button onClick={() => setFlowStep('selectMuscles')} className="g-start-cta">
+            <span className="g-start-cta-bg" />
+            <Dumbbell size={16} />
+            <span>Start Custom Workout</span>
+            <Zap size={14} />
           </button>
 
-          {/* Packages */}
-          <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-            <div className="flex items-center space-x-2 mb-3">
-              <Package className="text-purple-400" size={20} />
-              <h3 className="text-md font-bold text-white">Workout Routines</h3>
+          {/* Workout Routines */}
+          <section className="card">
+            <div className="card-head">
+              <span className="card-head-icon"><Package size={14} /></span>
+              <span className="hud-label">WORKOUT ROUTINES</span>
               {storageService.getUserState().focusArea && (
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/30">
+                <span className="ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/30">
                   Focus: {storageService.getUserState().focusArea}
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              {sortRoutinesByFocus(WORKOUT_PACKAGES, storageService.getUserState().focusArea).map(pkg => (
-                <button key={pkg.id} onClick={() => startPackage(pkg)}
-                  className="p-3 bg-slate-800 rounded-lg text-left hover:bg-slate-700 transition-colors border border-slate-700 hover:border-purple-500/50 group">
-                  <div className="text-xs font-bold text-white group-hover:text-purple-300 mb-1">{pkg.name}</div>
-                  <div className="text-[10px] text-slate-500 line-clamp-2">{pkg.description}</div>
-                  <div className={`mt-2 text-[9px] px-1.5 py-0.5 rounded inline-block ${pkg.difficulty === 'Beginner' ? 'bg-emerald-500/10 text-emerald-400' : pkg.difficulty === 'Intermediate' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                    {pkg.difficulty}
-                  </div>
-                </button>
-              ))}
+            <div className="g-rt-grid">
+              {sortRoutinesByFocus(WORKOUT_PACKAGES, storageService.getUserState().focusArea).map(pkg => {
+                const diffID = pkg.difficulty === 'Beginner' ? 'Pemula' : pkg.difficulty === 'Intermediate' ? 'Menengah' : 'Lanjut';
+                const diffStyle = diffID === 'Pemula'
+                  ? { color: '#22C55E', background: 'rgba(34,197,94,0.10)', borderColor: 'rgba(34,197,94,0.4)' }
+                  : diffID === 'Menengah'
+                    ? { color: '#FBBF24', background: 'rgba(251,191,36,0.10)', borderColor: 'rgba(251,191,36,0.4)' }
+                    : { color: '#EF4444', background: 'rgba(239,68,68,0.10)', borderColor: 'rgba(239,68,68,0.4)' };
+                return (
+                  <button key={pkg.id} onClick={() => startPackage(pkg)} className="g-rt-card">
+                    <div className="g-rt-title">{pkg.name}</div>
+                    <div className="g-rt-desc">{pkg.description}</div>
+                    <span className="g-rt-diff" style={diffStyle}>{diffID}</span>
+                  </button>
+                );
+              })}
             </div>
-          </div>
+          </section>
 
-          <div className="pt-4 border-t border-slate-800"><Leaderboard profile={profile} /></div>
+          {/* Hunter Ranking Board */}
+          <section className="card">
+            <Leaderboard profile={profile} />
+          </section>
 
           {/* Recent Workouts */}
-          <div>
-            <h3 className="text-sm font-bold text-slate-300 mb-3 flex items-center"><Activity size={14} className="mr-1.5" />Recent Workouts</h3>
-            <div className="space-y-2">
-              {(logs || []).slice(0, 5).map(l => (
-                <div key={l.id} className="jarvis-card p-3 rounded-xl flex items-center justify-between group">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm font-bold text-white">{l.type}</span>
-                      {(l.xpEarned || 0) > 0 && <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded font-mono">+{l.xpEarned}xp</span>}
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-mono mt-0.5">{l.date} • {l.exercises?.length || 0} exercises</div>
-                  </div>
-                  <button onClick={() => deleteLog(l.id)} className="text-slate-700 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all p-1"><Trash2 size={14} /></button>
-                </div>
-              ))}
-              {(!logs || logs.length === 0) && <p className="text-sm text-slate-600 text-center py-6">No workouts yet. Start your first session!</p>}
+          <section className="card">
+            <div className="card-head">
+              <span className="card-head-icon" style={{ color: 'var(--cyan)' }}><Activity size={14} /></span>
+              <span className="hud-label">RECENT WORKOUTS</span>
             </div>
-          </div>
+            <ul className="g-recent-list">
+              {(logs || []).slice(0, 5).map(l => (
+                <li key={l.id} className="g-recent-row group" onClick={() => undefined}>
+                  <div className="g-recent-info">
+                    <div className="g-recent-title">
+                      {l.type}
+                      {(l.xpEarned || 0) > 0 && <span className="g-recent-xp">+{l.xpEarned}xp</span>}
+                    </div>
+                    <div className="g-recent-meta">{l.date} · {l.exercises?.length || 0} latihan</div>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteLog(l.id); }}
+                    className="text-slate-700 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all p-1"
+                    aria-label="Delete workout log"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </li>
+              ))}
+              {(!logs || logs.length === 0) && (
+                <li className="text-sm text-slate-600 text-center py-6">No workouts yet. Start your first session!</li>
+              )}
+            </ul>
+          </section>
         </div>
       )}
 
-      {/* ═══ STEP 1: SELECT MUSCLES ═══ */}
+      {/* ═══ STEP 1: SELECT MUSCLES (prototype workout.css port) ═══ */}
       {viewMode === 'workout' && flowStep === 'selectMuscles' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white">Select Muscle Groups</h3>
-            <button onClick={() => { setFlowStep('idle'); setSelectedMuscles([]); }} className="text-slate-500 hover:text-white"><X size={18} /></button>
+        <div className="wf-screen">
+          <div className="wf-sub">
+            <button className="wf-back" type="button" aria-label="Tutup"
+              onClick={() => { setFlowStep('idle'); setSelectedMuscles([]); }}>
+              <X size={14} />
+            </button>
+            <h2 className="wf-sub-title">Pilih Kelompok Otot</h2>
           </div>
           <MuscleGroupPicker selected={selectedMuscles} onToggle={toggleMuscle} />
-          {selectedMuscles.length > 0 && (
-            <button onClick={() => setFlowStep('selectExercises')}
-              className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-white font-bold shadow-lg shadow-cyan-500/20 flex items-center justify-center space-x-2">
-              <span>Choose Exercises ({selectedMuscles.length} muscles)</span><ChevronRight size={16} />
-            </button>
-          )}
+          <button type="button"
+            className={`wf-cta wf-cta-cyan ${selectedMuscles.length === 0 ? 'is-disabled' : ''}`}
+            disabled={selectedMuscles.length === 0}
+            onClick={() => setFlowStep('selectExercises')}>
+            <span>Pilih Latihan{selectedMuscles.length ? ` (${selectedMuscles.length} otot)` : ''}</span>
+            <span className="wf-cta-arrow">›</span>
+          </button>
         </div>
       )}
 
-      {/* ═══ STEP 2: SELECT EXERCISES (Firestore Auto-Load) ═══ */}
+      {/* ═══ STEP 2: SELECT EXERCISES (Firestore Auto-Load, .wf-ex port) ═══ */}
       {viewMode === 'workout' && flowStep === 'selectExercises' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white">Choose Exercises</h3>
-            <button onClick={() => setFlowStep('selectMuscles')} className="text-slate-500 hover:text-white text-xs">← Back</button>
+        <div className="wf-screen">
+          <div className="wf-sub">
+            <button className="wf-back" type="button" aria-label="Kembali"
+              onClick={() => setFlowStep('selectMuscles')}>
+              <ChevronLeft size={14} />
+            </button>
+            <h2 className="wf-sub-title">Pilih Latihan</h2>
+            <span className="wf-sub-meta">{selectedExercises.length} TERPILIH</span>
           </div>
-          <p className="text-xs text-slate-500">Tap an exercise to add or remove it. Exercises load automatically from Firestore.</p>
 
           <ExerciseBrowser
             muscles={selectedMuscles}
@@ -1012,160 +1288,174 @@ export const GymTracker: React.FC = () => {
             logs={logs}
           />
 
-          {selectedExercises.length > 0 && (
-            <button onClick={startWorkout}
-              className="w-full py-3 bg-gradient-to-r from-emerald-500 to-green-600 rounded-xl text-white font-bold shadow-lg shadow-emerald-500/20 flex items-center justify-center space-x-2 sticky bottom-4">
-              <Zap size={16} /><span>Start Workout ({selectedExercises.length} exercises)</span>
-            </button>
-          )}
+          <button type="button"
+            className={`wf-cta wf-cta-green ${selectedExercises.length === 0 ? 'is-disabled' : ''}`}
+            disabled={selectedExercises.length === 0}
+            onClick={startWorkout}>
+            <Zap size={14} />
+            <span>Mulai Workout{selectedExercises.length ? ` (${selectedExercises.length} latihan)` : ''}</span>
+          </button>
         </div>
       )}
 
-      {/* ═══ ACTIVE WORKOUT ═══ */}
-      {viewMode === 'workout' && flowStep === 'active' && currentExercise && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-500 font-mono">Exercise {currentExIndex + 1} / {selectedExercises.length}</div>
-              <h3 className="text-lg font-bold text-white flex items-center">
-                <div className="relative w-6 h-6 mr-2 inline-flex items-center justify-center shrink-0">
-                  <img src={`/assets/muscles/${currentExercise.muscleGroup}.webp`} alt={currentExercise.muscleGroup}
-                    className="w-full h-full object-contain opacity-80 mix-blend-screen bg-cyan-500/10 rounded p-0.5"
-                    onError={e => { e.currentTarget.style.display = 'none'; }} />
-                </div>
+      {/* ═══ ACTIVE WORKOUT (prototype workout.css .ae-* port) ═══ */}
+      {viewMode === 'workout' && flowStep === 'active' && currentExercise && (() => {
+        const completedRows = sessionData.map((d) => {
+          const matchedEx = selectedExercises.find(e => e.name === d.name);
+          const xpGained = (matchedEx?.xpPerSet || 15) * d.sets;
+          const volume = d.sets * d.reps * d.weight;
+          return { ...d, xp: xpGained, vol: volume };
+        });
+        const muscleLabel = MUSCLE_GROUP_CONFIG[currentExercise.muscleGroup]?.label || currentExercise.muscleGroup;
+        return (
+        <div className="wf-screen">
+          <div className="wf-sub ae-sub">
+            <div className="ae-sub-left">
+              <div className="ae-progress">Latihan {currentExIndex + 1} / {selectedExercises.length}</div>
+              <h2 className="ae-title">
+                <img src={`/assets/muscles/${currentExercise.muscleGroup}.webp`} alt=""
+                  className="ae-title-ico"
+                  onError={e => { e.currentTarget.style.display = 'none'; }} />
                 {currentExercise.name}
-              </h3>
-              <div className="flex items-center space-x-2 mt-1">
-                <DifficultyStars d={currentExercise.difficulty} />
-                <span className="text-[10px] text-slate-500">{currentExercise.equipment}</span>
+              </h2>
+              <div className="ae-stars-row">
+                <WfStars value={currentExercise.difficulty} />
+                <span className="ae-equip">{currentExercise.equipment}</span>
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-xs text-amber-400 font-mono font-bold flex items-center"><Zap size={12} className="mr-0.5" />{sessionXP} XP</div>
-              <span className="text-[10px] text-slate-500">+{currentExercise.xpPerSet}/set</span>
+            <div className="ae-sub-right">
+              <div className="ae-xp">
+                <Zap size={12} />
+                {sessionXP} <span className="ae-xp-unit">XP</span>
+              </div>
+              <div className="ae-xp-sub">+{currentExercise.xpPerSet}/set</div>
             </div>
           </div>
 
-          {/* Progress bar */}
-          <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-full transition-all"
-              style={{ width: `${(currentExIndex / selectedExercises.length) * 100}%` }} />
-          </div>
+          <div className="ae-body">
+            {/* Progress bar */}
+            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-full transition-all"
+                style={{ width: `${(currentExIndex / Math.max(1, selectedExercises.length)) * 100}%` }} />
+            </div>
 
-          {/* Anatomy viewer — single centered card with built-in front/back flip */}
-          <div className="w-full max-w-xs mx-auto my-4">
-            <AnatomyViewer
-              trainedMuscles={getTrainedMuscleIds([
-                currentExercise.muscleGroup,
-                ...(currentExercise.secondaryMuscles || []),
-              ])}
-              defaultView={getViewForMuscle(currentExercise.muscleGroup)}
-            />
-          </div>
+            {/* Body highlight stage — preserve-3d toggle around AnatomyViewer */}
+            <section className="ae-bodystage">
+              <span className="brk-c brk-tl" /><span className="brk-c brk-tr" />
+              <span className="brk-c brk-bl" /><span className="brk-c brk-br" />
+              <div className="d-body-toggle ae-bodystage-toggle">
+                <button type="button" className={`d-body-toggle-opt ${bodyView === 'front' ? 'is-on' : ''}`}
+                  onClick={() => setBodyView('front')}>FRONT</button>
+                <button type="button" className={`d-body-toggle-opt ${bodyView === 'back' ? 'is-on' : ''}`}
+                  onClick={() => setBodyView('back')}>BACK</button>
+              </div>
+              <div className="ae-bodystage-fig">
+                <AnatomyViewer
+                  trainedMuscles={getTrainedMuscleIds([
+                    currentExercise.muscleGroup,
+                    ...(currentExercise.secondaryMuscles || []),
+                  ])}
+                  defaultView={bodyView}
+                />
+              </div>
+              <div className="ae-bodystage-tag">
+                <span style={{ color: 'var(--red)' }}>●</span> {currentSets * currentReps} ACTIVE
+              </div>
+            </section>
 
-          {/* Tags */}
-          <div className="flex gap-2">
-            <span className="bg-slate-800 text-cyan-400 text-[10px] px-2 py-1 rounded-full border border-cyan-400/30 capitalize">{currentExercise.equipment || 'Bodyweight'}</span>
-            <span className="bg-slate-800 text-pink-400 text-[10px] px-2 py-1 rounded-full border border-pink-400/30 capitalize">{MUSCLE_GROUP_CONFIG[currentExercise.muscleGroup]?.label}</span>
-          </div>
+            {/* Chips */}
+            <div className="ae-chips">
+              <span className="ae-chip">{currentExercise.equipment || 'Bodyweight'}</span>
+              <span className="ae-chip ae-chip-pink">{muscleLabel}</span>
+            </div>
 
-          {/* Tips */}
-          <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-800">
-            <p className="text-sm text-slate-400 leading-relaxed">{currentExercise.tips || 'Position yourself and maintain proper form.'}</p>
-          </div>
+            {/* Tips */}
+            <div className="ae-desc">{currentExercise.tips || 'Atur posisi dan jaga form yang benar.'}</div>
 
-          {/* Watch on YouTube — dynamic search for proper form / tutorial */}
-          <a
-            href={`https://www.youtube.com/results?search_query=${encodeURIComponent(currentExercise.name + ' exercise form tutorial')}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="group flex items-center justify-center space-x-2 py-3 px-4 bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 rounded-xl text-white font-bold shadow-lg shadow-red-500/20 hover:shadow-red-500/40 active:scale-[0.98] transition-all"
-          >
-            <Youtube size={18} className="fill-white text-red-600" />
-            <span className="text-sm">Watch on YouTube</span>
-            <ExternalLink size={12} className="opacity-70 group-hover:opacity-100 transition-opacity" />
-          </a>
+            {/* YouTube */}
+            <a
+              href={`https://www.youtube.com/results?search_query=${encodeURIComponent(currentExercise.name + ' exercise form tutorial')}`}
+              target="_blank" rel="noopener noreferrer"
+              className="ae-yt">
+              <Youtube size={14} />
+              <span>Tonton di YouTube</span>
+              <ExternalLink size={12} className="ae-yt-ext" />
+            </a>
 
-          {/* Input Controls */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <InteractiveInput label="Sets" value={currentSets} onChange={setCurrentSets} min={1} max={10} />
-            <InteractiveInput label="Reps" value={currentReps} onChange={setCurrentReps} min={1} max={50} />
-            <InteractiveInput label="Kg" value={currentWeight} onChange={setCurrentWeight} min={0} max={300} step={2.5} />
-          </div>
+            {/* Steppers */}
+            <div className="ae-steppers">
+              <StepperSlider label="SETS" value={currentSets} onChange={setCurrentSets} min={1} max={10} />
+              <StepperSlider label="REPS" value={currentReps} onChange={setCurrentReps} min={1} max={50} />
+              <StepperSlider label="KG"   value={currentWeight} onChange={setCurrentWeight} min={0} max={300} step={2.5} />
+            </div>
 
-          {/* Logged exercises */}
-          {sessionData.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-[10px] text-slate-500 font-mono uppercase tracking-widest">Completed ({sessionData.length})</div>
-              {sessionData.map((d, i) => {
-                const matchedEx = selectedExercises.find(e => e.name === d.name);
-                const xpGained = (matchedEx?.xpPerSet || 15) * d.sets;
-                const volume = d.sets * d.reps * d.weight;
-                return (
-                  <div key={i} className="flex items-center justify-between bg-slate-900/80 border border-emerald-500/30 rounded-xl px-4 py-3 hover:border-emerald-500/50 transition-all">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-7 h-7 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
-                        <CheckSquare size={13} className="text-emerald-400" />
-                      </div>
-                      <div>
-                        <span className="text-emerald-300 font-bold text-sm">{d.name}</span>
-                        <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-                          {d.sets} sets x {d.reps} reps @ {d.weight}kg
-                        </div>
-                      </div>
+            {/* Completed sets */}
+            {completedRows.length > 0 && (
+              <div className="ae-completed">
+                <div className="ae-completed-head">
+                  <span className="ae-step-label">SELESAI ({completedRows.length})</span>
+                </div>
+                {completedRows.map((d, i) => (
+                  <div key={i} className="ae-completed-row">
+                    <div className="ae-completed-check"><CheckSquare size={14} /></div>
+                    <div className="ae-completed-info">
+                      <div className="ae-completed-title">{d.name}</div>
+                      <div className="ae-completed-meta">{d.sets} set × {d.reps} rep @ {d.weight}kg</div>
                     </div>
-                    <div className="text-right shrink-0 ml-2">
-                      <span className="text-amber-400 font-mono font-bold text-xs">+{xpGained}xp</span>
-                      <div className="text-[10px] text-slate-600 font-mono">{volume.toLocaleString()}kg vol</div>
+                    <div className="ae-completed-right">
+                      <div className="ae-completed-xp">+{d.xp}xp</div>
+                      <div className="ae-completed-vol">{d.vol.toLocaleString()}kg vol</div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Notes */}
-          <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500"
-            placeholder="Session notes (optional)..." />
-
-          <RestTimer trigger={triggerTimer} defaultTime={60} />
-
-          {/* Action Buttons */}
-          <div className="flex space-x-3">
-            <button onClick={() => setFlowStep('addExercise')}
-              className="py-3 px-4 bg-slate-800 rounded-xl text-slate-300 hover:text-white hover:bg-slate-700 flex items-center justify-center border border-slate-700">
-              <ListPlus size={20} />
-            </button>
-            {currentExIndex < selectedExercises.length - 1 ? (
-              <button onClick={logExercise}
-                className="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-white font-bold flex items-center justify-center space-x-2 shadow-lg shadow-cyan-500/20">
-                <span>Log & Next</span><ChevronRight size={16} />
-              </button>
-            ) : (
-              <button onClick={logExercise}
-                className="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-white font-bold flex items-center justify-center space-x-2">
-                <span>Log Exercise</span>
-              </button>
+                ))}
+              </div>
             )}
-            <button onClick={finishWorkout}
-              className="py-3 px-5 bg-gradient-to-r from-emerald-500 to-green-600 rounded-xl text-white font-bold flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/20">
-              <Save size={16} /><span>Finish</span>
+
+            {/* Notes */}
+            <input type="text" className="ae-notes"
+              value={notes} onChange={e => setNotes(e.target.value)}
+              placeholder="Catatan sesi (opsional)…" />
+
+            {/* Rest Timer (auto-starts via trigger from logExercise) */}
+            <RestTimerRing trigger={triggerTimer} defaultTime={60} />
+
+            {/* Cancel link */}
+            <button type="button" className="ae-cancel"
+              onClick={() => { setFlowStep('idle'); setSelectedMuscles([]); setSelectedExercises([]); setSessionData([]); }}>
+              Batalkan Workout
             </button>
           </div>
-          <button onClick={() => { setFlowStep('idle'); setSelectedMuscles([]); setSelectedExercises([]); setSessionData([]); }}
-            className="w-full py-2 text-slate-600 hover:text-rose-400 text-xs transition-colors">Cancel Workout</button>
-        </div>
-      )}
 
-      {/* ═══ ADD EXERCISE MID-SESSION ═══ */}
-      {viewMode === 'workout' && flowStep === 'addExercise' && (
-        <div className="space-y-4 animate-slide-up">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white">Add Exercise</h3>
-            <button onClick={() => setFlowStep('active')} className="text-slate-500 hover:text-white text-xs">Cancel</button>
+          {/* Sticky bottom action row */}
+          <div className="ae-sticky">
+            <button type="button" className="ae-act-edit" aria-label="Tambah latihan"
+              onClick={() => setFlowStep('addExercise')}>
+              <ListPlus size={14} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'var(--t-2)' }} />
+            </button>
+            <button type="button" className="ae-act-log" onClick={logExercise}>
+              <CheckSquare size={14} />
+              <span>{currentExIndex < selectedExercises.length - 1 ? 'Log & Next' : 'Log Latihan'}</span>
+            </button>
+            <button type="button" className="ae-act-finish" onClick={finishWorkout}>
+              <Save size={14} />
+              <span>Selesai</span>
+            </button>
           </div>
-          <p className="text-xs text-slate-500">Selected exercises will be appended to the current session.</p>
+        </div>
+        );
+      })()}
+
+      {/* ═══ ADD EXERCISE MID-SESSION (.wf-screen wrapper) ═══ */}
+      {viewMode === 'workout' && flowStep === 'addExercise' && (
+        <div className="wf-screen">
+          <div className="wf-sub">
+            <button className="wf-back" type="button" aria-label="Batal"
+              onClick={() => setFlowStep('active')}>
+              <X size={14} />
+            </button>
+            <h2 className="wf-sub-title">Tambah Latihan</h2>
+            <span className="wf-sub-meta">{selectedExercises.length} TERPILIH</span>
+          </div>
           <ExerciseBrowser
             muscles={selectedMuscles}
             selectedExercises={selectedExercises}
@@ -1176,110 +1466,184 @@ export const GymTracker: React.FC = () => {
         </div>
       )}
 
-      {/* ═══ ANALYTICS VIEW ═══ */}
-      {viewMode === 'analytics' && (
-        <div className="space-y-6">
-          <h3 className="text-lg font-bold text-white flex items-center"><TrendingUp size={16} className="mr-2 text-cyan-400" />Analytics</h3>
+      {/* ═══ ANALYTICS VIEW (prototype Analytics.jsx port) ═══ */}
+      {viewMode === 'analytics' && (() => {
+        const streakDays = profile.currentStreak ?? 0;
+        const longestStreak = profile.longestStreak ?? 0;
+        const current = tierFromDays(streakDays);
+        const next = nextTier(current);
+        const showTier = STREAK_TIERS.find((t) => t.tier === previewTier) || current;
+        const hasData = volumeData.some(d => d.volume > 0 || d.xp > 0);
+        const muscleXPMap = (profile?.muscleXP || {}) as Record<MuscleGroup, number>;
+        const maxMuscleXP = Math.max(...(Object.values(muscleXPMap) as number[]), 1);
+        const muscleXPRows = (Object.entries(muscleXPMap) as [MuscleGroup, number][])
+          .filter(([, xp]) => xp > 0)
+          .sort((a, b) => b[1] - a[1]);
+        const trendIdx = ['weekly', 'monthly', 'yearly'].indexOf(trendRange);
+        return (
+        <div className="g-tabbody">
+          <div className="an-title-row">
+            <span className="an-title-ico"><TrendingUp size={14} /></span>
+            <h2 className="an-title">Analytics</h2>
+          </div>
 
-          {/* Workout Streak — sourced from unified profile so it matches Profile.tsx */}
-          {(() => {
-            const currentStreak = profile.currentStreak ?? 0;
-            const longestStreak = profile.longestStreak ?? 0;
-            return (
-              <div className="jarvis-card p-6 rounded-xl flex flex-col items-center justify-center text-center space-y-4 shadow-lg border border-slate-700/50 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl" />
-                <h4 className="text-xs font-mono text-slate-400 uppercase tracking-widest z-10">Workout Streak</h4>
-                <div className="relative flex justify-center items-center">
-                  {currentStreak > 0 && <div className="absolute inset-0 bg-orange-500/20 blur-xl rounded-full scale-150 animate-pulse" />}
-                  <Flame size={72} strokeWidth={1.5} className={`z-10 transition-all duration-1000 ${currentStreak > 0 ? 'text-orange-500 drop-shadow-[0_0_25px_rgba(249,115,22,0.9)] scale-110 animate-bounce' : 'text-slate-700'}`} />
-                </div>
-                <div className="z-10 mt-2">
-                  <span className="text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-300 font-mono tracking-tighter">{currentStreak}</span>
-                  <span className="text-xl text-slate-500 ml-2 font-medium">Days</span>
-                </div>
-                <div className="z-10 text-xs font-mono text-slate-500 uppercase tracking-widest">
-                  Best: <span className="text-orange-300">{longestStreak}d</span>
-                </div>
-                <p className="text-sm text-slate-400 max-w-[250px] z-10 mt-2 font-medium">
-                  {currentStreak > 0 ? "Keep the fire burning! Don't break the streak! 🔥" : 'Time to ignite your streak! Start a workout today.'}
-                </p>
+          {/* Streak — Heart-Fire + ECG */}
+          <section className="card an-streak-card">
+            <div className="an-streak-top">
+              <div className="hud-label an-streak-label">WORKOUT STREAK</div>
+              <div className="an-streak-tier-pill"
+                style={{ borderColor: showTier.color, color: showTier.color }}>
+                <span>TIER {showTier.tier}</span>
+                <span className="an-streak-tier-name">{showTier.name}</span>
               </div>
-            );
-          })()}
+            </div>
 
-          {/* Volume + XP Trend — with Weekly / Monthly / Yearly toggle */}
-          <div className="jarvis-card p-4 rounded-xl">
-            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <h4 className="text-xs font-mono text-slate-400 uppercase">Volume & XP Trend</h4>
-              <div className="flex bg-slate-900 rounded-lg p-0.5 border border-slate-800">
+            <div className="an-streak-stage">
+              <ECGLine />
+              <HeartFire size={150} tier={showTier.tier} />
+            </div>
+
+            <div className="an-streak-day">
+              <span className="an-streak-num">{streakDays}</span>
+              <span className="an-streak-unit">Hari</span>
+            </div>
+            <div className="an-streak-best">
+              BEST: <span style={{ color: 'var(--orange)' }}>{longestStreak}H</span>
+            </div>
+
+            {next && (
+              <div className="an-streak-next">
+                <span className="an-streak-next-arrow">→</span>
+                <span>{next.name} dalam</span>
+                <strong style={{ color: next.color }}>{next.min - streakDays} hari</strong>
+              </div>
+            )}
+
+            <div className="an-streak-roadmap">
+              {STREAK_TIERS.map((t) => {
+                const reached = streakDays >= t.min;
+                const active = previewTier === t.tier;
+                return (
+                  <button key={t.tier} type="button"
+                    className={`an-streak-rmark ${reached ? 'is-reached' : ''} ${active ? 'is-active' : ''}`}
+                    style={{ ['--rm-color' as string]: t.color }}
+                    onClick={() => setPreviewTier(t.tier)}
+                    aria-label={`Preview ${t.name}`}>
+                    <span className="an-streak-rmark-dot">
+                      <span className="an-streak-rmark-glow" />
+                    </span>
+                    <span className="an-streak-rmark-name">{t.name}</span>
+                    <span className="an-streak-rmark-day">
+                      {t.min >= 365 ? `${Math.floor(t.min / 365)}thn+`
+                        : t.min >= 30 ? `${Math.floor(t.min / 30)}bln`
+                        : `${t.min}h`}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {previewTier !== current.tier && (
+              <div className="an-streak-preview-hint">
+                ⌬ PREVIEW · ketuk tier untuk simulasi ·
+                <button type="button" className="an-streak-preview-reset"
+                  onClick={() => setPreviewTier(current.tier)}>
+                  kembali ke tier kamu
+                </button>
+              </div>
+            )}
+
+            <p className="an-streak-quote">
+              {streakDays > 0
+                ? 'Jaga detak jantungmu menyala. Jangan biarkan rantai terputus.'
+                : 'Mulai workout pertamamu untuk menyalakan bara.'}
+            </p>
+          </section>
+
+          {/* Trend */}
+          <section className="card">
+            <div className="card-head">
+              <span className="hud-label">VOLUME &amp; XP TREND</span>
+              <div className="an-range">
                 {(['weekly', 'monthly', 'yearly'] as const).map(r => (
-                  <button
-                    key={r}
-                    onClick={() => setTrendRange(r)}
-                    className={`px-3 py-1 text-[10px] font-mono uppercase tracking-wider rounded-md transition-all ${trendRange === r
-                        ? 'bg-cyan-500 text-slate-900 font-bold shadow-lg shadow-cyan-500/30'
-                        : 'text-slate-400 hover:text-white'}`}
-                  >
+                  <button key={r} type="button"
+                    className={`an-range-opt ${trendRange === r ? 'is-on' : ''}`}
+                    onClick={() => setTrendRange(r)}>
                     {r === 'weekly' ? '7D' : r === 'monthly' ? '30D' : '12M'}
                   </button>
                 ))}
+                <div className="an-range-indicator"
+                  style={{ transform: `translateX(${trendIdx * 100}%)` }} />
               </div>
             </div>
-            {volumeData.some(d => d.volume > 0 || d.xp > 0) ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={volumeData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} />
-                  <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} />
-                  <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} />
-                  <Line type="monotone" dataKey="volume" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} name="Volume (kg)" />
-                  <Line type="monotone" dataKey="xp" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} name="XP" />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="py-8 text-center text-xs text-slate-600 font-mono">
-                No data in this {trendRange === 'weekly' ? 'week' : trendRange === 'monthly' ? 'month' : 'year'} — log a workout to populate the trend.
-              </div>
-            )}
-          </div>
 
-          {/* Muscle XP Distribution */}
-          <div className="jarvis-card p-4 rounded-xl">
-            <h4 className="text-xs font-mono text-slate-400 uppercase mb-3">Muscle XP Distribution</h4>
-            <div className="grid grid-cols-2 gap-2">
-              {(Object.entries(profile?.muscleXP || {}) as [MuscleGroup, number][])
-                .filter(([, xp]) => xp > 0)
-                .sort((a, b) => b[1] - a[1])
-                .map(([muscle, xp]) => {
-                  const cfg = MUSCLE_GROUP_CONFIG[muscle];
-                  const maxXP = Math.max(...(Object.values(profile?.muscleXP || {}) as number[]), 1);
-                  const pct = Math.round((xp / maxXP) * 100);
-                  return (
-                    <div key={muscle} className="flex items-center space-x-3 mb-2">
-                      <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center overflow-hidden shrink-0">
-                        <img src={`/assets/muscles/${muscle}.webp`} alt={cfg?.label}
-                          className="w-full h-full object-cover scale-110 opacity-80 mix-blend-screen"
-                          onError={e => { e.currentTarget.style.display = 'none'; }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between text-[10px] mb-1">
-                          <span className="text-slate-200 font-bold truncate">{cfg?.label}</span>
-                          <span className="text-amber-400 font-mono ml-2 shrink-0">{xp}</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-slate-800/80 rounded-full overflow-hidden">
-                          <div className="h-full bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              {Object.values(profile?.muscleXP || {}).every(v => v === 0) && (
-                <p className="text-sm text-slate-600 col-span-2 text-center py-4">Complete a workout to see muscle XP</p>
+            <div className="an-chart">
+              {hasData ? (
+                <div className="an-chart-recharts">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={volumeData} margin={{ top: 10, right: 12, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(34,211,238,0.08)" />
+                      <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} />
+                      <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} />
+                      <Tooltip contentStyle={{ background: 'rgba(7,12,24,0.95)', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} />
+                      <Line type="monotone" dataKey="volume" stroke="#22D3EE" strokeWidth={2} dot={{ r: 3 }} name="Volume (kg)" />
+                      <Line type="monotone" dataKey="xp" stroke="#FB923C" strokeWidth={2} dot={{ r: 3 }} name="XP" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <>
+                  <div className="an-chart-grid">
+                    {Array.from({ length: 5 }).map((_, i) => <div key={i} className="an-chart-grid-line" />)}
+                  </div>
+                  <div className="an-chart-empty">
+                    <div className="an-chart-empty-icon">⌬</div>
+                    <div>NO DATA · {trendRange === 'weekly' ? '7D' : trendRange === 'monthly' ? '30D' : '12M'}</div>
+                    <div className="an-chart-empty-sub">Catat satu sesi untuk mulai mengisi tren.</div>
+                  </div>
+                  <div className="an-chart-axis">
+                    {['SEN','SEL','RAB','KAM','JUM','SAB','MIN'].map((d) => <span key={d}>{d}</span>)}
+                  </div>
+                </>
               )}
             </div>
-          </div>
+          </section>
+
+          {/* Muscle XP Distribution */}
+          <section className="card">
+            <div className="card-head">
+              <span className="hud-label">MUSCLE XP DISTRIBUTION</span>
+            </div>
+            <div className="an-mx-grid">
+              {muscleXPRows.length === 0 && (
+                <p className="text-sm text-slate-600 text-center py-4">Selesaikan workout untuk melihat muscle XP</p>
+              )}
+              {muscleXPRows.map(([muscle, xp]) => {
+                const cfg = MUSCLE_GROUP_CONFIG[muscle];
+                const pct = Math.round((xp / maxMuscleXP) * 100);
+                return (
+                  <div key={muscle} className="an-mx-row">
+                    <div className="an-mx-row-l">
+                      <div className="an-puck">
+                        <img src={`/assets/muscles/${muscle}.webp`} alt={cfg?.label}
+                          className="an-puck-img"
+                          onError={e => { e.currentTarget.style.display = 'none'; }} />
+                      </div>
+                      <span className="an-mx-name">{cfg?.label || muscle}</span>
+                    </div>
+                    <div className="an-mx-row-r">
+                      <div className="an-mx-bar">
+                        <div className="an-mx-bar-fill" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="an-mx-val">{xp}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
