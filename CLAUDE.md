@@ -16,7 +16,7 @@
 - **CSS 3D:** Element dengan `transform-style: preserve-3d` (mis. flip cards) — **JANGAN** pakai `filter` (drop-shadow) atau `mix-blend-mode` di element itu atau parent-nya (flattens 3D context).
 - **Eksekusi:** Satu fitur sampai sempurna. Pause after each commit. Audit before edit. Build green sebelum commit.
 - **Bahasa:** Copy untuk user (toast, modal, button) = Bahasa Indonesia. Code, comments, logs = English.
-- **Security:** Jangan introduce hardcoded API keys atau `dangerouslyAllowBrowser` baru. Existing `aiService.ts` exposure adalah Tier 0.1 task di roadmap.
+- **Security policy:** `aiService.ts` uses **direct Groq SDK call** dengan `dangerouslyAllowBrowser: true` (`VITE_GROQ_API_KEY` bundled to client). Trade-off accepted by user untuk personal-use PWA + Groq free tier. **Tier 0.1 server-side migration DEFERRED to Tier 6** (future multi-user scenario). **JANGAN refactor balik ke Cloud Function tanpa explicit user OK.** Untuk SECRET LAIN (Firebase admin keys, third-party paid APIs, dll) — jangan introduce hardcoded keys.
 
 ## Quick reference
 

@@ -106,7 +106,7 @@ npm run build
 
 **On the roadmap** (lihat `PROMPT_CLAUDE_CODE.md` Section 8 untuk detail penuh):
 
-- [ ] Tier 0: Security blockers (Groq API → Firebase Function, role-based admin, etc.)
+- [ ] Tier 0: Security blockers (~~Groq API → Firebase Function~~ deferred per user decision; role-based admin, Firestore rules, cascade-delete account)
 - [ ] Tier 2: FCM notifications, 2FA, change email/password, export data
 - [ ] Tier 3: Per-set workout logging, PR tracking, body measurements, goals
 - [ ] Tier 5: Seasonal rank system, friend system, exercise library upgrade

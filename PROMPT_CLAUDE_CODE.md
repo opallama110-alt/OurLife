@@ -105,8 +105,8 @@ Halo Claude. Kamu berperan sebagai **Senior Full-Stack Engineer + Product-Minded
   - Firestore (denormalized profile data + leaderboard queries)
   - Realtime Database / RTDB (live state via `onSnapshot`)
   - Storage (avatar upload)
-  - Cloud Functions (untuk security-sensitive ops — belum di-set up, Tier 0.1 task)
-- **AI:** `groq-sdk` ^0.7.0, Llama 3.3 70B Versatile, function calling (`execute_penalty`, `mark_quest_complete`). **TODO security:** API key currently exposed via `dangerouslyAllowBrowser: true`.
+  - Cloud Functions (NOT in current scope — project on Spark free plan; `functions/src/chatWithSystem.ts` kept as deprecated reference for future Tier 6 multi-user migration)
+- **AI:** `groq-sdk` ^0.7.0, Llama 3.3 70B Versatile, function calling (`execute_penalty`, `mark_quest_complete`). Called **direct from client** via `dangerouslyAllowBrowser: true` — user-accepted trade-off for personal-PWA + Groq free tier. See Section 6.5.
 - **Charts:** `recharts` ^3.7.0 (Power Signature radar + future analytics).
 - **Icons:** `lucide-react` — pakai konsisten, jangan campur library icon lain.
 - **PWA:** `vite-plugin-pwa` — auto-generate service worker.
@@ -214,9 +214,9 @@ Komponen TIDAK boleh akses Firebase langsung kecuali di service layer. Semua mut
 
 ### 6.5 Security
 - **JANGAN** introduce hardcoded API keys. Pakai `import.meta.env.VITE_X` dari `.env.local` (yang harus di `.gitignore`).
-- **JANGAN** introduce `dangerouslyAllowBrowser: true` baru.
+- **`dangerouslyAllowBrowser: true`** in `aiService.ts` is the project's ONE accepted exception — for direct Groq SDK calls on the personal-PWA / free-tier use case. **JANGAN add the flag to any new module** without explicit user OK.
 - **JANGAN** log PII (nama, email, XP user lain) ke console di production code.
-- Existing `aiService.ts` punya `dangerouslyAllowBrowser` flag = security debt → Tier 0.1.
+- `aiService.ts` security policy: client-side direct Groq call accepted (user decision). Tier 0.1 server-side migration **DEFERRED to Tier 6** — see Section 8.2 row 0.1 note. JANGAN silently refactor to Cloud Function.
 
 ### 6.6 Error handling
 - Service layer: throw atau return discriminated union (`{ ok: true, data } | { ok: false, error }`).
@@ -336,7 +336,7 @@ Lean cut "good enough to charge for it" = **Tier 0–3 selesai = ~6–8 minggu**
 
 | # | Item | Effort | Files |
 |---|------|--------|-------|
-| 0.1 | Move Groq API ke Firebase Function (server-side) | L (1 hari) | aiService.ts, functions/src/chatWithSystem.ts (NEW) |
+| 0.1 | ~~Move Groq API ke Firebase Function~~ — **DEFERRED to Tier 6** per user decision (personal PWA + free tier). Stays as direct client Groq call with `dangerouslyAllowBrowser`. `functions/src/chatWithSystem.ts` marked deprecated. | — | — |
 | 0.2 | Audit + tulis `firestore.rules` + `database.rules.json` | M (3 jam) | rules files |
 | 0.3 | Role-based admin (replace hardcoded email check) | M (3 jam) | storageService.ts, App.tsx, AdminDashboard.tsx |
 | 0.4 | Cascade-delete account (Storage + subcollections + Auth) | L (5 jam) | AuthContext.tsx, functions/ |
@@ -437,7 +437,7 @@ Lean cut "good enough to charge for it" = **Tier 0–3 selesai = ~6–8 minggu**
 ### 8.9 Suggested execution timeline
 
 **Sprint 1 (Minggu 1-2): Critical + Phase A.7 polish**
-- Tier 0.1, 0.2, 0.3, 0.6, 0.4, 0.5
+- Tier 0.2, 0.3, 0.6, 0.4, 0.5 (Tier 0.1 deferred per user decision — see Section 8.2 row)
 - Tier 1.2, 1.3, 1.4, 1.5
 - Goal: branch aman di-merge ke main, security closed.
 
