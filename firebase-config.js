@@ -5,7 +5,13 @@ import { getAuth } from "firebase/auth";
 import { getMessaging } from "firebase/messaging";
 import { getDatabase } from "firebase/database";
 import { getStorage } from "firebase/storage";
-import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
+
+// NOTE: Cloud Functions binding intentionally removed (was the
+// chatWithSystem callable for the Tier 0.1 AI proxy). aiService now
+// talks to Groq directly from the browser — see services/aiService.ts
+// + CLAUDE.md §6.5 for the policy rationale. Do not re-add
+// `getFunctions` / `connectFunctionsEmulator` here without first
+// reintroducing a real client callable.
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -27,17 +33,3 @@ export const auth = getAuth(app);
 export const messaging = getMessaging(app);
 export const rtdb = getDatabase(app);
 export const storage = getStorage(app);
-export const functions = getFunctions(app, "asia-southeast1");
-
-// Local emulator wiring — only Functions is emulated. Auth + Firestore + RTDB
-// keep talking to production so the rest of the app behaves normally during
-// Tier 0.1 smoke testing. HMR can re-run this module; the try/catch absorbs
-// the "already connected" error a second connect would throw.
-if (import.meta.env.DEV) {
-  try {
-    connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-    console.info("[firebase-config] Connected to local Functions emulator (127.0.0.1:5001)");
-  } catch (e) {
-    console.debug("[firebase-config] Emulator connect skipped:", e?.message ?? e);
-  }
-}
