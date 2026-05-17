@@ -4764,70 +4764,64 @@ input, select, textarea {
 .h-card-trash:hover { color: var(--red); border-color: rgba(239, 68, 68, 0.4); }
 .h-card-trash:active { transform: scale(0.9); }
 
-.h-week {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-  padding: 10px;
-  border-radius: 10px;
-  background: rgba(7, 12, 24, 0.4);
+/* ─── Today-only big check (.h-today) ─────────────────────────────────
+   Replaces the 7-day grid. Single tappable row: large circular check
+   on the left + label on the right. Done-today flips circle to green
+   with the checkmark drawn in via h-today-pop. */
+.h-today {
+  width: 100%;
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 14px;
+  background: rgba(7, 12, 24, 0.45);
   border: 1px solid var(--line-soft);
-}
-.h-day {
-  display: flex; flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 0 4px;
-  background: transparent;
-  border: 0;
+  border-radius: 12px;
+  color: var(--sys-ink);
+  font-family: var(--font-sans, 'Inter', sans-serif);
   cursor: pointer;
-  border-radius: 8px;
-  transition: background 140ms ease;
-  position: relative;
+  transition: border-color 160ms ease, background 160ms ease, transform 120ms ease;
 }
-.h-day-label {
-  font-size: 11px; font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--t-3);
-  font-family: var(--font-mono);
+.h-today:hover { border-color: rgba(125, 217, 245, 0.45); }
+.h-today:active { transform: scale(0.98); }
+.h-today.is-on {
+  border-color: rgba(34, 197, 94, 0.45);
+  background:
+    linear-gradient(90deg, rgba(34, 197, 94, 0.10), transparent 65%),
+    rgba(7, 12, 24, 0.55);
 }
-.h-day.is-today .h-day-label { color: var(--cyan); text-shadow: 0 0 8px rgba(34, 211, 238, 0.5); }
-.h-day-box {
-  position: relative;
-  width: 22px; height: 22px;
-  border-radius: 6px;
-  border: 1.5px solid var(--line);
-  color: var(--green-bright);
+.h-today-circle {
+  flex-shrink: 0;
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  border: 2px solid rgba(125, 217, 245, 0.45);
+  background: rgba(7, 12, 24, 0.6);
+  color: transparent;
   display: inline-flex; align-items: center; justify-content: center;
-  overflow: hidden;
-  transition: all 180ms var(--ease-spring);
+  transition: all 200ms var(--ease-spring);
 }
-.h-day.is-today .h-day-box { border-color: rgba(34, 211, 238, 0.55); border-style: dashed; background: rgba(34, 211, 238, 0.05); }
-.h-day.is-on .h-day-box {
+.h-today-circle.is-on {
   background: var(--green-bright);
   border-color: var(--green-bright);
-  border-style: solid;
   color: var(--bg-1, #04060D);
-  box-shadow: 0 0 10px rgba(34, 197, 94, 0.55);
+  box-shadow:
+    0 0 18px rgba(34, 197, 94, 0.55),
+    inset 0 0 14px rgba(255, 255, 255, 0.18);
+  animation: h-today-pop 360ms var(--ease-spring);
 }
-.h-day-check { animation: h-day-pop 380ms var(--ease-spring); }
-@keyframes h-day-pop {
-  0%   { transform: scale(0.4); opacity: 0; }
-  60%  { transform: scale(1.3); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+@keyframes h-today-pop {
+  0%   { transform: scale(0.7); }
+  60%  { transform: scale(1.12); }
+  100% { transform: scale(1); }
 }
-.h-day-ripple {
-  position: absolute; inset: -8px;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(34, 197, 94, 0.55), transparent 65%);
-  pointer-events: none;
-  animation: h-day-ripple 600ms ease-out forwards;
+.h-today-label {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--sys-ink-dim);
 }
-@keyframes h-day-ripple {
-  0%   { opacity: 0.9; transform: scale(0.4); }
-  100% { opacity: 0;   transform: scale(2.2); }
+.h-today.is-on .h-today-label {
+  color: var(--green-bright);
+  font-weight: 700;
 }
-.h-day:active { transform: scale(0.94); }
 
 .h-empty {
   position: relative;
@@ -4867,20 +4861,20 @@ input, select, textarea {
    name takes that letter-spacing treatment which is fine since habits
    are short labels ("Push Up", "Lari Pagi", etc.). */
 .sys-frame.sys-frame-habit {
-  padding: 22px 22px 20px;
+  padding: 16px 16px 14px;
 }
 .sys-frame.sys-frame-habit .sys-title {
-  font-size: 17px;
+  font-size: 16px;
   letter-spacing: 0.14em;
 }
 .sys-frame.sys-frame-habit .sys-head {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
-.sys-frame.sys-frame-habit .sys-divider { margin-bottom: 14px; }
+.sys-frame.sys-frame-habit .sys-divider { margin-bottom: 12px; }
 .sys-frame.sys-frame-habit .sys-body { font-style: normal; }
 
 /* Spacing between successive habit cards in the list. */
-.h-list > .reveal + .reveal { margin-top: 10px; }
+.h-list > .reveal + .reveal { margin-top: 14px; }
 
 /* ─── Sub-task list (.h-subtasks*) ──────────────────────────────────── */
 .h-subtasks { margin-top: 14px; }

@@ -208,17 +208,6 @@ export const HabitTracker: React.FC = () => {
   const allTimeCompletions = habits.reduce((sum, h) => sum + (h.completedDates?.length || 0), 0);
   const allDone = totalHabits > 0 && completedToday === totalHabits;
 
-  // Last-7-days array. Actual dates so the checkboxes line up correctly.
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    return {
-      date: d.toISOString().split('T')[0],
-      label: ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()],
-      isToday: d.toISOString().split('T')[0] === today,
-    };
-  });
-
   /**
    * Persist updated habit list and run the "all daily habits done" side-effects:
    *   - grant a streak-freeze token (rate-limited inside storageService),
@@ -427,32 +416,34 @@ export const HabitTracker: React.FC = () => {
                 cta={deleteCta}
                 className="sys-frame-habit"
               >
-                {/* Weekly 7-day grid — manual override / history view */}
-                <div className="h-week">
-                  {last7Days.map((day) => {
-                    const checked = h.completedDates?.includes(day.date);
-                    return (
-                      <button
-                        key={day.date}
-                        type="button"
-                        className={`h-day ${checked ? 'is-on' : ''} ${day.isToday ? 'is-today' : ''}`}
-                        onClick={() => togglePerDay(h.id, day.date)}
-                        aria-label={`${day.date}: ${checked ? 'Selesai' : 'Belum'}`}
-                      >
-                        <span className="h-day-label">{day.label}</span>
-                        <span className="h-day-box">
-                          {checked && (
-                            <svg className="h-day-check" width="14" height="14" viewBox="0 0 24 24" fill="none">
-                              <path d="M5 12.5 L10 17.5 L19 8.5"
-                                stroke="currentColor" strokeWidth="2.6"
-                                strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          )}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                {/* TODAY-ONLY big check — replaces the 7-day grid per user
+                    feedback ("kayang terlalu rapet terus kayanya ceklisnya
+                    untuk hari itu aja"). For habits WITH sub-tasks, this
+                    is a manual override that marks the whole day done
+                    without ticking the individual sub-tasks (they remain
+                    untouched so the user's sub-task history is preserved). */}
+                <button
+                  type="button"
+                  className={`h-today ${isDoneToday ? 'is-on' : ''}`}
+                  onClick={() => togglePerDay(h.id, today)}
+                  aria-pressed={isDoneToday}
+                  aria-label={isDoneToday ? 'Batalkan tanda selesai hari ini' : 'Tandai selesai hari ini'}
+                >
+                  <span className={`h-today-circle ${isDoneToday ? 'is-on' : ''}`}>
+                    {isDoneToday && <Check size={28} strokeWidth={2.6} />}
+                  </span>
+                  <span className="h-today-label">
+                    {isDoneToday ? '✓ Selesai Hari Ini' : 'Tandai Selesai Hari Ini'}
+                  </span>
+                </button>
+
+                {/* TODO (Tier 6 — defer): dashboard grafik perkembangan
+                    habit (per user: "nanti kalo udah di cheklist hari itu
+                    nanti ada dashborad grafik habits nya kaya perkembangannya").
+                    Likely surface: weekly + 30-day completion sparkline,
+                    sub-task heatmap, streak velocity chart. Keep
+                    completedDates + completedSubTasks as the source of
+                    truth — no schema change needed for the dashboard. */}
 
                 {/* Sub-task checklist — only when defined */}
                 {hasSubTasks && (
