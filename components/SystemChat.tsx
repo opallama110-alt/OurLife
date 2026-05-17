@@ -1,249 +1,275 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Send, Loader2 } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { aiService } from '../services/aiService';
 import { storageService } from '../services/storageService';
-import { SystemPet, PetEmotion } from './SystemPet';
-import { SystemNotification } from './hud';
-
-type ChatMsg = {
-  id: string;
-  role: 'user' | 'system';
-  text: string;
-};
+import { BotFace, BotMood, DotPulse } from './hud';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SYSTEM CHAT — wrapped in the .sys-frame modal chrome from
-// SystemNotification. The chat-specific layout (messages list +
-// textarea + send button) lives in the .sys-body; the header carries
-// the level chip as the .sys-head cta slot, and "Powered by Llama 3.3"
-// rides the SystemNotification footer prop.
+// SYSTEM CHAT — wholesale ported from
+// .design-reference/ourlife/project/components/SystemChat.jsx.
+// CLI/terminal aesthetic: "[ SYSTEM ]" bracketed title, ONLINE status line,
+// JUMAT · 15 MEI 2026 date divider, SYSTEM-labelled bubbles with mono
+// timestamps, quick-reply chips, "> " input prompt, orange send button.
 //
-// The previous inline gradient + red border + glow chrome was dropped
-// (it duplicated chrome the .sys-frame already provides). Bot avatar
-// (SystemPet) stays in the empty-state body — that emotion mapping is
-// part of the System's personality.
+// AI integration uses the existing aiService.chat (Groq Llama 3.3) — the
+// prototype's window.claude.complete shim is replaced. Habit-aware emotion
+// priority chain from the prior implementation is dropped in favor of the
+// prototype's simpler typing↔happy↔idle BotFace mood swap, because the
+// prototype is the canonical design now. Re-introducing angry/sad/tired
+// moods to BotFace is a separate task (Tier 1 polish).
 // ═══════════════════════════════════════════════════════════════════════════
 export interface SystemChatProps {
   open: boolean;
   onClose: () => void;
 }
 
-export const SystemChat: React.FC<SystemChatProps> = ({ open, onClose }) => {
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [profile, setProfile] = useState(storageService.getGymProfile());
-  const [emotion, setEmotion] = useState<PetEmotion>('idle');
-  const scrollRef = useRef<HTMLDivElement>(null);
+type ChatMsg = {
+  from: 'system' | 'user';
+  text: string;
+  time: string;
+};
 
-  // Hydrate the most recent System verdict on first open so the user sees continuity.
-  useEffect(() => {
-    if (!open) return;
+const QUICK_REPLIES = [
+  'Plan terbaik untuk hari ini?',
+  'Cek status fatigue.',
+  'Apa habit yang harus aku selesaikan?',
+];
+
+const SEED_MESSAGES: ChatMsg[] = [
+  {
+    from: 'system',
+    text: 'Halo, Hunter. Aku [SYSTEM] — antarmuka taktismu. Aku bisa baca status, jadwal, fatigue, dan habit harian.',
+    time: '',
+  },
+];
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const formatTime = (d: Date = new Date()) => `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+
+const DAY_NAMES = ['MINGGU', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
+const MONTH_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MEI', 'JUN', 'JUL', 'AGU', 'SEP', 'OKT', 'NOV', 'DES'];
+const formatTodayHeader = (d: Date = new Date()) =>
+  `${DAY_NAMES[d.getDay()]} · ${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+
+const MessageBubble: React.FC<{ msg: ChatMsg; animateIn: boolean }> = ({ msg, animateIn }) => {
+  if (msg.from === 'system') {
+    return (
+      <div className={`sc-msg sc-msg-sys ${animateIn ? 'sc-msg-in' : ''}`}>
+        <span className="sc-msg-ava">
+          <BotFace mood="idle" size={26} />
+        </span>
+        <div className="sc-msg-body sc-msg-body-sys">
+          <div className="sc-msg-head">
+            <span>SYSTEM</span>
+            <span className="sc-msg-time">{msg.time}</span>
+          </div>
+          <div className="sc-msg-text">{msg.text}</div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={`sc-msg sc-msg-user ${animateIn ? 'sc-msg-in' : ''}`}>
+      <div className="sc-msg-body sc-msg-body-user">
+        <div className="sc-msg-text">{msg.text}</div>
+        <div className="sc-msg-time-user">{msg.time}</div>
+      </div>
+    </div>
+  );
+};
+
+const TypingIndicator: React.FC = () => (
+  <div className="sc-msg sc-msg-sys sc-msg-in">
+    <span className="sc-msg-ava">
+      <BotFace mood="thinking" size={26} />
+    </span>
+    <div className="sc-msg-body sc-msg-body-sys sc-typing">
+      <div className="sc-msg-head">
+        <span>SYSTEM</span>
+        <span className="sc-msg-time">sedang berpikir…</span>
+      </div>
+      <div className="sc-typing-dots">
+        <span /><span /><span />
+      </div>
+    </div>
+  </div>
+);
+
+export const SystemChat: React.FC<SystemChatProps> = ({ open, onClose }) => {
+  const [mounted, setMounted] = useState(false);
+  const [show, setShow] = useState(false);
+  const [messages, setMessages] = useState<ChatMsg[]>(() => {
     const last = storageService.getLastSystemMessage();
-    if (last && messages.length === 0) {
-      setMessages([{ id: 'init', role: 'system', text: last }]);
+    if (last) {
+      return [{ from: 'system', text: last, time: '' }];
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return SEED_MESSAGES;
+  });
+  const [draft, setDraft] = useState('');
+  const [typing, setTyping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastIdx, setLastIdx] = useState(messages.length - 1);
+  const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Mount state machine (rAF → setShow, setTimeout → setMounted false on close).
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      const id = requestAnimationFrame(() => setShow(true));
+      const focusT = window.setTimeout(() => { inputRef.current?.focus(); }, 360);
+      return () => { cancelAnimationFrame(id); window.clearTimeout(focusT); };
+    }
+    setShow(false);
+    const t = window.setTimeout(() => setMounted(false), 320);
+    return () => window.clearTimeout(t);
   }, [open]);
 
-  // Live-update XP/streak chip while sheet is open so AI mutations land visibly.
+  // Auto-scroll to bottom on new message / typing change.
   useEffect(() => {
-    const unsub = storageService.subscribe(() => setProfile(storageService.getGymProfile()));
-    return unsub;
-  }, []);
+    const list = listRef.current;
+    if (!list) return;
+    list.scrollTop = list.scrollHeight;
+  }, [messages.length, typing]);
 
-  // Pet resting mood — habit-aware priority chain. send() owns interaction-
-  // driven emotions (thinking/happy/excited/shocked/sad-on-error); when the
-  // sheet is open the emotion is sticky from the last interaction. This
-  // effect only runs in the closed-sheet, non-loading rest state.
-  //
-  // Priority (highest first):
-  //   angry  — user dropped the ball yesterday (any habit missed)
-  //   sad    — workout streak broken (had history, now zero)
-  //   tired  — late in the day, today's protocol incomplete
-  //   happy  — today's protocol fully cleared
-  //   idle   — fresh state (morning / no signal)
-  useEffect(() => {
-    if (loading) return; // 'thinking' is owned by send() — don't fight it
-    if (open) return;    // sticky emotion while sheet is open
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-    const habits = storageService.getHabits() || [];
-    const hasHabits = habits.length > 0;
-
-    const allTodayDone =
-      hasHabits &&
-      habits.every(h => (h.completedDates || []).includes(todayStr));
-
-    const missedYesterday =
-      hasHabits &&
-      habits.some(h => !(h.completedDates || []).includes(yesterdayStr));
-
-    const streak = profile.currentStreak ?? 0;
-    const hasHistory = (profile.workoutsCompleted ?? 0) > 0;
-    const hour = new Date().getHours();
-    const lateAndNotDone =
-      hasHabits &&
-      hour >= 18 &&
-      !allTodayDone;
-
-    if (missedYesterday) {
-      setEmotion('angry');
-    } else if (streak === 0 && hasHistory) {
-      setEmotion('sad');
-    } else if (lateAndNotDone) {
-      setEmotion('tired');
-    } else if (allTodayDone) {
-      setEmotion('happy');
-    } else {
-      setEmotion('idle');
-    }
-  }, [profile, loading, open]);
-
-  // Auto-scroll to bottom on new message.
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, loading]);
-
-  const send = async () => {
-    const text = input.trim();
-    if (!text || loading) return;
-    const userMsg: ChatMsg = { id: `u_${Date.now()}`, role: 'user', text };
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    setLoading(true);
+  const send = useCallback(async (text: string) => {
+    const t = (text || '').trim();
+    if (!t || typing) return;
+    setDraft('');
     setError(null);
-    setEmotion('thinking');
+    setMessages(m => {
+      const next: ChatMsg[] = [...m, { from: 'user', text: t, time: formatTime() }];
+      setLastIdx(next.length - 1);
+      return next;
+    });
+    setTyping(true);
+
     try {
-      const reply = await aiService.chat(text);
-      const sysMsg: ChatMsg = { id: `s_${Date.now()}`, role: 'system', text: reply || '...' };
-      setMessages(prev => [...prev, sysMsg]);
-
-      // Heuristic emotion mapping from response text. Cheap; can be upgraded
-      // later by reading tool-call results directly from aiService.
-      const lower = (reply || '').toLowerCase();
-      if (/penalty|deducted|broken|punish/i.test(lower)) {
-        setEmotion('shocked');
-      } else if (/quest|level up|bonus|achievement|xp granted|reward/i.test(lower)) {
-        setEmotion('excited');
-      } else {
-        setEmotion('happy');
-      }
-    } catch (e: any) {
+      const reply = await aiService.chat(t);
+      // small intentional delay so the thinking state is visible
+      await new Promise(r => window.setTimeout(r, 380));
+      setMessages(m => {
+        const next: ChatMsg[] = [...m, {
+          from: 'system',
+          text: reply || 'Sinyal melemah. Coba ulangi pertanyaanmu, Hunter.',
+          time: formatTime(),
+        }];
+        setLastIdx(next.length - 1);
+        return next;
+      });
+    } catch (e) {
       console.error('[SystemChat] aiService.chat failed:', e);
-      setError(e?.message || 'The System is unreachable.');
-      setEmotion('sad');
+      setError((e as Error)?.message || 'The System is unreachable.');
     } finally {
-      setLoading(false);
+      setTyping(false);
     }
+  }, [typing]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void send(draft);
   };
 
-  const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      void send();
-    }
-  };
+  if (!mounted) return null;
 
-  // Compact level chip rendered in .sys-head cta slot.
-  const levelChip = (
-    <span className="sys-chat-chip">
-      <span className="sys-chat-chip-lv">Lv.{profile.level ?? 1}</span>
-      <span className="sys-chat-chip-sep">·</span>
-      <span>{(profile.totalXP ?? 0).toLocaleString()} XP</span>
-      {(profile.currentStreak ?? 0) > 0 && (
-        <>
-          <span className="sys-chat-chip-sep">·</span>
-          <span className="sys-chat-chip-flame">{profile.currentStreak}🔥</span>
-        </>
-      )}
-    </span>
-  );
+  const hasUserMsg = messages.some(m => m.from === 'user');
+  const headMood: BotMood = typing ? 'thinking' : 'happy';
 
   return (
-    <SystemNotification
-      open={open}
-      mode="modal"
-      tone="cyan"
-      closable
-      onClose={onClose}
-      title="THE SYSTEM"
-      subtitle="awaiting your transmission"
-      cta={levelChip}
-      className="sys-frame-chat"
-      footer={
-        <p className="sys-chat-footnote">
+    <div className={`sc-root ${show ? 'is-open' : ''}`}>
+      <div className="sc-backdrop" onClick={onClose} />
+      <div className="sc-panel">
+        {/* Corner brackets — inline brk-c spans (reference uses Brackets helper, our
+            CornerBracket component is a wrapper; the .sc-panel .brk-* CSS already
+            positions them, we just emit the bare spans). */}
+        <span className="brk-c brk-tl" style={{ width: 14, height: 14, top: -1, left: -1 }} aria-hidden="true" />
+        <span className="brk-c brk-tr" style={{ width: 14, height: 14, top: -1, right: -1 }} aria-hidden="true" />
+        <span className="brk-c brk-bl" style={{ width: 14, height: 14, bottom: -1, left: -1 }} aria-hidden="true" />
+        <span className="brk-c brk-br" style={{ width: 14, height: 14, bottom: -1, right: -1 }} aria-hidden="true" />
+
+        <div className="sc-handle" />
+
+        {/* Header */}
+        <div className="sc-head">
+          <div className="sc-head-ava">
+            <span className="sc-head-ava-halo" />
+            <BotFace mood={headMood} size={36} />
+          </div>
+          <div className="sc-head-info">
+            <div className="sc-head-title">
+              <span className="sc-bracket">[</span> SYSTEM <span className="sc-bracket">]</span>
+            </div>
+            <div className="sc-head-status">
+              <DotPulse tone="green" />
+              <span>ONLINE · v1.0 · LLAMA-3.3</span>
+            </div>
+          </div>
+          <button type="button" className="sc-close" onClick={onClose} aria-label="Tutup">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 2 L12 12 M12 2 L2 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Messages */}
+        <div className="sc-list" ref={listRef}>
+          <div className="sc-day">
+            <span className="sc-day-line" />
+            <span>{formatTodayHeader()}</span>
+            <span className="sc-day-line" />
+          </div>
+          {messages.map((m, i) => (
+            <MessageBubble key={i} msg={m} animateIn={i === lastIdx} />
+          ))}
+          {typing && <TypingIndicator />}
+          {error && (
+            <div className="sc-error">{error}</div>
+          )}
+        </div>
+
+        {/* Quick replies — only before user has sent anything */}
+        {!hasUserMsg && (
+          <div className="sc-quick">
+            {QUICK_REPLIES.map(q => (
+              <button
+                key={q}
+                type="button"
+                className="sc-quick-btn"
+                onClick={() => send(q)}
+                disabled={typing}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Input */}
+        <form className="sc-input" onSubmit={handleSubmit}>
+          <span className="sc-prompt">&gt;</span>
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Speak to the System…"
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            disabled={typing}
+          />
+          <button
+            type="submit"
+            className="sc-send"
+            disabled={!draft.trim() || typing}
+            aria-label="Kirim"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 11 L21 3 L13 21 L11 13 Z" />
+            </svg>
+          </button>
+        </form>
+
+        <div className="sc-foot">
           Powered by Llama 3.3 · The System may grant XP or apply penalties
-        </p>
-      }
-    >
-      {/* Messages list */}
-      <div ref={scrollRef} className="sys-chat-messages">
-        {messages.length === 0 && !loading && (
-          <div className="sys-chat-empty">
-            <SystemPet emotion={emotion} size="lg" className="mb-4" />
-            <p className="sys-chat-empty-title">The System is listening.</p>
-            <p className="sys-chat-empty-sub">
-              Report a missed session, request a quest, or ask for guidance.
-              The System can grant XP and apply penalties directly.
-            </p>
-          </div>
-        )}
-
-        {messages.map(m => (
-          <div key={m.id} className={`sys-chat-row ${m.role === 'user' ? 'is-user' : 'is-system'}`}>
-            <div className={`sys-chat-bubble ${m.role === 'user' ? 'is-user' : 'is-system'}`}>
-              {m.role === 'system' && (
-                <div className="sys-chat-bubble-label">The System</div>
-              )}
-              {m.text}
-            </div>
-          </div>
-        ))}
-
-        {loading && (
-          <div className="sys-chat-row is-system">
-            <div className="sys-chat-bubble is-system sys-chat-bubble-loading">
-              <Loader2 size={14} className="animate-spin" />
-              <span>The System is deliberating…</span>
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="sys-chat-error">{error}</div>
-        )}
+        </div>
       </div>
-
-      {/* Input bar */}
-      <div className="sys-chat-input">
-        <textarea
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKey}
-          placeholder="Speak to the System..."
-          rows={1}
-          className="sys-chat-textarea"
-        />
-        <button
-          type="button"
-          onClick={send}
-          disabled={!input.trim() || loading}
-          className="sys-chat-send"
-          aria-label="Send message to System"
-        >
-          {loading
-            ? <Loader2 size={16} className="animate-spin" />
-            : <Send size={16} />}
-        </button>
-      </div>
-    </SystemNotification>
+    </div>
   );
 };
