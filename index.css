@@ -1454,6 +1454,60 @@ input, select, textarea {
     inset 0 0 4px rgba(255, 255, 255, 0.7);
 }
 
+/* ─── Verdict modifier (.sys-body--verdict) — Dashboard THE SYSTEM card ─── */
+/* Clamps long oracle pronouncements to 4 lines + adds italic first paragraph
+   + a soft cyan drop cap. Toggles to .is-expanded to reveal full text.
+   Scoped — does NOT affect other call-sites of .sys-body. */
+.sys-body--verdict {
+  font-style: italic;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  /* line-clamp is line-count, so a tighter line-height keeps the block
+     vertically balanced regardless of font-size scale. */
+  line-height: 1.6;
+}
+.sys-body--verdict.is-expanded {
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  display: block;
+}
+.sys-body--verdict::first-letter {
+  font-size: 1.5em;
+  color: var(--sys-cyan-3);
+  float: left;
+  line-height: 1;
+  margin-right: 4px;
+  padding-top: 2px;
+  text-shadow: 0 0 8px rgba(165, 234, 248, 0.55);
+  font-style: normal;
+}
+/* "Selengkapnya ↓" / "Lebih sedikit ↑" toggle pill below the verdict. */
+.sys-verdict-toggle {
+  position: relative;
+  z-index: 2;
+  display: inline-block;
+  margin-top: 10px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid rgba(125, 217, 245, 0.35);
+  border-radius: 999px;
+  color: var(--sys-cyan-1);
+  font-family: var(--font-sans, 'Inter', sans-serif);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.sys-verdict-toggle:hover {
+  background: rgba(125, 217, 245, 0.10);
+  color: #FFFFFF;
+  border-color: rgba(125, 217, 245, 0.6);
+}
+
 /* ─── Responsive — keeps ornaments clean at 380px ─── */
 @media (max-width: 420px) {
   .sys-frame { padding: 26px 20px 24px; }

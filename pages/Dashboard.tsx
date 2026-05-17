@@ -161,6 +161,10 @@ export const Dashboard: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [newHabitName, setNewHabitName] = useState('');
   const [systemMessage, setSystemMessage] = useState<string>(storageService.getLastSystemMessage());
+  // Long verdicts (3-5 paragraphs) collapse to 4 lines until user expands.
+  // Scoped to this card only — re-collapses whenever the verdict text changes.
+  const [verdictExpanded, setVerdictExpanded] = useState(false);
+  useEffect(() => { setVerdictExpanded(false); }, [systemMessage]);
 
   // Muscle Recovery 3D flip state (Q4: 600ms cubic ease-out)
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
@@ -393,8 +397,10 @@ export const Dashboard: React.FC = () => {
       </section>
 
       {/* ── 2. SYSTEM VERDICT (inline .sys-frame) ──
-          title + subtitle now come from the component's own .sys-head;
-          body is just the verdict text. */}
+          title + subtitle now come from the component's own .sys-head.
+          Body uses the .sys-body--verdict modifier: italic first paragraph,
+          drop cap, and a 4-line clamp with "Selengkapnya ↓" / "Lebih sedikit ↑"
+          toggle so long oracle responses don't dominate the screen. */}
       {systemMessage && (
         <div className="reveal" style={{ '--reveal-i': 1 } as React.CSSProperties}>
           <SystemNotification
@@ -405,9 +411,18 @@ export const Dashboard: React.FC = () => {
             subtitle="latest verdict"
             onClose={() => { storageService.saveLastSystemMessage(''); setSystemMessage(''); }}
           >
-            <p className="whitespace-pre-line glitch-in" style={{ margin: 0 }}>
-              {systemMessage}
-            </p>
+            <div className={`sys-body--verdict ${verdictExpanded ? 'is-expanded' : ''}`}>
+              <p className="whitespace-pre-line glitch-in" style={{ margin: 0 }}>
+                {systemMessage}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="sys-verdict-toggle"
+              onClick={() => setVerdictExpanded(v => !v)}
+            >
+              {verdictExpanded ? 'Lebih sedikit ↑' : 'Selengkapnya ↓'}
+            </button>
           </SystemNotification>
         </div>
       )}
