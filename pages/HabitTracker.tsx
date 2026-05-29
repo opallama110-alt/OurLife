@@ -6,10 +6,9 @@ import { computeFatigue } from '../services/fatigueService';
 import { achievementService } from '../services/achievementService';
 import { useAchievements } from '../context/AchievementContext';
 import {
-  Plus, Trash2, Trophy, Zap, Target, Loader2, Flame, Clock, Shield, Check,
+  Plus, Trash2, Trophy, Zap, Target, Loader2, Flame, Clock, Shield, Check, Sparkles,
 } from 'lucide-react';
 import { NewHabitModal, NewHabitPayload } from '../components/habits/NewHabitModal';
-import { SystemNotification } from '../components/hud';
 
 // ── Streak helpers (preserved verbatim from prior implementation) ──
 const calculateStreak = (completedDates: string[] | undefined | null): number => {
@@ -52,10 +51,62 @@ const calculateLongestStreak = (completedDates: string[] | undefined | null): nu
   return longest;
 };
 
+// ── Trailing-7-day window helpers ──
+// Single-letter weekday initials (Sun…Sat) for the .h-week grid. English
+// initials collide less than Indonesian ones and match the design reference.
+const WEEKDAY_INITIAL = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/**
+ * The 7 day-cells shown on every habit card: today−6 … today. ISO dates are
+ * built the same UTC-day way `completedDates` is stored (toISOString) so the
+ * membership checks line up exactly. Cheap; identical across all habits.
+ */
+const buildWeekCells = (todayISO: string) =>
+  Array.from({ length: 7 }, (_, k) => {
+    const d = new Date(Date.now() - (6 - k) * 86400000);
+    const iso = d.toISOString().split('T')[0];
+    return { iso, label: WEEKDAY_INITIAL[d.getUTCDay()], isToday: iso === todayISO };
+  });
+
+// ── DayCell — one cell of the weekly grid, with its own tap ripple ──
+const DayCell: React.FC<{
+  label: string;
+  checked: boolean;
+  isToday: boolean;
+  onToggle: () => void;
+  animDelay?: number;
+}> = ({ label, checked, isToday, onToggle, animDelay = 0 }) => {
+  const [ripple, setRipple] = useState(false);
+  const handle = () => {
+    setRipple(true);
+    window.setTimeout(() => setRipple(false), 600);
+    onToggle();
+  };
+  return (
+    <button
+      type="button"
+      className={`h-day ${checked ? 'is-on' : ''} ${isToday ? 'is-today' : ''}`}
+      onClick={handle}
+      style={{ animationDelay: `${animDelay}ms` }}
+      aria-pressed={checked}
+      aria-label={`${label}${isToday ? ' (hari ini)' : ''}`}
+    >
+      <span className="h-day-label">{label}</span>
+      <span className="h-day-box">
+        {checked && (
+          <svg className="h-day-check" width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M5 12.5 L10 17.5 L19 8.5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+        {ripple && <span className="h-day-ripple" />}
+      </span>
+    </button>
+  );
+};
+
 // ═══════════════════════════════════════════════════════════════
-// DailyProtocolEvaluator — wrapped in .sys-frame (inline mode).
-// Uses the SystemNotification cta slot for "Evaluate Now" so the
-// pill sits right-edge of .sys-head per the canonical reference.
+// DailyProtocolEvaluator — restyled to the .h-system reference card
+// (no SystemNotification wrapper). AI evaluation logic is unchanged.
 // ═══════════════════════════════════════════════════════════════
 const DailyProtocolEvaluator: React.FC<{
   habits: Habit[];
@@ -133,55 +184,53 @@ const DailyProtocolEvaluator: React.FC<{
     }
   };
 
-  const evaluateCta = (
-    <button type="button" className="sys-cta" onClick={runEvaluation} disabled={loading}>
-      {loading
-        ? <><Loader2 size={12} className="animate-spin" /><span>Deliberating</span></>
-        : <><span className="sys-cta-bolt">⚡</span><span>{verdict ? 'Re-evaluate' : 'Evaluate Now'}</span></>}
-    </button>
-  );
-
   return (
-    <div className="reveal" style={{ ['--reveal-i' as string]: 3 }}>
-      <SystemNotification
-        mode="inline"
-        tone="cyan"
-        closable={false}
-        title="Daily Protocol"
-        subtitle="system ai evaluation — habits × gym × recovery"
-        cta={evaluateCta}
-      >
-        {!verdict && !loading && !error && (
-          <p style={{ margin: 0 }}>
-            Ketuk <strong style={{ color: 'var(--sys-cyan-3)' }}>Evaluate Now</strong> untuk menerima
-            verdict yang dipersonalisasi — System akan menganalisa penyelesaian habit, performa gym
-            terakhir, streak saat ini, dan fatigue otot, lalu memberikan langkah berikutnya.
-          </p>
-        )}
-        {error && (
-          <div className="sys-chat-error">{error}</div>
-        )}
-        {verdict && !loading && (
-          <div className="h-system-verdict">
-            <div className="h-system-verdict-label">THE SYSTEM</div>
-            <div className="h-system-verdict-body">{verdict}</div>
-            {evaluatedAt && (
-              <div className="h-system-verdict-meta">
-                Verdict at {new Date(evaluatedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            )}
-          </div>
-        )}
-      </SystemNotification>
-    </div>
+    <article className="h-system reveal" style={{ ['--reveal-i' as string]: 3 }}>
+      <div className="h-system-glow" />
+      <div className="h-system-head">
+        <div className="h-system-icon">
+          <Sparkles size={14} />
+          <span className="h-system-icon-halo" />
+        </div>
+        <div className="h-system-text">
+          <div className="hud-label">DAILY PROTOCOL</div>
+          <div className="h-system-sub">system ai evaluation — habits × gym × recovery</div>
+        </div>
+        <button type="button" className="h-system-eval" onClick={runEvaluation} disabled={loading}>
+          {loading
+            ? <><Loader2 size={12} className="animate-spin" /><span>Deliberating</span></>
+            : <><Zap size={12} /><span>{verdict ? 'Re-evaluate' : 'Evaluate Now'}</span></>}
+        </button>
+      </div>
+
+      {!verdict && !loading && !error && (
+        <p className="h-system-body">
+          Ketuk <strong className="fz-orange">Evaluate Now</strong> untuk menerima verdict yang
+          dipersonalisasi — System akan menganalisa penyelesaian habit, performa gym terakhir,
+          streak saat ini, dan fatigue otot, lalu memberikan langkah berikutnya.
+        </p>
+      )}
+      {error && <div className="sys-chat-error">{error}</div>}
+      {verdict && !loading && (
+        <div className="h-system-verdict">
+          <div className="h-system-verdict-label">THE SYSTEM</div>
+          <div className="h-system-verdict-body">{verdict}</div>
+          {evaluatedAt && (
+            <div className="h-system-verdict-meta">
+              Verdict at {new Date(evaluatedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+            </div>
+          )}
+        </div>
+      )}
+    </article>
   );
 };
 
 // ═══════════════════════════════════════════════════════════════
 // HabitTracker — main screen
-// Every habit card is wrapped in <SystemNotification mode="inline">
-// per user spec ("kayanya gw mau ganti kotak sama dengan kotak pesan").
-// The body holds the weekly 7-day grid + optional sub-task checklist.
+// Each habit renders as an .h-card (design-reference look): today check
+// circle + 7-day .h-week grid + flame streak + completions badge + trash.
+// Optional sub-task checklist renders below the week when present.
 // ═══════════════════════════════════════════════════════════════
 export const HabitTracker: React.FC = () => {
   const { addUnlocks } = useAchievements();
@@ -199,6 +248,7 @@ export const HabitTracker: React.FC = () => {
   }, []);
 
   const today = new Date().toISOString().split('T')[0];
+  const weekCells = buildWeekCells(today);
   const completedToday = habits.filter(h => h.completedDates?.includes(today))?.length;
   const totalHabits = habits?.length;
   const percentage = totalHabits > 0 ? Math.round((completedToday / totalHabits) * 100) : 0;
@@ -355,7 +405,7 @@ export const HabitTracker: React.FC = () => {
         </div>
       </div>
 
-      {/* Daily Protocol (System AI) — sys-frame inline */}
+      {/* Daily Protocol (System AI) — .h-system reference card */}
       <DailyProtocolEvaluator
         habits={habits}
         completedToday={completedToday}
@@ -374,7 +424,7 @@ export const HabitTracker: React.FC = () => {
         </div>
       )}
 
-      {/* Habit cards — every habit wraps in .sys-frame */}
+      {/* Habit cards — design-reference .h-card with weekly grid */}
       <div className="h-list">
         {habits.map((h, idx) => {
           const isDoneToday = h.completedDates?.includes(today);
@@ -385,111 +435,116 @@ export const HabitTracker: React.FC = () => {
             : 0;
           const subTotal = hasSubTasks ? (h.subTasks || []).length : 0;
 
-          // Subtitle: streak + (sub-task progress OR cue OR frequency hint).
-          const subtitleBits = [
-            `streak ${h.streak} hari`,
-          ];
-          if (hasSubTasks) subtitleBits.push(`${subDone}/${subTotal} sub-task`);
-          else if (h.cue) subtitleBits.push(h.cue);
-          const subtitleText = subtitleBits.join(' · ');
-
-          // CTA: delete button as right-edge .sys-head slot.
-          const deleteCta = (
-            <button
-              type="button"
-              className="h-card-trash"
-              onClick={(e) => deleteHabit(e, h.id)}
-              aria-label="Hapus habit"
-            >
-              <Trash2 size={12} />
-            </button>
-          );
-
           return (
-            <div key={h.id} className="reveal" style={{ ['--reveal-i' as string]: 5 + idx }}>
-              <SystemNotification
-                mode="inline"
-                tone={isDoneToday ? 'gold' : 'cyan'}
-                closable={false}
-                title={h.name}
-                subtitle={subtitleText}
-                cta={deleteCta}
-                className="sys-frame-habit"
-              >
-                {/* TODAY-ONLY big check — replaces the 7-day grid per user
-                    feedback ("kayang terlalu rapet terus kayanya ceklisnya
-                    untuk hari itu aja"). For habits WITH sub-tasks, this
-                    is a manual override that marks the whole day done
-                    without ticking the individual sub-tasks (they remain
-                    untouched so the user's sub-task history is preserved). */}
+            <article
+              key={h.id}
+              className={`h-card reveal h-card-cyan ${isDoneToday ? 'is-done' : ''}`}
+              style={{ ['--reveal-i' as string]: 5 + idx }}
+            >
+              <div className="h-card-top">
+                {/* Top-left circle: quick-toggle TODAY (mirrors the last
+                    day-cell). For sub-task habits it's a manual override
+                    that marks the whole day done without ticking individual
+                    sub-tasks (their history stays intact). */}
                 <button
                   type="button"
-                  className={`h-today ${isDoneToday ? 'is-on' : ''}`}
+                  className="h-card-check"
                   onClick={() => togglePerDay(h.id, today)}
                   aria-pressed={isDoneToday}
-                  aria-label={isDoneToday ? 'Batalkan tanda selesai hari ini' : 'Tandai selesai hari ini'}
+                  aria-label={isDoneToday ? 'Batalkan selesai hari ini' : 'Tandai selesai hari ini'}
                 >
-                  <span className={`h-today-circle ${isDoneToday ? 'is-on' : ''}`}>
-                    {isDoneToday && <Check size={28} strokeWidth={2.6} />}
-                  </span>
-                  <span className="h-today-label">
-                    {isDoneToday ? '✓ Selesai Hari Ini' : 'Tandai Selesai Hari Ini'}
+                  <span className={`h-card-check-circle ${isDoneToday ? 'is-on' : ''}`}>
+                    {isDoneToday && <Check size={14} strokeWidth={2.8} />}
                   </span>
                 </button>
 
-                {/* TODO (Tier 6 — defer): dashboard grafik perkembangan
-                    habit (per user: "nanti kalo udah di cheklist hari itu
-                    nanti ada dashborad grafik habits nya kaya perkembangannya").
-                    Likely surface: weekly + 30-day completion sparkline,
-                    sub-task heatmap, streak velocity chart. Keep
-                    completedDates + completedSubTasks as the source of
-                    truth — no schema change needed for the dashboard. */}
+                <h3 className={`h-card-title ${isDoneToday ? 'is-done' : ''}`}>{h.name}</h3>
 
-                {/* Sub-task checklist — only when defined */}
-                {hasSubTasks && (
-                  <div className="h-subtasks">
-                    <div className="h-subtasks-head">
-                      <Flame size={11} className="h-subtasks-flame" />
-                      <span>SUB-TASK HARI INI</span>
-                      <span className="h-subtasks-count">{subDone}/{subTotal}</span>
-                    </div>
-                    <ul className="h-subtask-list">
-                      {(h.subTasks || []).map(st => {
-                        const checked = todaysSubs.has(st.id);
-                        return (
-                          <li key={st.id}>
-                            <button
-                              type="button"
-                              className={`h-subtask ${checked ? 'is-on' : ''}`}
-                              onClick={() => toggleSubTask(h.id, st.id)}
-                              aria-pressed={checked}
-                            >
-                              <span className={`h-subtask-box ${checked ? 'is-on' : ''}`}>
-                                {checked && <Check size={12} />}
+                <div className="h-card-meta">
+                  <span className="h-card-streak" title="Streak saat ini">
+                    <span className="h-card-flame"><Flame size={11} /></span>
+                    <span>{h.streak}</span>
+                  </span>
+                  <span className="h-card-xp" title="Total selesai sepanjang waktu">
+                    <Trophy size={12} />
+                    <span>{h.completedDates?.length || 0}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="h-card-trash"
+                    onClick={(e) => deleteHabit(e, h.id)}
+                    aria-label="Hapus habit"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+
+              {/* 7-day week grid (today−6 … today). Each cell toggles that
+                  date's completion via togglePerDay → completedDates + streak. */}
+              <div className="h-week">
+                {weekCells.map((cell, i) => (
+                  <DayCell
+                    key={cell.iso}
+                    label={cell.label}
+                    checked={!!h.completedDates?.includes(cell.iso)}
+                    isToday={cell.isToday}
+                    onToggle={() => togglePerDay(h.id, cell.iso)}
+                    animDelay={50 * i}
+                  />
+                ))}
+              </div>
+
+              {/* TODO (Tier 6 — defer): dashboard grafik perkembangan habit
+                  (weekly + 30-day completion sparkline, sub-task heatmap,
+                  streak velocity). completedDates + completedSubTasks stay the
+                  source of truth — no schema change needed for the dashboard. */}
+
+              {/* Sub-task checklist — only when defined. Auto-completes the
+                  day once every sub-task is checked (see toggleSubTask). */}
+              {hasSubTasks && (
+                <div className="h-subtasks">
+                  <div className="h-subtasks-head">
+                    <Flame size={11} className="h-subtasks-flame" />
+                    <span>SUB-TASK HARI INI</span>
+                    <span className="h-subtasks-count">{subDone}/{subTotal}</span>
+                  </div>
+                  <ul className="h-subtask-list">
+                    {(h.subTasks || []).map(st => {
+                      const checked = todaysSubs.has(st.id);
+                      return (
+                        <li key={st.id}>
+                          <button
+                            type="button"
+                            className={`h-subtask ${checked ? 'is-on' : ''}`}
+                            onClick={() => toggleSubTask(h.id, st.id)}
+                            aria-pressed={checked}
+                          >
+                            <span className={`h-subtask-box ${checked ? 'is-on' : ''}`}>
+                              {checked && <Check size={12} />}
+                            </span>
+                            <span className="h-subtask-label">{st.label}</span>
+                            {st.target !== undefined && (
+                              <span className="h-subtask-target">
+                                [{checked ? st.target : 0}/{st.target}]
                               </span>
-                              <span className="h-subtask-label">{st.label}</span>
-                              {st.target !== undefined && (
-                                <span className="h-subtask-target">
-                                  [{checked ? st.target : 0}/{st.target}]
-                                </span>
-                              )}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                )}
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
 
-                {/* Quick toggle for single-task habits: row of optional cue + clock icon */}
-                {!hasSubTasks && h.cue && (
-                  <div className="h-cue-row">
-                    <Clock size={11} className="h-cue-ico" />
-                    <span>{h.cue}</span>
-                  </div>
-                )}
-              </SystemNotification>
-            </div>
+              {/* Cue row for single-task habits with a trigger note. */}
+              {!hasSubTasks && h.cue && (
+                <div className="h-cue-row">
+                  <Clock size={11} className="h-cue-ico" />
+                  <span>{h.cue}</span>
+                </div>
+              )}
+            </article>
           );
         })}
 
