@@ -6,7 +6,7 @@ import { storageService } from '../services/storageService';
 import { exerciseService } from '../services/exerciseService';
 import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 import { WORKOUT_PACKAGES, WorkoutRoutine } from '../data/workoutPackages';
-import { auth, db } from '../firebase-config';
+import { auth, db } from '../../firebase-config';
 import { doc, getDoc } from 'firebase/firestore';
 import {
   getLevelFromXP, getRankForLevel, getXPProgress, calculateWorkoutXP,

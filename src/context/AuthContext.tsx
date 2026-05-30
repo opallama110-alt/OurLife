@@ -15,7 +15,7 @@ import {
 } from 'firebase/auth';
 import { ref, remove } from 'firebase/database';
 import { deleteDoc, doc } from 'firebase/firestore';
-import { auth, rtdb, db } from '../firebase-config';
+import { auth, rtdb, db } from '../../firebase-config';
 import { storageService } from '../services/storageService';
 
 interface AuthContextType {

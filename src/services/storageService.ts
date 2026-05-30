@@ -9,7 +9,7 @@ import {
   getTitleForLevel,
 } from './gamificationService';
 import { calculateAge } from '../utils/dateUtils';
-import { rtdb, auth, db } from '../firebase-config';
+import { rtdb, auth, db } from '../../firebase-config';
 import { ref, get, set, update, onValue, off } from 'firebase/database';
 import { collection, query as firestoreQuery, orderBy, limit, getDocs, onSnapshot, doc, setDoc } from 'firebase/firestore';
 

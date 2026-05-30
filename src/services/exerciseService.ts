@@ -1,4 +1,4 @@
-import { db } from '../firebase-config';
+import { db } from '../../firebase-config';
 import { collection, query, where, getDocs, limit, doc, getDoc } from 'firebase/firestore';
 import { FirestoreExercise } from '../types';
 

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { UserState, ExperienceLevel, IdealDuration, FocusArea, MuscleGroup, Environment } from '../types';
 import { storageService } from '../services/storageService';
 import { doc, setDoc } from 'firebase/firestore';
-import { db, auth } from '../firebase-config';
+import { db, auth } from '../../firebase-config';
 import {
     ArrowRight, User, Ruler, Weight, Sparkles,
     Sprout, Flame, Crown,

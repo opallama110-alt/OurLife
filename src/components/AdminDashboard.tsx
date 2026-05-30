@@ -8,7 +8,7 @@ import { GymProfile, WorkoutLog, MuscleGroup } from '../types';
 import { calculateStreak } from '../services/gamificationService';
 import { calculateAge } from '../utils/dateUtils';
 import { ref, get, remove } from 'firebase/database';
-import { rtdb } from '../firebase-config';
+import { rtdb } from '../../firebase-config';
 
 export const AdminDashboard: React.FC = () => {
     const { user, loading: authLoading } = useAuth();

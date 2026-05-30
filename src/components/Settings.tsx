@@ -10,7 +10,7 @@ import {
   Type, Download, Database, Info, FileText, HelpCircle, MessageCircle,
   Sparkles, Clock, ChevronRight, Smartphone,
 } from 'lucide-react';
-import { db, storage } from '../firebase-config';
+import { db, storage } from '../../firebase-config';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
 import { Profile } from '../pages/Profile';
