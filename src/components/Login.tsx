@@ -45,18 +45,7 @@ const AuthCornerFiligree: React.FC = () => (
 const AuthLogo: React.FC<{ subtitle: string }> = ({ subtitle }) => (
   <div className="au-logo">
     <div className="au-logo-mark">
-      <svg viewBox="0 0 28 28" width="40" height="40" fill="none">
-        <path d="M4 18 C 4 12, 10 6, 14 14 C 18 22, 24 16, 24 10"
-          stroke="url(#au-grad)" strokeWidth="2.6" strokeLinecap="round" fill="none" />
-        <path d="M21.5 7 L24 10 L21 12" stroke="url(#au-grad)" strokeWidth="2.6"
-          strokeLinecap="round" strokeLinejoin="round" fill="none" />
-        <defs>
-          <linearGradient id="au-grad" x1="0" y1="0" x2="28" y2="28">
-            <stop offset="0%" stopColor="#67E8F9" />
-            <stop offset="100%" stopColor="#3B82F6" />
-          </linearGradient>
-        </defs>
-      </svg>
+      <img src="/ourlife-logo.png" alt="OurLife" />
     </div>
     <div className="au-logo-name">OurLife</div>
     <div className="au-logo-tag">{subtitle}</div>
