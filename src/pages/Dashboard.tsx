@@ -430,7 +430,7 @@ export const Dashboard: React.FC = () => {
       {/* ── 3. LAST SESSION ── */}
       <div className="reveal" style={{ '--reveal-i': 2 } as React.CSSProperties}>
       <CornerBracket
-        className="card card-cyan d-card-last"
+        className="card card-cyan"
         tone="cyan"
         size={9}
         inset={4}

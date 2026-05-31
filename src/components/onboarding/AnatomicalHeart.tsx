@@ -144,7 +144,7 @@ export const AnatomicalHeart: React.FC<Props> = ({ size = 180, tier = 5 }) => {
         <ellipse cx="70" cy="92" rx={50 + t * 4} ry={54 + t * 4}
           fill={`url(#ah-bloom-${t})`} filter={`url(#ah-blur-${t})`} opacity={0.35 + t * 0.1} />
 
-        <g className="ah-heart" filter={`url(#ah-glow-${t})`}>
+        <g filter={`url(#ah-glow-${t})`}>
           {t >= 2 && (
             <path
               d="M 60 38 Q 56 24, 64 18 Q 74 10, 78 22 Q 80 32, 76 42 Q 80 36, 86 32 Q 96 30, 96 42 Q 96 50, 88 54 L 86 58"
