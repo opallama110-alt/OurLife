@@ -119,7 +119,7 @@ git push origin feature/dob-system
 | `.gitignore` | Updated dengan pattern lengkap |
 | `firebase-config.js`, `firebase.json`, `firestore.rules`, `database.rules.json`, `firestore.indexes.json` | Firebase config |
 | `package.json`, `package-lock.json`, `vite.config.ts`, `tsconfig.json`, `index.html` | Build config |
-| `App.tsx`, `index.tsx`, `index.css`, `types.ts` | App entry + global |
+| `src/` (App.tsx, index.tsx, index.css, types.ts + components/pages/services/context/hooks/utils/constants/config/data) | All frontend source — moved under `src/` in Fase 2 (commit 49e787d); no longer at root |
 
 ### 3.4 Build & bundle
 - `npm run build` last run: green ✅
@@ -184,11 +184,11 @@ Quick wins yang tetap valid:
 Identified during cleanup audit. NOT blocker, NOT urgent. Buat eksekusi terpisah saat ada bandwidth.
 
 ### 5.1 Folder structure consistency
-- `index.tsx` di root — Vite convention biasa `main.tsx`. Rename kalau mau strict alignment, tapi works as-is.
-- `constants/` folder isi cuma 1 file (`muscleMapping.ts`). Mungkin merge ke `config/` (yang juga isi 1 file: `constants.ts`). Two folders dengan 1 file masing-masing = confusing.
-- `data/` folder isi cuma 1 file (`workoutPackages.ts`). Mungkin pindah ke `config/data/` atau langsung ke `config/`.
-- `hooks/` folder isi cuma 1 file (`usePWAInstall.ts`). React convention valid, leave alone.
-- `firebase-config.js` di root — works, but bisa pindah ke `services/firebase.ts` untuk konsistensi.
+- `src/index.tsx` — Vite convention biasa `main.tsx`. Rename kalau mau strict alignment, tapi works as-is.
+- `src/constants/` folder isi cuma 1 file (`muscleMapping.ts`). Mungkin merge ke `src/config/` (yang juga isi 1 file: `constants.ts`). Two folders dengan 1 file masing-masing = confusing.
+- `src/data/` folder isi cuma 1 file (`workoutPackages.ts`). Mungkin pindah ke `src/config/data/` atau langsung ke `src/config/`.
+- `src/hooks/` folder isi cuma 1 file (`usePWAInstall.ts`). React convention valid, leave alone.
+- `firebase-config.js` **tetap di root** setelah Fase 2 (di-import 8 file via `../../firebase-config`) — keputusan deliberate, JANGAN pindah ke `src/`.
 
 **Reason flag:** Each refactor butuh import-path updates di banyak file. Single commit per refactor. Easy to verify dengan `npm run build` after move.
 

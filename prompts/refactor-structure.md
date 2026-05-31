@@ -67,5 +67,13 @@ Acceptance Fase 2:
 - [ ] `functions/` (backend) TIDAK tersentuh.
 - [ ] Tiap layar dites manual jalan normal.
 - [ ] Update path di `CLAUDE.md`, `HANDOFF.md`, `PROMPT_CLAUDE_CODE.md`, dan `prompts/ui-flow-polish.md` (path onboarding/login berubah ke `src/components/...`).
+- [ ] Saat update struktur folder di docs: hapus referensi `SystemPet.tsx` + `FatigueGauge.tsx` (sudah dihapus commit be58731) dari `README.md` §Project Structure DAN `PROMPT_CLAUDE_CODE.md` §7 + §3.2. Keduanya masih nyebut file mati itu.
 
-> CATATAN: Fase 2 mengubah hampir semua path di dokumen prompt yang lain. Kalau onboarding (ui-flow-polish Section 6) belum dikerjakan saat Fase 2 jalan, update path-nya dulu di md sebelum kasih ke CC.
+### 7b. Tambahkan catatan arsitektur ke docs (saat doc-pass Fase 2)
+
+User sempat nanya kenapa struktur OurLife beda dari template "fullstack MERN/PERN" (frontend + backend Express + database SQL). Tambahkan blok singkat ini ke `README.md` (di bawah §Project Structure) DAN `PROMPT_CLAUDE_CODE.md` §7, biar nggak kepikiran lagi tiap lihat diagram fullstack generik:
+
+> **Kenapa nggak ada folder `backend/` + `database/`?**
+> OurLife pakai arsitektur **React + Firebase (BaaS)**, bukan MERN/PERN. Backend = Firebase (Auth + Firestore + RTDB), di-manage Firebase — jadi NGGAK ada Express server, folder `controllers/`, `models/`, `routes/`, atau `schema.sql` yang ditulis manual. Database = Firestore (NoSQL), no SQL schema. Yang paling deket ke "backend folder" = `functions/` (Cloud Functions) — tapi currently idle (Groq dipanggil dari client, deferred ke Tier 6). Template fullstack generik (backend Express + SQL terpisah) TIDAK berlaku di sini; jangan bikin folder backend manual — itu cuma bikin folder kosong yang misleading.
+
+Struktur target yang BENAR untuk OurLife (post-Fase-2): cuma `src/` (frontend) + `functions/` (Firebase backend) + `public/` + config root. Tidak ada `backend/` Express atau `database/` SQL.

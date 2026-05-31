@@ -118,19 +118,31 @@ npm run build
 
 ```
 OurLife/
-├── components/          ← reusable UI (StatusCard, SystemPet, AnatomyViewer, ...)
-├── pages/               ← navigation-level (Dashboard, Profile, Gym, Habits, ...)
-├── context/             ← AuthContext, AchievementContext
-├── services/            ← business logic (storageService, gamification, attribute, ...)
-├── utils/               ← dateUtils
-├── config/              ← constants, muscleMapping
-├── public/              ← static assets (exercise images, logos)
-├── types.ts             ← TypeScript interfaces
-├── App.tsx              ← router + providers
-├── index.css            ← global CSS + keyframes
-├── PROMPT_CLAUDE_CODE.md← project bible (architecture, roadmap, conventions)
-└── CLAUDE.md            ← Claude Code auto-load pointer
+├── src/                  ← all frontend source
+│   ├── components/       ← reusable UI (StatusCard, SystemBot, AnatomyViewer, ...)
+│   ├── pages/            ← navigation-level (Dashboard, Profile, Gym, Habits, ...)
+│   ├── context/          ← AuthContext, AchievementContext
+│   ├── services/         ← business logic (storageService, gamification, attribute, ...)
+│   ├── hooks/            ← usePWAInstall
+│   ├── utils/            ← dateUtils, bmi
+│   ├── constants/        ← muscleMapping
+│   ├── config/           ← constants
+│   ├── data/             ← workoutPackages
+│   ├── types.ts          ← TypeScript interfaces
+│   ├── App.tsx           ← router + providers
+│   ├── index.tsx         ← entry
+│   └── index.css         ← global CSS + keyframes
+├── functions/            ← Firebase Cloud Functions (backend; idle — see note below)
+├── public/               ← static assets (exercise images, logos)
+├── firebase-config.js    ← Firebase SDK init (reads VITE_* from .env.local)
+├── index.html            ← Vite entry (loads /src/index.tsx + /src/index.css)
+├── PROMPT_CLAUDE_CODE.md ← project bible (architecture, roadmap, conventions)
+└── CLAUDE.md             ← Claude Code auto-load pointer
 ```
+
+### Kenapa nggak ada folder `backend/` + `database/`?
+
+OurLife pakai arsitektur **React + Firebase (BaaS)**, bukan MERN/PERN. Backend = Firebase (Auth + Firestore + RTDB), di-manage Firebase — jadi **nggak ada** Express server, folder `controllers/`/`models/`/`routes/`, atau `schema.sql` yang ditulis manual. Database = Firestore (NoSQL), no SQL schema. Yang paling dekat ke "backend folder" = `functions/` (Cloud Functions) — tapi currently idle (Groq dipanggil dari client, deferred ke Tier 6). Template fullstack generik (backend Express + SQL terpisah) **tidak berlaku** di sini; jangan bikin folder backend manual — itu cuma bikin folder kosong yang misleading.
 
 ---
 

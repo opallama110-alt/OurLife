@@ -68,7 +68,7 @@ Halo Claude. Kamu berperan sebagai **Senior Full-Stack Engineer + Product-Minded
 - **Step 1:** `StatusWindowModal.tsx` deleted, `StatusCard.tsx` created.
 - **Step 2:** Recovery list emerald glow de-escalated. Status chips (✓ Ready / ⏳ Recovering) added below anatomy viewer.
 - **Step 3:** Anatomy SVG drop-shadow filters stripped. EXHAUSTED state pakai translucent red fill. Massive perf win di muscle picker.
-- **Step 4:** `components/SystemPet.tsx` (round blob, 7 emotion, 2 size, animate-pet-float). Replace static Sparkles avatar di SystemChat.
+- **Step 4:** Pet avatar (round blob, emotion states) — originally `components/SystemPet.tsx`, since superseded by `src/components/hud/SystemBot.tsx` (Phase A.5 FAB). Replace static Sparkles avatar di SystemChat.
 - **Step 5a:** StatusCard moved into Stats Grid (3-col on desktop).
 - **Step 5b:** `Settings.tsx:122` reads `displayName` from `storageService.getUserState().name` first (UserState canonical).
 
@@ -128,13 +128,13 @@ OurLife pakai **single-page application** dengan client-side routing (`react-rou
 
 ```
 ┌─────────────────────────────────────┐
-│  PAGES (pages/*.tsx)                │  ← Dashboard, Profile, Gym, Habits, Settings, Leaderboard, Admin
+│  PAGES (src/pages/*.tsx)            │  ← Dashboard, Profile, Gym, Habits, Settings, Leaderboard, Admin
 ├─────────────────────────────────────┤
-│  COMPONENTS (components/*.tsx)      │  ← StatusCard, SystemPet, AnatomyViewer, etc.
+│  COMPONENTS (src/components/*.tsx)  │  ← StatusCard, SystemBot, AnatomyViewer, etc.
 ├─────────────────────────────────────┤
-│  CONTEXT (context/*.tsx)            │  ← AuthContext, AchievementContext
+│  CONTEXT (src/context/*.tsx)        │  ← AuthContext, AchievementContext
 ├─────────────────────────────────────┤
-│  SERVICES (services/*.ts)           │  ← business logic + I/O abstraction
+│  SERVICES (src/services/*.ts)       │  ← business logic + I/O abstraction
 │  - storageService     : source of truth, cache + Firebase sync
 │  - gamificationService: XP, levels, ranks, achievements eval
 │  - attributeService   : Power Signature stats (STR/VIT/AGI/PER/INT)
@@ -145,7 +145,7 @@ OurLife pakai **single-page application** dengan client-side routing (`react-rou
 │  - notificationService: FCM (currently stub)
 │  - migrationService   : schema migrations on boot
 ├─────────────────────────────────────┤
-│  FIREBASE (services/firebase.ts)    │  ← thin SDK config
+│  FIREBASE (firebase-config.js)      │  ← SDK init at repo ROOT (not in src/)
 └─────────────────────────────────────┘
 ```
 
@@ -238,78 +238,52 @@ Komponen TIDAK boleh akses Firebase langsung kecuali di service layer. Semua mut
 
 ## 7. STRUKTUR FOLDER
 
+> **Catatan (Fase 2, commit `49e787d`):** Semua source frontend sekarang di bawah **`src/`**. Path inline di dokumen ini yang nyebut `components/...`, `services/...`, `pages/...`, dll. maksudnya `src/components/...`, `src/services/...`, `src/pages/...`. Yang TETAP di root: `firebase-config.js`, `index.html`, `vite.config.ts`, `tsconfig.json`, `functions/` (backend), `public/`.
+
 ```
 OurLife/
-├── public/                          ← static assets
-│   ├── exercises/                   ← exercise images per muscle group
-│   ├── assets/                      ← logo, icons
-│   └── ...
+├── src/                             ← all frontend source (Fase 2 — moved here from root)
+│   ├── components/                  ← reusable UI
+│   │   ├── Anatomy/AnatomyViewer.tsx
+│   │   ├── hud/                     ← HUD primitives (SystemBot, BottomNav, StatChip, RankBadge, ...)
+│   │   ├── onboarding/              ← AnatomicalHeart, FirstDailyQuest, IntroSequence
+│   │   ├── habits/NewHabitModal.tsx
+│   │   ├── StatusCard.tsx  SystemChat.tsx  Layout.tsx  Settings.tsx
+│   │   ├── Login.tsx  Onboarding.tsx  AdminDashboard.tsx  Leaderboard.tsx
+│   │   ├── Achievement{Card,Emblem,Gallery,Modal,Notification}.tsx
+│   │   └── TokenDisplay.tsx  TokenUsedModal.tsx  DateOfBirthPicker.tsx  VerifyEmailGate.tsx
+│   │
+│   ├── pages/                       ← Dashboard, Profile, GymTracker, HabitTracker, CalculatorSuite
+│   ├── context/                     ← AuthContext.tsx, AchievementContext.tsx
+│   │
+│   ├── services/                    ← business logic + I/O
+│   │   ├── storageService.ts        ← THE source of truth
+│   │   ├── gamificationService.ts  attributeService.ts  fatigueService.ts
+│   │   ├── streakProtectionService.ts  achievementService.ts  exerciseService.ts
+│   │   └── aiService.ts  notificationService.ts  migrationService.ts
+│   │
+│   ├── hooks/usePWAInstall.ts
+│   ├── utils/                       ← dateUtils.ts, bmi.ts
+│   ├── constants/muscleMapping.ts   config/constants.ts   data/workoutPackages.ts
+│   │
+│   ├── types.ts                     ← all TypeScript interfaces
+│   ├── App.tsx                      ← router + providers
+│   ├── index.tsx                    ← entry (mounted by /index.html)
+│   └── index.css                    ← global CSS + all keyframes
 │
-├── components/                      ← reusable UI components
-│   ├── Anatomy/
-│   │   └── AnatomyViewer.tsx
-│   ├── StatusCard.tsx
-│   ├── SystemPet.tsx
-│   ├── SystemChat.tsx
-│   ├── TokenDisplay.tsx
-│   ├── TokenUsedModal.tsx
-│   ├── AchievementCard.tsx
-│   ├── AchievementNotification.tsx
-│   ├── Settings.tsx
-│   ├── Layout.tsx
-│   ├── FatigueGauge.tsx
-│   └── ...
+├── functions/                       ← Firebase Cloud Functions (backend; idle — see note below)
+├── public/                          ← static assets (exercise images, logos, messaging-sw)
 │
-├── pages/                           ← navigation-level pages
-│   ├── Dashboard.tsx
-│   ├── Profile.tsx
-│   ├── GymTracker.tsx
-│   ├── HabitTracker.tsx
-│   ├── Leaderboard.tsx
-│   ├── AdminDashboard.tsx
-│   ├── CalculatorSuite.tsx
-│   ├── Onboarding.tsx
-│   ├── Login.tsx
-│   └── ...
-│
-├── context/
-│   ├── AuthContext.tsx
-│   └── AchievementContext.tsx
-│
-├── services/                        ← business logic + I/O
-│   ├── storageService.ts            ← THE source of truth
-│   ├── gamificationService.ts
-│   ├── attributeService.ts
-│   ├── fatigueService.ts
-│   ├── streakProtectionService.ts
-│   ├── achievementService.ts
-│   ├── aiService.ts
-│   ├── notificationService.ts
-│   ├── migrationService.ts
-│   └── firebase.ts
-│
-├── utils/
-│   └── dateUtils.ts                 ← age calc, date formatting
-│
-├── config/
-│   ├── constants.ts                 ← MUSCLE_GROUP_CONFIG, etc.
-│   └── muscleMapping.ts
-│
-├── types.ts                         ← all TypeScript interfaces
-├── App.tsx                          ← router + providers
-├── main.tsx                         ← entry
-├── index.css                        ← global CSS + all keyframes
-│
-├── CLAUDE.md                        ← tiny pointer (Claude Code auto-loads)
-├── PROMPT_CLAUDE_CODE.md            ← THIS FILE (master single source)
-├── README.md                        ← public-facing for GitHub
-│
-├── .env.local                       ← secrets (in .gitignore)
-├── .gitignore
-├── package.json
-├── vite.config.ts
-└── tsconfig.json
+├── firebase-config.js               ← Firebase SDK init (repo ROOT; reads VITE_* from .env.local)
+├── index.html                       ← Vite entry → loads /src/index.tsx + /src/index.css
+├── CLAUDE.md  PROMPT_CLAUDE_CODE.md  HANDOFF.md  README.md
+├── .env.local                       ← secrets (gitignored)
+└── .gitignore  vite.config.ts  tsconfig.json  package.json  firebase.json  *.rules
 ```
+
+### Kenapa nggak ada folder `backend/` + `database/`?
+
+OurLife pakai arsitektur **React + Firebase (BaaS)**, bukan MERN/PERN. Backend = Firebase (Auth + Firestore + RTDB), di-manage Firebase — jadi **nggak ada** Express server, folder `controllers/`/`models/`/`routes/`, atau `schema.sql` yang ditulis manual. Database = Firestore (NoSQL), no SQL schema. Yang paling dekat ke "backend folder" = `functions/` (Cloud Functions) — tapi currently idle (Groq dipanggil dari client, deferred ke Tier 6). Template fullstack generik (backend Express + SQL terpisah) **tidak berlaku** di sini; jangan bikin folder `backend/`/`database/` manual — cuma bikin folder kosong yang misleading.
 
 ---
 
@@ -679,8 +653,8 @@ JANGAN hapus apa pun di:
 - `node_modules/` (regenerate dengan `npm install`)
 - `dist/` (regenerate dengan `npm run build`)
 - `public/` (static assets, dipakai aplikasi)
-- `components/`, `pages/`, `services/`, `context/`, `utils/`, `config/` (source code)
-- `types.ts`, `App.tsx`, `main.tsx`, `index.css`, `index.html`
+- `src/` (all frontend source: components, pages, services, context, hooks, utils, constants, config, data)
+- `src/types.ts`, `src/App.tsx`, `src/index.tsx`, `src/index.css` (frontend source), `index.html` (root), `firebase-config.js` (root)
 - `package.json`, `package-lock.json`, `vite.config.ts`, `tsconfig.json`
 - `.gitignore`, `.env.local`, `firebase.json` (kalau ada)
 
@@ -737,7 +711,7 @@ OurLife adalah proyek dengan momentum — 19+ commit, foundation solid (gamifica
 
 - **Polish > novelty.** Satu fitur yang kerasa premium > tiga fitur yang kerasa beta.
 - **Security > velocity (untuk Tier 0).** Groq API exposure dan Firebase rules harus selesai sebelum push public marketing.
-- **Existing pattern > new pattern.** Phase A + B menetapkan banyak konvensi (StatusCard inline expand, jarvis-card style, SystemPet emotion-aware avatar, dll) — extend yang ada, jangan reinvent.
+- **Existing pattern > new pattern.** Phase A + B menetapkan banyak konvensi (StatusCard inline expand, jarvis-card style, SystemBot emotion-aware avatar, dll) — extend yang ada, jangan reinvent.
 - **Iteratif > big bang.** PR kecil yang shipping > epic PR yang stuck di review 2 minggu.
 
 Saya percaya engineering yang baik adalah engineering yang membuat code base **tetap mudah diubah 6 bulan ke depan**. Kalau lo lihat decision yang mengorbankan itu untuk shortcut sekarang, push back.

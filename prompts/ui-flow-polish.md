@@ -8,13 +8,13 @@ Audit nge-scan tiap `className` di flow vs definisi di `index.css`. Bug visual b
 
 | Class | Dipakai di | Status | Efek |
 |---|---|---|---|
-| `.au-check`, `.au-check-box` | `components/Login.tsx` (register: setuju S&K) | ❌ no CSS | Checkbox native nggak disembunyiin + box custom nggak distyle → jelek pas dipencet |
-| `.au-google` | `components/Login.tsx` | ⚠️ ada CSS tapi `inline-flex` & di LUAR `.au-form` | Tombol nggak full-width → keliatan ke kanan/miring; harusnya center/full karena ini satu-satunya opsi sosial |
-| `.sc-msg-sys` | `components/SystemChat.tsx` | ❌ no CSS | Bubble pesan System nggak ke-style |
-| `.sys-chat-error` | `pages/HabitTracker.tsx` (Daily Protocol error) | ❌ no CSS | Pesan error AI nggak ke-style |
-| `.ah-heart` | `components/onboarding/AnatomicalHeart.tsx` | ❌ no CSS | Elemen onboarding nggak ke-style |
+| `.au-check`, `.au-check-box` | `src/components/Login.tsx` (register: setuju S&K) | ❌ no CSS | Checkbox native nggak disembunyiin + box custom nggak distyle → jelek pas dipencet |
+| `.au-google` | `src/components/Login.tsx` | ⚠️ ada CSS tapi `inline-flex` & di LUAR `.au-form` | Tombol nggak full-width → keliatan ke kanan/miring; harusnya center/full karena ini satu-satunya opsi sosial |
+| `.sc-msg-sys` | `src/components/SystemChat.tsx` | ❌ no CSS | Bubble pesan System nggak ke-style |
+| `.sys-chat-error` | `src/pages/HabitTracker.tsx` (Daily Protocol error) | ❌ no CSS | Pesan error AI nggak ke-style |
+| `.ah-heart` | `src/components/onboarding/AnatomicalHeart.tsx` | ❌ no CSS | Elemen onboarding nggak ke-style |
 | `.mono` | banyak (AchievementModal, BodyAnatomy, StatChip dll) | ❌ no CSS | Font mono nggak ke-apply; harusnya `font-family: var(--font-mono)` |
-| `.d-card-last` | `pages/Dashboard.tsx` | ❌ no CSS | Marker spacing nggak jalan (minor) |
+| `.d-card-last` | `src/pages/Dashboard.tsx` | ❌ no CSS | Marker spacing nggak jalan (minor) |
 
 Catatan: token global aman — `--cyan`, `--line`, `--line-cyan-soft`, `--t-1/3/mute`, `--font-mono`, `--ease-spring`, `--bg-1` semua sudah ada di `:root`.
 
@@ -42,7 +42,7 @@ Target perilaku:
 
 User konfirmasi: `public/ourlife-logo.png` adalah **logo asli OurLife**. Pakai PNG itu sebagai logo brand, konsisten di Login DAN Onboarding (override spec lama yang nyuruh SVG mark).
 
-- **Login** (`components/Login.tsx`): komponen `AuthLogo` sekarang render SVG mark inline (`<svg viewBox="0 0 28 28">…`). Ganti jadi `<img src="/ourlife-logo.png" alt="OurLife" />` dengan ukuran/rounded yang pas (mis. 40–56px, `border-radius` selaras `.au-logo-mark`). Pertahankan `.au-logo-name` + `.au-logo-tag`.
+- **Login** (`src/components/Login.tsx`): komponen `AuthLogo` sekarang render SVG mark inline (`<svg viewBox="0 0 28 28">…`). Ganti jadi `<img src="/ourlife-logo.png" alt="OurLife" />` dengan ukuran/rounded yang pas (mis. 40–56px, `border-radius` selaras `.au-logo-mark`). Pertahankan `.au-logo-name` + `.au-logo-tag`.
 - **Onboarding** (Section 6): sudah pakai `<img src="/ourlife-logo.png">` — biarkan sumbernya, cukup rapikan styling via class tema. JANGAN balik ke SVG.
 - Pastikan path `/ourlife-logo.png` ke-resolve dari `public/` (Vite serve root). Tes muncul di kedua layar.
 
@@ -57,7 +57,7 @@ Tambah satu rule global: `.mono { font-family: var(--font-mono); }`. Ini fix kon
 
 ## Section 5 — `.ah-heart` & `.d-card-last` (minor)
 
-- `.ah-heart`: cek `components/onboarding/AnatomicalHeart.tsx`, kasih style yang masuk akal (size/center) — atau kalau ternyata sisa class mati, hapus dari JSX. Audit dulu.
+- `.ah-heart`: cek `src/components/onboarding/AnatomicalHeart.tsx`, kasih style yang masuk akal (size/center) — atau kalau ternyata sisa class mati, hapus dari JSX. Audit dulu.
 - `.d-card-last`: cek Dashboard, kemungkinan cuma marker margin-bottom terakhir. Kasih `margin-bottom: 0` atau hapus kalau redundant.
 
 ---
@@ -75,7 +75,7 @@ Tambah satu rule global: `.mono { font-family: var(--font-mono); }`. Ini fix kon
 
 ## Section 6 — Onboarding belum di-port ke tema (AKAR "kaku") [SCOPE BESAR — section terpisah]
 
-Hasil audit `components/Onboarding.tsx` (688 baris, 6 step): file ini **masih pakai Tailwind generik mentah**, belum di-wholesale-port ke design system seperti Login/Habits/Dashboard. Itu sebabnya kerasa "kaku" — secara visual nyangkut di look lama yang flat.
+Hasil audit `src/components/Onboarding.tsx` (688 baris, 6 step): file ini **masih pakai Tailwind generik mentah**, belum di-wholesale-port ke design system seperti Login/Habits/Dashboard. Itu sebabnya kerasa "kaku" — secara visual nyangkut di look lama yang flat.
 
 Bukti konkret:
 - Wrapper: `bg-slate-950`, kartu `bg-slate-900 border-slate-800 rounded-2xl` — bukan `.au-card` (gradient + corner filigree + cyan glow).
@@ -117,7 +117,7 @@ Bikin set class tema baru `.ob-*` di `index.css` (selaras token: `--cyan`, `--li
 **Step 6 — Jadwal Mingguan (597-633):** preset chips (PPL/Bro Split/dll) → `.ob-chip`; baris hari (Senin-Minggu) `bg-slate-800/50 border-slate-800` → `.ob-day-row` + input transparan bertema. `no-scrollbar` dibiarkan.
 
 ### Acceptance Section 6
-- [ ] Onboarding satu bahasa visual dengan Login/Habits (gradient cyan, token tema, NOL `slate-*` mentah tersisa — verifikasi: `grep -c "slate-" components/Onboarding.tsx` → 0).
+- [ ] Onboarding satu bahasa visual dengan Login/Habits (gradient cyan, token tema, NOL `slate-*` mentah tersisa — verifikasi: `grep -c "slate-" src/components/Onboarding.tsx` → 0).
 - [ ] Logo konsisten: `/ourlife-logo.png` (logo asli) dipakai di Onboarding & Login.
 - [ ] `.ob-choice` dipakai konsisten di semua tombol pilihan (gender/goal/activity/duration/focus/env/equipment).
 - [ ] 6 step + progress bar + back/next + validasi (nama wajib, equipment wajib) tetap jalan persis.
