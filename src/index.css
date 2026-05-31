@@ -6340,3 +6340,175 @@ input, select, textarea {
   border: 1px solid rgba(34, 197, 94, 0.4);
   color: var(--green-bright);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ONBOARDING (.ob-*) — themed port of the 6-step flow. Same visual
+   language as Login (.au-*): cyan glow, --line borders, dark glass.
+   Logic/markup structure preserved in Onboarding.tsx; only presentation
+   classes changed. Reuses .au-bg-grid / .au-bg-glow / .au-field /
+   .au-input / .au-cta.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Fixed scrollable overlay so tall steps (4 anatomy, 6 schedule) never clip. */
+.ob-screen {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+  background: var(--bg-1, #04060D);
+}
+.ob-card {
+  position: relative; z-index: 2;
+  width: 100%; max-width: 448px;
+  margin: auto;
+  padding: 26px 22px 22px;
+  border-radius: 18px;
+  overflow: hidden;
+  background:
+    radial-gradient(closest-side at 50% 0%, rgba(34, 211, 238, 0.08), transparent 55%),
+    linear-gradient(180deg, rgba(15, 21, 37, 0.72), rgba(7, 11, 22, 0.88));
+  border: 1px solid var(--line-cyan-soft);
+  box-shadow:
+    inset 0 1px 0 rgba(34, 211, 238, 0.18),
+    0 0 0 1px rgba(34, 211, 238, 0.05),
+    0 28px 60px -16px rgba(0, 0, 0, 0.85),
+    0 0 50px -16px rgba(34, 211, 238, 0.35);
+}
+
+/* Progress bar (top edge of card) */
+.ob-progress { position: absolute; top: 0; left: 0; width: 100%; height: 3px; background: var(--line); }
+.ob-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22D3EE, #3B82F6);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.6);
+  transition: width 500ms var(--ease-out);
+}
+
+/* Logo */
+.ob-logo { display: flex; justify-content: center; margin-bottom: 22px; }
+.ob-logo img {
+  width: 60px; height: 60px;
+  border-radius: 16px;
+  object-fit: cover;
+  border: 1px solid var(--line-cyan-soft);
+  box-shadow: inset 0 0 12px rgba(34, 211, 238, 0.18), 0 0 16px -4px rgba(34, 211, 238, 0.5);
+}
+
+/* Step wrapper + heads */
+.ob-step { display: flex; flex-direction: column; gap: 22px; }
+.ob-step-head { text-align: center; }
+.ob-step-title { margin: 0 0 4px; font-size: 21px; font-weight: 800; color: var(--t-hi); letter-spacing: -0.01em; }
+.ob-step-sub { margin: 0; font-size: 12.5px; color: var(--t-3); line-height: 1.5; }
+
+/* Field group + labels + hints */
+.ob-group { display: flex; flex-direction: column; gap: 16px; }
+.ob-field { display: flex; flex-direction: column; gap: 7px; }
+.ob-label { font-size: 12.5px; font-weight: 600; color: var(--t-2); }
+.ob-hint { font-size: 10px; letter-spacing: 0.04em; color: var(--t-mute); font-family: var(--font-mono); margin-top: 2px; }
+.ob-warn { font-size: 10px; letter-spacing: 0.02em; color: #FBBF24; font-family: var(--font-mono); margin-top: 8px; }
+
+/* Layout grids */
+.ob-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ob-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.ob-col { display: flex; flex-direction: column; gap: 8px; }
+
+/* Generic choice button (gender / goal / activity / duration / focus / env / equipment) */
+.ob-choice {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(7, 12, 24, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--t-2);
+  font-size: 13px; font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 200ms ease, transform 120ms var(--ease-spring);
+}
+.ob-choice:hover { border-color: var(--line-cyan-soft); }
+.ob-choice:active { transform: scale(0.98); }
+.ob-choice.is-stacked { flex-direction: column; justify-content: center; text-align: center; gap: 6px; padding: 14px 8px; }
+.ob-choice.is-between { justify-content: space-between; }
+
+/* active — default cyan */
+.ob-choice.is-active {
+  border-color: var(--cyan);
+  background: rgba(34, 211, 238, 0.12);
+  box-shadow: 0 0 20px -4px rgba(34, 211, 238, 0.4);
+  color: var(--t-hi);
+}
+/* tone modifiers — only override when active (Step 4 experience + focus) */
+.ob-choice.tone-emerald.is-active { border-color: #10B981; background: rgba(16, 185, 129, 0.15); box-shadow: 0 0 20px rgba(16, 185, 129, 0.25); }
+.ob-choice.tone-amber.is-active   { border-color: #F59E0B; background: rgba(245, 158, 11, 0.15); box-shadow: 0 0 20px rgba(245, 158, 11, 0.25); }
+.ob-choice.tone-purple.is-active  { border-color: #A855F7; background: rgba(168, 85, 247, 0.15); box-shadow: 0 0 20px rgba(168, 85, 247, 0.25); }
+.ob-choice.tone-rose.is-active    { border-color: #F43F5E; background: rgba(244, 63, 94, 0.15); box-shadow: 0 0 20px rgba(244, 63, 94, 0.25); }
+
+/* choice inner bits */
+.ob-choice-icon { color: var(--t-mute); transition: color 160ms ease; flex-shrink: 0; }
+.ob-choice.is-active .ob-choice-icon { color: var(--cyan); }
+.ob-choice.tone-emerald.is-active .ob-choice-icon { color: #34D399; }
+.ob-choice.tone-amber.is-active  .ob-choice-icon  { color: #FBBF24; }
+.ob-choice.tone-purple.is-active .ob-choice-icon  { color: #C084FC; }
+.ob-choice.tone-rose.is-active   .ob-choice-icon  { color: #FB7185; }
+.ob-choice-label { font-size: 12px; font-weight: 700; color: var(--t-2); }
+.ob-choice.is-active .ob-choice-label { color: var(--t-hi); }
+.ob-choice-sub { font-size: 10px; color: var(--t-mute); font-family: var(--font-mono); margin-top: 1px; }
+
+/* radio dot (Step 3 goal) */
+.ob-choice-radio {
+  width: 16px; height: 16px; flex-shrink: 0;
+  border-radius: 50%; border: 1px solid var(--t-mute);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.ob-choice.is-active .ob-choice-radio { border-color: var(--cyan); }
+.ob-choice-radio::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: transparent; transition: background 160ms ease; }
+.ob-choice.is-active .ob-choice-radio::after { background: var(--cyan); }
+
+/* equipment check badge */
+.ob-choice-check {
+  width: 20px; height: 20px; flex-shrink: 0;
+  border-radius: 50%; background: var(--cyan); color: var(--bg-1, #04060D);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* Step 2 — themed inner panel (bmi.borderClass/bgClass/colorClass layer on top) */
+.ob-panel {
+  border-radius: 16px; padding: 18px;
+  border: 1px solid var(--line);
+  background: rgba(7, 12, 24, 0.6);
+  transition: border-color 300ms ease, background 300ms ease;
+}
+.ob-panel-sm { padding: 14px; border-radius: 14px; }
+.ob-scale { position: relative; height: 8px; border-radius: 999px; overflow: hidden; background: rgba(7, 12, 24, 0.8); border: 1px solid var(--line); }
+
+/* Step 6 — preset chips + day rows */
+.ob-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.ob-chip {
+  white-space: nowrap; padding: 7px 12px;
+  border-radius: 10px; border: 1px solid var(--line);
+  background: rgba(7, 12, 24, 0.6);
+  color: var(--t-3); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: color 160ms ease, border-color 160ms ease;
+}
+.ob-chip:hover { color: var(--t-hi); border-color: var(--cyan); }
+.ob-day-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 12px; border-radius: 12px;
+  border: 1px solid var(--line); background: rgba(7, 12, 24, 0.45);
+}
+.ob-day-label { width: 76px; flex-shrink: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--t-mute); }
+.ob-day-input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--t-1); font-size: 13px; }
+.ob-day-input::placeholder { color: var(--t-mute); }
+
+/* Footer nav */
+.ob-nav { display: flex; align-items: center; justify-content: space-between; margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--line); }
+.ob-nav .au-cta { width: auto; flex: 0 0 auto; margin-top: 0; padding: 0 22px; }
+.ob-back { background: transparent; border: 0; color: var(--t-3); font-size: 13px; font-weight: 600; cursor: pointer; padding: 8px 10px; }
+.ob-back:hover { color: var(--t-hi); }
+
+/* Text-token helpers (replace raw text-slate-* utilities, keep sizing utilities) */
+.ob-t-hi { color: var(--t-hi); }
+.ob-t-2 { color: var(--t-2); }
+.ob-t-3 { color: var(--t-3); }
+.ob-t-mute { color: var(--t-mute); }

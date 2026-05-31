@@ -158,41 +158,39 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
     // ════════════ STEP 1 — Identitas ════════════
     const renderStep1 = () => (
-        <div className="space-y-6 animate-slide-up">
-            <div className="text-center">
-                <h2 className="text-2xl font-bold text-white mb-2">Selamat Datang di OurLife</h2>
-                <p className="text-slate-400">Mari mulai dengan saling mengenal.</p>
+        <div className="ob-step animate-slide-up">
+            <div className="ob-step-head">
+                <h2 className="ob-step-title">Selamat Datang di OurLife</h2>
+                <p className="ob-step-sub">Mari mulai dengan saling mengenal.</p>
             </div>
 
-            <div className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1.5">Panggil kamu apa?</label>
-                    <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+            <div className="ob-group">
+                <div className="ob-field">
+                    <label className="ob-label">Panggil kamu apa?</label>
+                    <label className="au-field">
+                        <span className="au-field-ico"><User size={16} /></span>
                         <input
+                            className="au-input"
                             type="text"
                             value={formData.name}
                             onChange={(e) => updateField('name', e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:border-cyan-500 transition-colors"
                             placeholder="Nama Kamu"
                         />
-                    </div>
+                    </label>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1.5">Jenis Kelamin</label>
-                        <div className="grid grid-cols-2 gap-2">
+                <div className="ob-grid-2">
+                    <div className="ob-field">
+                        <label className="ob-label">Jenis Kelamin</label>
+                        <div className="ob-grid-2">
                             {([['Male', 'Pria'], ['Female', 'Wanita']] as const).map(([val, label]) => (
                                 <button
                                     key={val}
+                                    type="button"
                                     onClick={() => updateField('gender', val)}
-                                    className={`py-2.5 rounded-xl text-sm font-medium border transition-all ${formData.gender === val
-                                        ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
-                                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-750'
-                                        }`}
+                                    className={`ob-choice is-stacked ${formData.gender === val ? 'is-active' : ''}`}
                                 >
-                                    {label}
+                                    <span className="ob-choice-label">{label}</span>
                                 </button>
                             ))}
                         </div>
@@ -217,24 +215,24 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         const bmi = calcBMI(h, w, formData.gender, formData.experienceLevel);
 
         return (
-            <div className="space-y-6 animate-slide-up">
-                <div className="text-center">
-                    <h2 className="text-2xl font-bold text-white mb-2">Statistik Tubuh</h2>
-                    <p className="text-slate-400 text-sm">Geser untuk atur tinggi & berat — kami kalibrasi rencanamu langsung.</p>
+            <div className="ob-step animate-slide-up">
+                <div className="ob-step-head">
+                    <h2 className="ob-step-title">Statistik Tubuh</h2>
+                    <p className="ob-step-sub">Geser untuk atur tinggi &amp; berat — kami kalibrasi rencanamu langsung.</p>
                 </div>
 
-                {/* Live BMI Display */}
+                {/* Live BMI Display — bmi.borderClass/bgClass/colorClass kept (dynamic) */}
                 <div className={`rounded-2xl p-5 border ${bmi.borderClass} ${bmi.bgClass} transition-all duration-300`}>
                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] uppercase tracking-widest font-mono text-slate-400">BMI Kamu</span>
+                        <span className="text-[10px] uppercase tracking-widest font-mono ob-t-2">BMI Kamu</span>
                         <span className={`text-xs font-bold font-mono ${bmi.colorClass}`}>{bmi.category}</span>
                     </div>
                     <div className="flex items-baseline space-x-2">
                         <span className={`text-5xl font-bold font-mono ${bmi.colorClass} transition-colors`}>{bmi.value}</span>
-                        <span className="text-slate-500 text-xs font-mono">kg/m²</span>
+                        <span className="ob-t-3 text-xs font-mono">kg/m²</span>
                     </div>
-                    {/* BMI scale bar */}
-                    <div className="mt-3 relative h-2 rounded-full overflow-hidden bg-slate-900/80 border border-slate-800">
+                    {/* BMI scale bar — colored zones kept (semantic) */}
+                    <div className="ob-scale mt-3">
                         <div className="absolute inset-y-0 left-0 w-[calc(18.5/40*100%)] bg-cyan-500/40" />
                         <div className="absolute inset-y-0 left-[calc(18.5/40*100%)] w-[calc(6.5/40*100%)] bg-emerald-500/50" />
                         <div className="absolute inset-y-0 left-[calc(25/40*100%)] w-[calc(5/40*100%)] bg-amber-500/50" />
@@ -244,7 +242,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                             style={{ left: `calc(${Math.min(100, (bmi.value / 40) * 100)}% - 2px)` }}
                         />
                     </div>
-                    <div className="flex justify-between text-[9px] font-mono text-slate-500 mt-1.5">
+                    <div className="flex justify-between text-[9px] font-mono ob-t-3 mt-1.5">
                         <span>18.5</span><span>25</span><span>30</span><span>40+</span>
                     </div>
                 </div>
@@ -252,10 +250,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                 {/* Height Slider */}
                 <div>
                     <div className="flex items-center justify-between mb-2">
-                        <label className="flex items-center text-sm font-medium text-slate-300">
+                        <label className="flex items-center text-sm font-medium ob-t-2">
                             <Ruler size={14} className="mr-2 text-cyan-400" /> Tinggi
                         </label>
-                        <span className="text-lg font-bold font-mono text-white">{h}<span className="text-xs text-slate-500 ml-1">cm</span></span>
+                        <span className="text-lg font-bold font-mono ob-t-hi">{h}<span className="text-xs ob-t-3 ml-1">cm</span></span>
                     </div>
                     <input
                         type="range"
@@ -266,7 +264,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                         className="range-slider"
                         style={bmiSliderStyle(h, HEIGHT_MIN, HEIGHT_MAX)}
                     />
-                    <div className="flex justify-between text-[10px] font-mono text-slate-600 mt-1">
+                    <div className="flex justify-between text-[10px] font-mono ob-t-mute mt-1">
                         <span>{HEIGHT_MIN}</span><span>{HEIGHT_MAX}</span>
                     </div>
                 </div>
@@ -274,10 +272,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                 {/* Weight Slider */}
                 <div>
                     <div className="flex items-center justify-between mb-2">
-                        <label className="flex items-center text-sm font-medium text-slate-300">
+                        <label className="flex items-center text-sm font-medium ob-t-2">
                             <Weight size={14} className="mr-2 text-cyan-400" /> Berat
                         </label>
-                        <span className="text-lg font-bold font-mono text-white">{w}<span className="text-xs text-slate-500 ml-1">kg</span></span>
+                        <span className="text-lg font-bold font-mono ob-t-hi">{w}<span className="text-xs ob-t-3 ml-1">kg</span></span>
                     </div>
                     <input
                         type="range"
@@ -288,18 +286,18 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                         className={`range-slider ${bmi.sliderVariant}`}
                         style={bmiSliderStyle(w, WEIGHT_MIN, WEIGHT_MAX)}
                     />
-                    <div className="flex justify-between text-[10px] font-mono text-slate-600 mt-1">
+                    <div className="flex justify-between text-[10px] font-mono ob-t-mute mt-1">
                         <span>{WEIGHT_MIN}</span><span>{WEIGHT_MAX}</span>
                     </div>
                 </div>
 
-                {/* Tailored Recommendation (gender + experience aware) */}
-                <div className={`rounded-2xl p-4 border ${bmi.borderClass} bg-slate-900/60 transition-all duration-300`}>
+                {/* Tailored Recommendation (gender + experience aware) — bmi.borderClass kept */}
+                <div className={`rounded-2xl p-4 border ${bmi.borderClass} transition-all duration-300`} style={{ background: 'rgba(7, 12, 24, 0.6)' }}>
                     <div className="flex items-center space-x-2 mb-2">
                         <Sparkles size={14} className={bmi.colorClass} />
                         <span className={`text-[10px] uppercase tracking-widest font-mono font-bold ${bmi.colorClass}`}>Rutinitas Tersesuai</span>
                     </div>
-                    <p className="text-xs text-slate-300 leading-relaxed">{bmi.recommendation}</p>
+                    <p className="text-xs ob-t-2 leading-relaxed">{bmi.recommendation}</p>
                 </div>
             </div>
         );
@@ -320,57 +318,50 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         };
 
         return (
-            <div className="space-y-6 animate-slide-up">
-                <div className="text-center">
-                    <h2 className="text-2xl font-bold text-white mb-2">Misimu</h2>
-                    <p className="text-slate-400">Tentukan tujuan utamamu.</p>
+            <div className="ob-step animate-slide-up">
+                <div className="ob-step-head">
+                    <h2 className="ob-step-title">Misimu</h2>
+                    <p className="ob-step-sub">Tentukan tujuan utamamu.</p>
                 </div>
 
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Target Kebugaran</label>
-                        <div className="grid grid-cols-1 gap-2">
+                <div className="ob-group">
+                    <div className="ob-field">
+                        <label className="ob-label">Target Kebugaran</label>
+                        <div className="ob-col">
                             {(['Lose Weight', 'Build Muscle', 'Keep Fit'] as const).map((goal) => (
                                 <button
                                     key={goal}
+                                    type="button"
                                     onClick={() => updateField('fitnessGoal', goal)}
-                                    className={`flex items-center p-3 rounded-xl border transition-all ${formData.fitnessGoal === goal
-                                        ? 'bg-cyan-500/20 border-cyan-500 text-white'
-                                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-750'
-                                        }`}
+                                    className={`ob-choice ${formData.fitnessGoal === goal ? 'is-active' : ''}`}
                                 >
-                                    <div className={`w-4 h-4 rounded-full border mr-3 flex items-center justify-center ${formData.fitnessGoal === goal ? 'border-cyan-500' : 'border-slate-500'
-                                        }`}>
-                                        {formData.fitnessGoal === goal && <div className="w-2 h-2 rounded-full bg-cyan-500" />}
-                                    </div>
-                                    {GOAL_LABELS[goal]}
+                                    <span className="ob-choice-radio" />
+                                    <span className="ob-choice-label">{GOAL_LABELS[goal]}</span>
                                 </button>
                             ))}
                         </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Tingkat Aktivitas</label>
-                        <div className="grid grid-cols-2 gap-2">
+                    <div className="ob-field">
+                        <label className="ob-label">Tingkat Aktivitas</label>
+                        <div className="ob-grid-2">
                             {(['Sedentary', 'Light', 'Moderate', 'Active'] as const).map((level) => (
                                 <button
                                     key={level}
+                                    type="button"
                                     onClick={() => {
                                         updateField('activityLevel', level);
                                         // Phase 10 — auto-populate schedule to match activity level.
                                         // User can still edit this in Step 5.
                                         setSchedule({ ...ACTIVITY_SCHEDULES[level] });
                                     }}
-                                    className={`py-2 px-3 rounded-xl text-xs font-medium border transition-all ${formData.activityLevel === level
-                                        ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
-                                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-750'
-                                        }`}
+                                    className={`ob-choice is-stacked ${formData.activityLevel === level ? 'is-active' : ''}`}
                                 >
-                                    {ACT_LABELS[level]}
+                                    <span className="ob-choice-label">{ACT_LABELS[level]}</span>
                                 </button>
                             ))}
                         </div>
-                        <p className="text-[10px] text-slate-500 font-mono mt-2">Jadwal akan otomatis disesuaikan — bisa diubah di langkah terakhir.</p>
+                        <p className="ob-hint">Jadwal akan otomatis disesuaikan — bisa diubah di langkah terakhir.</p>
                     </div>
                 </div>
             </div>
@@ -398,51 +389,29 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
             { value: 'Seluruh Tubuh',   label: 'Seluruh Tubuh',   Icon: Layers },
         ];
 
-        const toneClasses = (tone: string, active: boolean) => {
-            const map: Record<string, { active: string; idle: string; iconActive: string }> = {
-                emerald: {
-                    active: 'bg-emerald-500/15 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.25)]',
-                    idle:   'bg-slate-800 border-slate-700 hover:bg-slate-750',
-                    iconActive: 'text-emerald-400',
-                },
-                amber: {
-                    active: 'bg-amber-500/15 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.25)]',
-                    idle:   'bg-slate-800 border-slate-700 hover:bg-slate-750',
-                    iconActive: 'text-amber-400',
-                },
-                purple: {
-                    active: 'bg-purple-500/15 border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.25)]',
-                    idle:   'bg-slate-800 border-slate-700 hover:bg-slate-750',
-                    iconActive: 'text-purple-400',
-                },
-            };
-            const t = map[tone];
-            return { wrap: active ? t.active : t.idle, icon: active ? t.iconActive : 'text-slate-500' };
-        };
-
         return (
-            <div className="space-y-6 animate-slide-up">
-                <div className="text-center">
-                    <h2 className="text-2xl font-bold text-white mb-2">Gaya Latihanmu</h2>
-                    <p className="text-slate-400 text-sm">Bantu kami menyesuaikan plan dengan ritmemu.</p>
+            <div className="ob-step animate-slide-up">
+                <div className="ob-step-head">
+                    <h2 className="ob-step-title">Gaya Latihanmu</h2>
+                    <p className="ob-step-sub">Bantu kami menyesuaikan plan dengan ritmemu.</p>
                 </div>
 
-                {/* Pengalaman Latihan */}
-                <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Pengalaman Latihan</label>
-                    <div className="grid grid-cols-3 gap-2">
+                {/* Pengalaman Latihan — semantic tone accents (emerald/amber/purple) kept */}
+                <div className="ob-field">
+                    <label className="ob-label">Pengalaman Latihan</label>
+                    <div className="ob-grid-3">
                         {EXPERIENCE.map(({ value, label, sub, Icon, tone }) => {
                             const active = formData.experienceLevel === value;
-                            const tc = toneClasses(tone, active);
                             return (
                                 <button
                                     key={value}
+                                    type="button"
                                     onClick={() => updateField('experienceLevel', value)}
-                                    className={`p-3 rounded-xl border transition-all flex flex-col items-center justify-center text-center ${tc.wrap}`}
+                                    className={`ob-choice is-stacked tone-${tone} ${active ? 'is-active' : ''}`}
                                 >
-                                    <Icon size={22} className={`${tc.icon} mb-1.5`} />
-                                    <span className={`text-xs font-bold ${active ? 'text-white' : 'text-slate-300'}`}>{label}</span>
-                                    <span className="text-[10px] text-slate-500 font-mono mt-0.5">{sub}</span>
+                                    <Icon size={22} className="ob-choice-icon" />
+                                    <span className="ob-choice-label">{label}</span>
+                                    <span className="ob-choice-sub">{sub}</span>
                                 </button>
                             );
                         })}
@@ -450,32 +419,30 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                 </div>
 
                 {/* Durasi Ideal */}
-                <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Durasi Ideal</label>
-                    <div className="grid grid-cols-3 gap-2">
+                <div className="ob-field">
+                    <label className="ob-label">Durasi Ideal</label>
+                    <div className="ob-grid-3">
                         {DURATIONS.map(({ value, label, sub, Icon }) => {
                             const active = formData.idealDuration === value;
                             return (
                                 <button
                                     key={value}
+                                    type="button"
                                     onClick={() => updateField('idealDuration', value)}
-                                    className={`p-3 rounded-xl border transition-all flex flex-col items-center justify-center text-center ${active
-                                        ? 'bg-cyan-500/15 border-cyan-500 shadow-[0_0_20px_rgba(6,182,212,0.25)]'
-                                        : 'bg-slate-800 border-slate-700 hover:bg-slate-750'
-                                        }`}
+                                    className={`ob-choice is-stacked ${active ? 'is-active' : ''}`}
                                 >
-                                    <Icon size={22} className={`${active ? 'text-cyan-400' : 'text-slate-500'} mb-1.5`} />
-                                    <span className={`text-xs font-bold ${active ? 'text-white' : 'text-slate-300'}`}>{label}</span>
-                                    <span className="text-[10px] text-slate-500 font-mono mt-0.5">{sub}</span>
+                                    <Icon size={22} className="ob-choice-icon" />
+                                    <span className="ob-choice-label">{label}</span>
+                                    <span className="ob-choice-sub">{sub}</span>
                                 </button>
                             );
                         })}
                     </div>
                 </div>
 
-                {/* Fokus Area Otot — with reactive AnatomyViewer preview */}
-                <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Fokus Area Otot</label>
+                {/* Fokus Area Otot — reactive AnatomyViewer preview (untouched) */}
+                <div className="ob-field">
+                    <label className="ob-label">Fokus Area Otot</label>
 
                     {/* Phase 10 — Interactive anatomy preview. Selected focus area
                         lights up the corresponding muscles in neon red in real time. */}
@@ -490,20 +457,18 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                         />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="ob-grid-2">
                         {FOCUS.map(({ value, label, Icon }) => {
                             const active = formData.focusArea === value;
                             return (
                                 <button
                                     key={value}
+                                    type="button"
                                     onClick={() => updateField('focusArea', value)}
-                                    className={`p-3 rounded-xl border transition-all flex items-center space-x-3 ${active
-                                        ? 'bg-rose-500/15 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.25)]'
-                                        : 'bg-slate-800 border-slate-700 hover:bg-slate-750'
-                                        }`}
+                                    className={`ob-choice tone-rose ${active ? 'is-active' : ''}`}
                                 >
-                                    <Icon size={20} className={active ? 'text-rose-400' : 'text-slate-500'} />
-                                    <span className={`text-xs font-bold text-left ${active ? 'text-white' : 'text-slate-300'}`}>{label}</span>
+                                    <Icon size={20} className="ob-choice-icon" />
+                                    <span className="ob-choice-label">{label}</span>
                                 </button>
                             );
                         })}
@@ -523,30 +488,28 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         const selectedEquipment = formData.userEquipment || [];
 
         return (
-            <div className="space-y-6 animate-slide-up">
-                <div className="text-center">
-                    <h2 className="text-2xl font-bold text-white mb-2">Lingkungan & Peralatan</h2>
-                    <p className="text-slate-400 text-sm">Pilih alat yang kamu punya — kami hanya menampilkan latihan yang bisa kamu lakukan.</p>
+            <div className="ob-step animate-slide-up">
+                <div className="ob-step-head">
+                    <h2 className="ob-step-title">Lingkungan &amp; Peralatan</h2>
+                    <p className="ob-step-sub">Pilih alat yang kamu punya — kami hanya menampilkan latihan yang bisa kamu lakukan.</p>
                 </div>
 
                 {/* Environment */}
-                <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Lingkungan Latihan</label>
-                    <div className="grid grid-cols-2 gap-2">
+                <div className="ob-field">
+                    <label className="ob-label">Lingkungan Latihan</label>
+                    <div className="ob-grid-2">
                         {ENV_OPTIONS.map(({ value, label, sub, Icon }) => {
                             const active = formData.environment === value;
                             return (
                                 <button
                                     key={value}
+                                    type="button"
                                     onClick={() => updateField('environment', value)}
-                                    className={`p-4 rounded-xl border transition-all flex flex-col items-center justify-center text-center ${active
-                                        ? 'bg-cyan-500/15 border-cyan-500 shadow-[0_0_20px_rgba(6,182,212,0.25)]'
-                                        : 'bg-slate-800 border-slate-700 hover:bg-slate-750'
-                                        }`}
+                                    className={`ob-choice is-stacked ${active ? 'is-active' : ''}`}
                                 >
-                                    <Icon size={24} className={`${active ? 'text-cyan-400' : 'text-slate-500'} mb-1.5`} />
-                                    <span className={`text-sm font-bold ${active ? 'text-white' : 'text-slate-300'}`}>{label}</span>
-                                    <span className="text-[10px] text-slate-500 font-mono mt-0.5">{sub}</span>
+                                    <Icon size={24} className="ob-choice-icon" />
+                                    <span className="ob-choice-label">{label}</span>
+                                    <span className="ob-choice-sub">{sub}</span>
                                 </button>
                             );
                         })}
@@ -554,37 +517,35 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                 </div>
 
                 {/* Equipment Multi-select */}
-                <div>
-                    <div className="flex items-center justify-between mb-2">
-                        <label className="block text-sm font-medium text-slate-300">Peralatan Tersedia</label>
-                        <span className="text-[10px] font-mono text-slate-500">
+                <div className="ob-field">
+                    <div className="flex items-center justify-between">
+                        <label className="ob-label">Peralatan Tersedia</label>
+                        <span className="text-[10px] font-mono ob-t-3">
                             {selectedEquipment.length} dipilih
                         </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="ob-grid-2">
                         {EQUIPMENT_OPTIONS.map(item => {
                             const active = selectedEquipment.includes(item);
                             return (
                                 <button
                                     key={item}
+                                    type="button"
                                     onClick={() => toggleEquipment(item)}
-                                    className={`p-3 rounded-xl border transition-all flex items-center justify-between text-left ${active
-                                        ? 'bg-cyan-500/15 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.2)]'
-                                        : 'bg-slate-800 border-slate-700 hover:bg-slate-750'
-                                        }`}
+                                    className={`ob-choice is-between ${active ? 'is-active' : ''}`}
                                 >
-                                    <span className={`text-xs font-bold ${active ? 'text-white' : 'text-slate-300'}`}>{item}</span>
+                                    <span className="ob-choice-label">{item}</span>
                                     {active && (
-                                        <div className="w-5 h-5 rounded-full bg-cyan-500 flex items-center justify-center shrink-0">
-                                            <Check size={12} strokeWidth={3} className="text-slate-900" />
-                                        </div>
+                                        <span className="ob-choice-check">
+                                            <Check size={12} strokeWidth={3} />
+                                        </span>
                                     )}
                                 </button>
                             );
                         })}
                     </div>
                     {selectedEquipment.length === 0 && (
-                        <p className="text-[10px] text-amber-400 font-mono mt-2">
+                        <p className="ob-warn">
                             ⚠ Pilih minimal satu — tanpa ini semua latihan akan disembunyikan.
                         </p>
                     )}
@@ -595,34 +556,35 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
     // ════════════ STEP 6 — Jadwal Mingguan ════════════
     const renderStep6 = () => (
-        <div className="space-y-6 animate-slide-up">
-            <div className="text-center">
-                <h2 className="text-2xl font-bold text-white mb-2">Jadwal Mingguan</h2>
-                <p className="text-slate-400">Rencanakan pertarunganmu. Bisa diubah kapan saja.</p>
+        <div className="ob-step animate-slide-up">
+            <div className="ob-step-head">
+                <h2 className="ob-step-title">Jadwal Mingguan</h2>
+                <p className="ob-step-sub">Rencanakan pertarunganmu. Bisa diubah kapan saja.</p>
             </div>
 
-            <div className="space-y-4">
-                <div className="flex space-x-2 overflow-x-auto pb-2 no-scrollbar">
+            <div className="ob-group">
+                <div className="ob-chips no-scrollbar">
                     {Object.keys(PRESETS).map((preset) => (
                         <button
                             key={preset}
+                            type="button"
                             onClick={() => setSchedule(PRESETS[preset as keyof typeof PRESETS])}
-                            className="whitespace-nowrap px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 text-xs text-slate-400 hover:text-white hover:border-cyan-500 transition-colors"
+                            className="ob-chip"
                         >
                             {preset}
                         </button>
                     ))}
                 </div>
 
-                <div className="grid grid-cols-1 gap-2">
+                <div className="ob-col">
                     {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((day) => (
-                        <div key={day} className="flex items-center space-x-3 bg-slate-800/50 p-2 rounded-xl border border-slate-800">
-                            <span className="w-24 text-xs font-bold text-slate-500 uppercase tracking-wider">{DAY_LABELS[day]}</span>
+                        <div key={day} className="ob-day-row">
+                            <span className="ob-day-label">{DAY_LABELS[day]}</span>
                             <input
                                 type="text"
                                 value={schedule[day] || ''}
                                 onChange={(e) => setSchedule({ ...schedule, [day]: e.target.value })}
-                                className="flex-1 bg-transparent text-sm text-white focus:outline-none placeholder-slate-600"
+                                className="ob-day-input"
                                 placeholder="Istirahat"
                             />
                         </div>
@@ -633,18 +595,17 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     );
 
     return (
-        <div className="fixed inset-0 bg-slate-950 flex items-center justify-center z-50 p-4">
-            <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+        <div className="ob-screen">
+            <div className="au-bg-grid" />
+            <div className="au-bg-glow" />
+            <div className="ob-card">
                 {/* Progress Bar */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-slate-800">
-                    <div
-                        className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-500 ease-out"
-                        style={{ width: `${(step / TOTAL_STEPS) * 100}%` }}
-                    />
+                <div className="ob-progress">
+                    <div className="ob-progress-fill" style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
                 </div>
 
-                <div className="mb-8 flex justify-center">
-                    <img src="/ourlife-logo.png" alt="OurLife" className="w-16 h-16 rounded-2xl shadow-lg shadow-cyan-500/20 object-cover" />
+                <div className="ob-logo">
+                    <img src="/ourlife-logo.png" alt="OurLife" />
                 </div>
 
                 {step === 1 && renderStep1()}
@@ -654,12 +615,9 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                 {step === 5 && renderStep5()}
                 {step === 6 && renderStep6()}
 
-                <div className="mt-8 pt-6 border-t border-slate-800 flex justify-between items-center">
+                <div className="ob-nav">
                     {step > 1 ? (
-                        <button
-                            onClick={() => setStep(prev => prev - 1)}
-                            className="text-slate-400 hover:text-white text-sm font-medium px-4 py-2"
-                        >
+                        <button type="button" className="ob-back" onClick={() => setStep(prev => prev - 1)}>
                             Kembali
                         </button>
                     ) : (
@@ -672,9 +630,10 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                         const disabled = nameInvalid || equipmentInvalid;
                         return (
                             <button
+                                type="button"
                                 onClick={handleNext}
                                 disabled={disabled}
-                                className={`flex items-center space-x-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-2.5 rounded-xl font-bold transition-all hover:shadow-lg hover:shadow-cyan-500/20 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className="au-cta"
                             >
                                 <span>{step === TOTAL_STEPS ? 'Mulai Sekarang' : 'Lanjut'}</span>
                                 <ArrowRight size={18} />
