@@ -66,30 +66,8 @@ export const Layout: React.FC = () => {
             {/* Top bar — minimal: logo + wordmark left, red logout right */}
             <header className="ol-top">
                 <div className="ol-top-brand">
-                    <div className="ol-top-logo" aria-hidden="true">
-                        <svg viewBox="0 0 28 28" width="20" height="20" fill="none">
-                            <defs>
-                                <linearGradient id="ol-brand-grad" x1="0" y1="0" x2="28" y2="28">
-                                    <stop offset="0%" stopColor="#67E8F9" />
-                                    <stop offset="100%" stopColor="#3B82F6" />
-                                </linearGradient>
-                            </defs>
-                            <path
-                                d="M4 18 C 4 12, 10 6, 14 14 C 18 22, 24 16, 24 10"
-                                stroke="url(#ol-brand-grad)"
-                                strokeWidth="2.6"
-                                strokeLinecap="round"
-                                fill="none"
-                            />
-                            <path
-                                d="M21.5 7 L24 10 L21 12"
-                                stroke="url(#ol-brand-grad)"
-                                strokeWidth="2.6"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                fill="none"
-                            />
-                        </svg>
+                    <div className="ol-top-logo">
+                        <img src="/ourlife-logo.png" alt="OurLife" />
                     </div>
                     <span className="ol-top-name">OurLife</span>
                 </div>
