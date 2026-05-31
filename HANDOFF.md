@@ -2,9 +2,9 @@
 
 > **For the next Claude session (any model, including future Cowork 4.8+).** Baca file ini DULU sebelum mulai kerja. Mengandung snapshot keputusan & state terakhir dari sesi sebelumnya yang mungkin belum sepenuhnya tercermin di `PROMPT_CLAUDE_CODE.md`. Update setiap akhir sesi besar.
 
-**Last updated:** Sesi konsolidasi dokumen + cleanup pass + Groq deferral decision
-**By:** User (Naufal) + Cowork session
-**Branch when last touched:** `main` (cleanup commit landed)
+**Last updated:** 2026-05-31 — src/ migration (Fase 2) + dead-code cleanup + auth polish + .gitattributes CRLF fix
+**By:** User (Naufal) + Claude Code (Opus) session
+**Branch when last touched:** `main` (5 commits landed: `daa0228` → `37c5cf5`)
 
 ---
 
@@ -20,7 +20,42 @@
 
 ---
 
-## 2. KEPUTUSAN KRITIS DARI SESI TERAKHIR
+## 2. SESI TERAKHIR — 2026-05-31 (src/ migration · cleanup · auth · CRLF fix)
+
+> State paling baru. 5 commit landed di `main` (`daa0228` → `37c5cf5`). Struktur folder di Section 7 master prompt sudah diselaraskan ke `src/`.
+
+### Commit sesi ini (kronologis)
+| Commit | Isi |
+|--------|-----|
+| `daa0228` | Auth Section 1+2 — checkbox S&K (`.au-check`/`.au-check-box`) di-style (custom box, state checked/focus/tap, link cyan) + tombol Google full-width + inline SVG logo Google. (User commit manual.) |
+| `be58731` | Hapus 4 komponen 0-ref: `AnatomyMap`, `components/CalculatorSuite` (dup dari `pages/CalculatorSuite`), `FatigueGauge`, `SystemPet`. Verified via Node import-resolver + bundle byte-identical. |
+| `49e787d` | **src/ migration (Fase 2).** Semua frontend `git mv` ke `src/` (history preserved). `@/`→`./src` (vite + tsconfig). `index.html` → `/src/index.tsx` + `/src/index.css`. 8 import `firebase-config` → `../../firebase-config`. |
+| `58c9ebc` | Docs selaras `src/` (README, CLAUDE, HANDOFF, PROMPT, ui-flow-polish) + arch note "kenapa nggak ada folder backend/" + hapus ref file mati. |
+| `37c5cf5` | `.gitattributes` (`* text=auto eol=lf`) — nutup akar CRLF noise. |
+
+### Struktur sekarang
+- **`src/`** = SEMUA frontend: `components/ pages/ services/ context/ hooks/ utils/ constants/ config/ data/` + `App.tsx index.tsx index.css types.ts vite-env.d.ts`.
+- **Root** = `vite.config.ts tsconfig.json package.json index.html`, **`firebase-config.js`** (Firebase SDK init — di-import 8 file via `../../firebase-config`; **JANGAN pindah ke `src/`**), **`functions/`** (backend Cloud Functions, idle), `public/`, `.gitattributes`, `.env.local`.
+- Arsitektur = **React + Firebase BaaS** (bukan MERN/PERN). NGGAK ada `backend/`/`database/`. `functions/` = satu-satunya "backend folder", currently idle (Groq dipanggil dari client, deferred ke Tier 6).
+
+### Keputusan kunci
+- `@/` alias di-update ke `./src` walau ternyata **0 import** yang pakai (semua relative) — hygiene; build nggak bergantung di situ.
+- `firebase-config.js` **sengaja** tetap di root.
+- CRLF: `.gitattributes` cukup nutup akar (`core.autocrlf=true` tanpa attributes = sumber noise). Working-tree fisik masih CRLF tapi git clean-filter normalisasi → `git status` clean & deterministik. **NGGAK** paksa konversi LF (kosmetik).
+- Commit hygiene: stage **spesifik** (`git add src/ vite.config.ts tsconfig.json index.html`), JANGAN `git add .` (CRLF noise transient + editan `prompts/` harus dipisah). Doc-pass = commit terpisah dari code.
+- Dead-file proof: bundle byte-identical pre/post hapus.
+
+### Build
+`npm run build` hijau — ~1,775 kB JS (gzip 469) / 144 kB CSS, 2461 modules. Warning >500KB persist (Tier 4.1, bukan blocker).
+
+### NEXT-UP (belum dikerjakan)
+- **UI onboarding Section 6** (`prompts/ui-flow-polish.md`): `src/components/Onboarding.tsx` (688 baris) masih pakai Tailwind `slate-*` mentah, belum di-port ke tema. TODO: bikin set class `.ob-*` bertema, ganti SEMUA `slate-*` → token tema (`--cyan`/`--line`/dst). **Keputusan terkunci:** warna tone Step 4 DIPERTAHANKAN (hijau/amber/ungu), logo pakai `ourlife-logo.png`. JANGAN sentuh logika form/step/Firestore. Acceptance: `grep -c "slate-" src/components/Onboarding.tsx` → 0.
+- **Sisa ui-flow-polish Section 3-5** (kalau masih relevan): `.mono` util, `.sc-msg-sys` + `.sys-chat-error`, audit `.ah-heart`/`.d-card-last`. (Section 1+2 sudah selesai di `daa0228`.)
+- Path di `prompts/ui-flow-polish.md` sudah ke-`src/`.
+
+---
+
+## KEPUTUSAN KRITIS — SESI SEBELUMNYA (Groq deferral · doc consolidation · cleanup)
 
 ### 2.1 Groq API migration ke Firebase Function — DEFERRED
 
