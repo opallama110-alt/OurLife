@@ -1,0 +1,15 @@
+# Normalize line endings. Repo stores LF; working tree is checked out as LF too.
+# Fixes the recurring CRLF noise on Windows (core.autocrlf=true with no
+# .gitattributes made files transiently show as modified — see HANDOFF).
+* text=auto eol=lf
+
+# Binary assets — never normalize or text-diff (text=auto already detects these;
+# explicit markers are belt-and-suspenders).
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.woff  binary
+*.woff2 binary
