@@ -1,22 +1,22 @@
 # OurLife — Session Handoff
 
-> **For the next Claude session (any model, including future Cowork 4.8+).** Baca file ini DULU sebelum mulai kerja. Mengandung snapshot keputusan & state terakhir dari sesi sebelumnya yang mungkin belum sepenuhnya tercermin di `PROMPT_CLAUDE_CODE.md`. Update setiap akhir sesi besar.
+> **Entry point Cowork + Claude Code tiap chat/sesi baru.** Baca file ini DULU, lalu `CLAUDE.md` (bible lengkap di root). Berisi snapshot keputusan & state terakhir. Dirawat oleh **Cowork** — di-update cuma saat user minta (biasanya sebelum buka chat baru).
 
-**Last updated:** 2026-05-31 — src/ migration (Fase 2) + dead-code cleanup + auth polish + .gitattributes CRLF fix
-**By:** User (Naufal) + Claude Code (Opus) session
-**Branch when last touched:** `main` (5 commits landed: `daa0228` → `37c5cf5`)
+**Last updated:** 2026-06-01 — doc reorg (docs/ + docs/prompts/), CLAUDE.md jadi bible tunggal (master prompt lama digabung + dihapus), + UI polish lengkap (habits, auth, onboarding, src/ migration, visual fixes)
+**Branch when last touched:** `main`
 
 ---
 
-## 1. APA FILE INI
+## 1. SISTEM DOKUMEN (struktur baru — 2026-06-01)
 
-`HANDOFF.md` adalah **stateful overlay** di atas master prompt. Master prompt (`PROMPT_CLAUDE_CODE.md`) memuat hal-hal yang stabil — identitas, arsitektur, konvensi, roadmap. Tapi setiap sesi pasti ada keputusan baru, deferral, branch change, atau insight yang belum sempat masuk master. File ini ngecover gap itu.
+- **`CLAUDE.md`** (root) — bible TUNGGAL: identitas, arsitektur, konvensi, roadmap, pola kerja. Auto-load Claude Code. (Dulu master prompt file terpisah — udah digabung ke sini & dihapus.)
+- **`docs/HANDOFF.md`** (file ini) — state + keputusan terakhir. Entry point tiap chat baru.
+- **`README.md`** (root) — public face GitHub.
+- **`docs/prompts/*.md`** — spec/prompt kerja per-fitur (habits-restore, refactor-structure, ui-flow-polish, visual-fixes-batch2).
 
-**Pola pemakaian:**
-- Awal sesi: Claude baca HANDOFF dulu, lalu PROMPT_CLAUDE_CODE.
-- Selama sesi: insight + keputusan dicatat di sini sebagai working notes.
-- Akhir sesi besar: rangkum jadi handoff entry baru di atas (kronologis newest-first).
-- Periodik (mis. tiap 3-5 sesi): konsolidasi handoff entries yang udah obsolete ke master prompt, sisakan hanya yang masih aktif.
+**Pembagian peran:** dokumen dirawat **Cowork** (bukan Claude Code). CC fokus coding. CLAUDE.md/HANDOFF di-update saat user minta.
+
+**Pola pemakaian:** awal sesi baca HANDOFF → CLAUDE.md. Akhir sesi besar (saat user minta): rangkum entry baru di atas, kronologis newest-first.
 
 ---
 
@@ -49,9 +49,9 @@
 `npm run build` hijau — ~1,775 kB JS (gzip 469) / 144 kB CSS, 2461 modules. Warning >500KB persist (Tier 4.1, bukan blocker).
 
 ### NEXT-UP (belum dikerjakan)
-- **UI onboarding Section 6** (`prompts/ui-flow-polish.md`): `src/components/Onboarding.tsx` (688 baris) masih pakai Tailwind `slate-*` mentah, belum di-port ke tema. TODO: bikin set class `.ob-*` bertema, ganti SEMUA `slate-*` → token tema (`--cyan`/`--line`/dst). **Keputusan terkunci:** warna tone Step 4 DIPERTAHANKAN (hijau/amber/ungu), logo pakai `ourlife-logo.png`. JANGAN sentuh logika form/step/Firestore. Acceptance: `grep -c "slate-" src/components/Onboarding.tsx` → 0.
+- **UI onboarding Section 6** (`docs/prompts/ui-flow-polish.md`): `src/components/Onboarding.tsx` (688 baris) masih pakai Tailwind `slate-*` mentah, belum di-port ke tema. TODO: bikin set class `.ob-*` bertema, ganti SEMUA `slate-*` → token tema (`--cyan`/`--line`/dst). **Keputusan terkunci:** warna tone Step 4 DIPERTAHANKAN (hijau/amber/ungu), logo pakai `ourlife-logo.png`. JANGAN sentuh logika form/step/Firestore. Acceptance: `grep -c "slate-" src/components/Onboarding.tsx` → 0.
 - **Sisa ui-flow-polish Section 3-5** (kalau masih relevan): `.mono` util, `.sc-msg-sys` + `.sys-chat-error`, audit `.ah-heart`/`.d-card-last`. (Section 1+2 sudah selesai di `daa0228`.)
-- Path di `prompts/ui-flow-polish.md` sudah ke-`src/`.
+- Path di `docs/prompts/ui-flow-polish.md` sudah ke-`src/`.
 
 ---
 
@@ -82,7 +82,7 @@
 - `functions/src/chatWithSystem.ts` (kalau ditemukan di branch experiment) — kept as deprecated reference for future migration. Jangan dipakai sekarang. Jangan dihapus.
 - CLAUDE.md Security Policy section explicitly forbids refactoring back to Cloud Function tanpa explicit user OK.
 
-**Impact on roadmap (PROMPT_CLAUDE_CODE.md Section 8):**
+**Impact on roadmap (CLAUDE.md §8):**
 - Tier 0.1 removed from Sprint 1 critical blockers.
 - Tier 0 sekarang fokus ke: Firebase rules audit (0.2), role-based admin (0.3), cascade-delete (0.4), avatar sanitation (0.5), confirmation dialogs (0.6).
 - Tier 6 gains: Groq API → Firebase Function (saat multi-user scenario tercapai).
@@ -95,16 +95,16 @@
 - CLAUDE.md (project rules — verbose)
 - CLAUDE_NEXT_PHASES.md (Phase B-E execution detail)
 - COMMERCIAL_ROADMAP.md (71-finding strategic roadmap)
-- PROMPT_CLAUDE_CODE.md (session entry-point prompt)
+- master prompt file (session entry-point prompt)
 - README.md (AI Studio auto-gen, tidak relevan)
 
 **After:**
 - CLAUDE.md (slim pointer — 30 baris)
-- PROMPT_CLAUDE_CODE.md (master single source — semua content dari ex-files)
+- master prompt file (master single source — semua content dari ex-files)
 - HANDOFF.md (this file — session snapshot)
 - README.md (proper OurLife public-facing README dengan badges, feature list, status)
 
-**Reasoning:** Reduce cognitive load. Single source of truth (PROMPT_CLAUDE_CODE.md). Minimal context budget burn for Claude Code auto-load (CLAUDE.md slim).
+**Reasoning:** Reduce cognitive load. Single source of truth (master prompt file). Minimal context budget burn for Claude Code auto-load (CLAUDE.md slim).
 
 ### 2.3 Cleanup pass eksekusi
 
@@ -146,9 +146,8 @@ git push origin feature/dob-system
 
 | File | Purpose |
 |------|---------|
-| `PROMPT_CLAUDE_CODE.md` | Master single source — paste manually saat sesi baru |
-| `CLAUDE.md` | Tiny pointer — auto-loaded by Claude Code |
-| `HANDOFF.md` | This file — session state overlay |
+| `CLAUDE.md` | Bible tunggal — auto-load Claude Code (identitas, arsitektur, roadmap, konvensi) |
+| `docs/HANDOFF.md` | This file — session state overlay |
 | `README.md` | GitHub public face |
 | `.env.local` | Secrets (Firebase + Groq API key — in .gitignore) |
 | `.gitignore` | Updated dengan pattern lengkap |
@@ -265,7 +264,7 @@ git status
 
 # 2. File management verification (must match HANDOFF §3.3)
 ls *.md
-# Expected: CLAUDE.md, HANDOFF.md, PROMPT_CLAUDE_CODE.md, README.md
+# Expected (root): CLAUDE.md, README.md  (HANDOFF.md → docs/, prompt specs → docs/prompts/)
 
 # 3. Stale files check (must be absent)
 ls CLAUDE_NEXT_PHASES.md COMMERCIAL_ROADMAP.md npm clean.mjs ourlife_exercises.json 2>&1
@@ -303,7 +302,7 @@ User explicitly chose model upgrade ke Cowork 4.8 (kalau ini kasusnya). Apresias
 
 ## 8. ENTRY POINT — APA YANG GW DO PERTAMA
 
-Setelah baca HANDOFF + PROMPT_CLAUDE_CODE:
+Setelah baca HANDOFF + CLAUDE.md:
 
 1. Run verification commands di Section 6.
 2. Konfirmasi user dengan 1 paragraf:

@@ -1,6 +1,6 @@
 # Prompt Claude Code — Restore Habits Card ke Desain Reference (lepas dari kotak "System")
 
-> Copy blok di bawah ke Claude Code. Disusun sesuai `CLAUDE.md` + `PROMPT_CLAUDE_CODE.md`: satu fitur sampai sempurna, audit before edit, build green sebelum commit, pause after commit.
+> Copy blok di bawah ke Claude Code. Disusun sesuai `CLAUDE.md`: satu fitur sampai sempurna, audit before edit, build green sebelum commit, pause after commit.
 
 ---
 
@@ -25,7 +25,7 @@ Komponen kunci di reference yang harus dibalikin:
 
 **SEBELUM nulis kode (WAJIB):**
 
-1. Baca `D:\OurLife\HANDOFF.md` lalu `D:\OurLife\PROMPT_CLAUDE_CODE.md`.
+1. Baca `D:\OurLife\docs\HANDOFF.md` lalu `D:\OurLife\CLAUDE.md`.
 2. Audit `pages/HabitTracker.tsx` (522 baris) — perhatikan yang HARUS dipertahankan (lihat di bawah).
 3. Cek `index.css`: grep apakah class `.h-card`, `.h-card-check`, `.h-week`, `.h-day`, `.h-day-ripple`, `.h-card-flame` dll **masih ada** (mungkin nyangkut dari commit `2259d5f`, atau kehapus pas pindah ke `.sys-frame`). Kalau hilang/berubah, **port ulang dari `.design-reference/.../styles/habits.css`** ke `index.css` (camelCase keyframe + kebab-case class, JANGAN `tailwind.config` extends).
 4. Konfirmasi pemahaman + tanya 2-3 klarifikasi sebelum coding.

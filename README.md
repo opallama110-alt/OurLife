@@ -104,7 +104,7 @@ npm run build
 - [x] System Pet (8 emotion states, habit-aware avatar)
 - [x] Real notched bottom nav (CSS mask cutout)
 
-**On the roadmap** (lihat `PROMPT_CLAUDE_CODE.md` Section 8 untuk detail penuh):
+**On the roadmap** (lihat `CLAUDE.md` §8 untuk detail penuh):
 
 - [ ] Tier 0: Security blockers (~~Groq API → Firebase Function~~ deferred per user decision; role-based admin, Firestore rules, cascade-delete account)
 - [ ] Tier 2: FCM notifications, 2FA, change email/password, export data
@@ -136,8 +136,7 @@ OurLife/
 ├── public/               ← static assets (exercise images, logos)
 ├── firebase-config.js    ← Firebase SDK init (reads VITE_* from .env.local)
 ├── index.html            ← Vite entry (loads /src/index.tsx + /src/index.css)
-├── PROMPT_CLAUDE_CODE.md ← project bible (architecture, roadmap, conventions)
-└── CLAUDE.md             ← Claude Code auto-load pointer
+└── CLAUDE.md             ←  project bible (architecture, roadmap, conventions)
 ```
 
 ### Kenapa nggak ada folder `backend/` + `database/`?
@@ -150,7 +149,7 @@ OurLife pakai arsitektur **React + Firebase (BaaS)**, bukan MERN/PERN. Backend =
 
 This is a private project saat ini. Issues & PRs dari collaborators welcome — koordinasi via [@opallama110-alt](https://github.com/opallama110-alt).
 
-For Claude Code sessions: paste `PROMPT_CLAUDE_CODE.md` sebagai pesan pertama. Itu master prompt yang berisi seluruh project context, roadmap, conventions, dan pola kerja.
+For Claude Code sessions: `CLAUDE.md` (root) auto-loads tiap sesi — itu project bible berisi seluruh project context, roadmap, conventions, dan pola kerja. Snapshot state terakhir ada di `docs/HANDOFF.md`.
 
 ---
 

@@ -4,7 +4,7 @@
 >
 > ⚠️ **PENTING — auth Section 1 & 2 ada perubahan uncommitted di working tree.** CC tadi sudah edit `index.css` + `components/Login.tsx` (checkbox + tombol Google) tapi BELUM commit. Sebelum mulai refactor, putuskan: commit dulu auth itu (`fix(auth): …`) ATAU stash. JANGAN mulai `git mv` di atas working tree yang ada perubahan uncommitted — nanti nyampur & susah di-rollback. Rekomendasi: commit auth dulu (kamu tes browser → acc), baru refactor.
 >
-> 📌 **Setelah Fase 2 selesai, path di `prompts/ui-flow-polish.md` berubah** (`components/…` → `src/components/…`). Update md itu sebelum lanjut onboarding.
+> 📌 **Setelah Fase 2 selesai, path di `docs/prompts/ui-flow-polish.md` berubah** (`components/…` → `src/components/…`). Update md itu sebelum lanjut onboarding.
 
 ## Temuan audit (29 Mei 2026)
 
@@ -66,12 +66,12 @@ Acceptance Fase 2:
 - [ ] `@/` alias resolve dari `src/`; semua import jalan.
 - [ ] `functions/` (backend) TIDAK tersentuh.
 - [ ] Tiap layar dites manual jalan normal.
-- [ ] Update path di `CLAUDE.md`, `HANDOFF.md`, `PROMPT_CLAUDE_CODE.md`, dan `prompts/ui-flow-polish.md` (path onboarding/login berubah ke `src/components/...`).
-- [ ] Saat update struktur folder di docs: hapus referensi `SystemPet.tsx` + `FatigueGauge.tsx` (sudah dihapus commit be58731) dari `README.md` §Project Structure DAN `PROMPT_CLAUDE_CODE.md` §7 + §3.2. Keduanya masih nyebut file mati itu.
+- [ ] Update path di `CLAUDE.md`, `docs/HANDOFF.md`, dan `docs/prompts/ui-flow-polish.md` (path onboarding/login berubah ke `src/components/...`).
+- [ ] Saat update struktur folder di docs: hapus referensi `SystemPet.tsx` + `FatigueGauge.tsx` (sudah dihapus commit be58731) dari `README.md` §Project Structure DAN `CLAUDE.md` §7 + §3.2. Keduanya masih nyebut file mati itu.
 
 ### 7b. Tambahkan catatan arsitektur ke docs (saat doc-pass Fase 2)
 
-User sempat nanya kenapa struktur OurLife beda dari template "fullstack MERN/PERN" (frontend + backend Express + database SQL). Tambahkan blok singkat ini ke `README.md` (di bawah §Project Structure) DAN `PROMPT_CLAUDE_CODE.md` §7, biar nggak kepikiran lagi tiap lihat diagram fullstack generik:
+User sempat nanya kenapa struktur OurLife beda dari template "fullstack MERN/PERN" (frontend + backend Express + database SQL). Tambahkan blok singkat ini ke `README.md` (di bawah §Project Structure) DAN `CLAUDE.md` §7, biar nggak kepikiran lagi tiap lihat diagram fullstack generik:
 
 > **Kenapa nggak ada folder `backend/` + `database/`?**
 > OurLife pakai arsitektur **React + Firebase (BaaS)**, bukan MERN/PERN. Backend = Firebase (Auth + Firestore + RTDB), di-manage Firebase — jadi NGGAK ada Express server, folder `controllers/`, `models/`, `routes/`, atau `schema.sql` yang ditulis manual. Database = Firestore (NoSQL), no SQL schema. Yang paling deket ke "backend folder" = `functions/` (Cloud Functions) — tapi currently idle (Groq dipanggil dari client, deferred ke Tier 6). Template fullstack generik (backend Express + SQL terpisah) TIDAK berlaku di sini; jangan bikin folder backend manual — itu cuma bikin folder kosong yang misleading.

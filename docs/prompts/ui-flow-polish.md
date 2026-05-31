@@ -1,6 +1,6 @@
 # UI/UX Polish — Auth & Onboarding Flow
 
-> Rules doc. CC: baca file ini penuh, lalu kerjakan per section. Patuhi `CLAUDE.md` + `PROMPT_CLAUDE_CODE.md` (satu section sampai sempurna, audit before edit, build green sebelum commit, pause after commit). Copy user = Bahasa Indonesia; code/comment = English. Animasi & style di `index.css` (kebab-case class, camelCase keyframe). No tailwind.config extends.
+> Rules doc. CC: baca file ini penuh, lalu kerjakan per section. Patuhi `CLAUDE.md` (satu section sampai sempurna, audit before edit, build green sebelum commit, pause after commit). Copy user = Bahasa Indonesia; code/comment = English. Animasi & style di `index.css` (kebab-case class, camelCase keyframe). No tailwind.config extends.
 
 ## Konteks temuan (hasil audit — sudah diverifikasi)
 
