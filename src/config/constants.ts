@@ -42,9 +42,9 @@ export const MUSCLE_ICON_MAP: Record<string, string> = {
 };
 
 export const INITIAL_HABITS = [
-  { id: 'h1', name: 'Sholat Subuh + Market News', streak: 0, completedDates: [] },
+  { id: 'h1', name: 'Sholat Subuh + Journaling', streak: 0, completedDates: [] },
   { id: 'h2', name: 'Deep Work (Java/UI/VR) - 1 Hr', streak: 0, completedDates: [] },
-  { id: 'h3', name: 'Daily Expense Audit', streak: 0, completedDates: [] },
+  { id: 'h3', name: 'Tidur 7+ Jam', streak: 0, completedDates: [] },
   { id: 'h4', name: 'Gym Session + Core', streak: 0, completedDates: [] },
   { id: 'h5', name: 'Protein Intake (1.6g/kg)', streak: 0, completedDates: [] },
 ];
