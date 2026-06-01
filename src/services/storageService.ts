@@ -73,6 +73,24 @@ let pendingWorkout: PendingWorkout = null;
 
 // ═══════════ SYSTEM CHAT STATE ═══════════
 // Last message returned by aiService.chat — surfaced as a Dashboard "System Briefing" card.
+
+// One-time migration: the verdict persona/context was reshaped in commit 3d2fb15
+// (finance pillar dropped + tone tightened). A verdict cached before that fix still
+// renders the stale "Keuangan: ..."/"Maaf..." format until a fresh one is generated,
+// so clear it once. Version-gated: fires only when the stored schema is older than
+// VERDICT_SCHEMA_VERSION, then bumps the flag — never re-fires, never clears a valid
+// post-fix verdict. Synchronous so it runs before the cache hydrates just below.
+const VERDICT_SCHEMA_VERSION = 2;
+(() => {
+  try {
+    const stored = parseInt(localStorage.getItem('ourlife_verdict_schema_v') || '0', 10) || 0;
+    if (stored < VERDICT_SCHEMA_VERSION) {
+      localStorage.removeItem('ourlife_last_system_message');
+      localStorage.setItem('ourlife_verdict_schema_v', String(VERDICT_SCHEMA_VERSION));
+    }
+  } catch { /* localStorage unavailable — nothing to migrate */ }
+})();
+
 let lastSystemMessage: string = (() => {
   try { return localStorage.getItem('ourlife_last_system_message') || ''; } catch { return ''; }
 })();
