@@ -50,6 +50,33 @@ const ComingSoonBadge: React.FC = () => (
   </span>
 );
 
+// Unified section wrapper — design-system .s-section (replaces the per-section
+// jarvis-card markup). Header: icon chip + title; `titleAfter` (e.g. a Coming-Soon
+// badge) sits beside the title, `right` (e.g. a SaveBadge) is pushed to the far
+// edge via .s-section-count. Body content is laid out by .s-section-body.
+const Section: React.FC<{
+  icon?: React.ComponentType<{ size?: number; className?: string }>;
+  title: string;
+  color?: 'orange' | 'gold' | 'red';
+  titleAfter?: React.ReactNode;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ icon: Icon, title, color, titleAfter, right, children }) => (
+  <section className="s-section">
+    <div className="s-section-head">
+      {Icon && (
+        <span className={`s-section-icon${color ? ` s-icon-${color}` : ''}`}>
+          <Icon size={16} />
+        </span>
+      )}
+      <h2 className="s-section-title">{title}</h2>
+      {titleAfter}
+      {right && <span className="s-section-count">{right}</span>}
+    </div>
+    <div className="s-section-body">{children}</div>
+  </section>
+);
+
 export const Settings: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -198,13 +225,7 @@ const MyProfileTab: React.FC = () => {
   return (
     <div className="space-y-6 max-w-2xl mx-auto animate-fade-in">
       {/* ═══════════ ACCOUNT (avatar + display name) ═══════════ */}
-      <section className="jarvis-card p-5 rounded-2xl border border-slate-800">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-bold text-white flex items-center">
-            <UserIcon size={16} className="mr-2 text-cyan-400" />Account
-          </h2>
-          <SaveBadge state={profileSave} />
-        </div>
+      <Section icon={UserIcon} title="Account" right={<SaveBadge state={profileSave} />}>
 
         <div className="flex items-center space-x-4 mb-4">
           <div className="relative">
@@ -275,16 +296,13 @@ const MyProfileTab: React.FC = () => {
             <Save size={14} /><span className="text-sm">Save Account</span>
           </button>
         </div>
-      </section>
+      </Section>
 
       {/* ═══════════ EMBEDDED PROFILE (HunterCard / Penghargaan / Compare / Identity / DOB) ═══════════ */}
       <Profile />
 
       {/* ═══════════ ACCOUNT SECURITY (mostly stubs until wired through Firebase Auth) ═══════════ */}
-      <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
-        <h2 className="text-sm font-bold text-white flex items-center">
-          <Shield size={16} className="mr-2 text-cyan-400" />Account Security
-        </h2>
+      <Section icon={Shield} title="Account Security">
 
         <SecurityRow
           icon={Mail}
@@ -307,7 +325,7 @@ const MyProfileTab: React.FC = () => {
           actionLabel="Enable 2FA"
           disabled
         />
-      </section>
+      </Section>
     </div>
   );
 };
@@ -402,13 +420,7 @@ const GoalsTrackingTab: React.FC = () => {
   return (
     <div className="space-y-6 max-w-2xl mx-auto animate-fade-in">
       {/* ═══════════ WORKOUT PREFERENCES ═══════════ */}
-      <section className="jarvis-card p-5 rounded-2xl border border-slate-800">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-bold text-white flex items-center">
-            <Dumbbell size={16} className="mr-2 text-cyan-400" />Workout Preferences
-          </h2>
-          <SaveBadge state={prefsSave} />
-        </div>
+      <Section icon={Dumbbell} title="Workout Preferences" right={<SaveBadge state={prefsSave} />}>
 
         {prefsLoading ? (
           <div className="flex items-center justify-center py-6 text-slate-500 text-xs">
@@ -468,13 +480,10 @@ const GoalsTrackingTab: React.FC = () => {
             </button>
           </div>
         )}
-      </section>
+      </Section>
 
       {/* ═══════════ STREAK PROTECTION (Phase 4 — real) ═══════════ */}
-      <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
-        <h2 className="text-sm font-bold text-white flex items-center">
-          <Shield size={16} className="mr-2 text-cyan-400" />Streak Protection
-        </h2>
+      <Section icon={Shield} title="Streak Protection">
 
         <div className="flex items-center justify-between bg-slate-950/60 border border-slate-800 rounded-xl p-3">
           <div>
@@ -490,13 +499,10 @@ const GoalsTrackingTab: React.FC = () => {
           <p><span className="text-cyan-400 font-bold">How to earn:</span> Complete <span className="text-white">ALL</span> daily habits → +1 token (max 1/day, cap 3).</p>
           <p><span className="text-cyan-400 font-bold">How they work:</span> Auto-applied when you miss a day, bridging the gap so your streak survives.</p>
         </div>
-      </section>
+      </Section>
 
       {/* ═══════════ HABIT TRACKING (remaining stubs) ═══════════ */}
-      <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
-        <h2 className="text-sm font-bold text-white flex items-center">
-          <Sparkles size={16} className="mr-2 text-cyan-400" />Habit Tracking
-        </h2>
+      <Section icon={Sparkles} title="Habit Tracking">
 
         <PrefRow
           icon={Clock}
@@ -510,7 +516,7 @@ const GoalsTrackingTab: React.FC = () => {
           value="Weekly digest"
           disabled
         />
-      </section>
+      </Section>
     </div>
   );
 };
@@ -600,10 +606,7 @@ const AppSettingsTab: React.FC = () => {
     <div className="space-y-6 max-w-2xl mx-auto animate-fade-in">
       {/* ═══════════ INSTALL APP (PWA) ═══════════ */}
       {(isInstallable || isInstalled) && (
-        <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
-          <h2 className="text-sm font-bold text-white flex items-center">
-            <Smartphone size={16} className="mr-2 text-cyan-400" />Install App
-          </h2>
+        <Section icon={Smartphone} title="Install App">
           <div className="s-pwa-card">
             <div className="s-pwa-card-info">
               <div className="s-pwa-card-title">OurLife Hunter</div>
@@ -619,15 +622,11 @@ const AppSettingsTab: React.FC = () => {
                   <Smartphone size={14} /> Pasang
                 </button>}
           </div>
-        </section>
+        </Section>
       )}
 
       {/* ═══════════ NOTIFICATIONS ═══════════ */}
-      <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-2">
-        <h2 className="text-sm font-bold text-white flex items-center mb-2">
-          <Bell size={16} className="mr-2 text-cyan-400" />Notifications
-          <ComingSoonBadge />
-        </h2>
+      <Section icon={Bell} title="Notifications" titleAfter={<ComingSoonBadge />}>
 
         <NotifToggle label="Workout Reminders" checked={notifs.workouts}
           onChange={(v) => setNotifs(p => ({ ...p, workouts: v }))} />
@@ -643,24 +642,18 @@ const AppSettingsTab: React.FC = () => {
         <p className="text-[10px] text-slate-600 font-mono pt-2">
           Toggles are local until notificationService FCM topic subscriptions ship.
         </p>
-      </section>
+      </Section>
 
       {/* ═══════════ APPEARANCE (stubs) ═══════════ */}
-      <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
-        <h2 className="text-sm font-bold text-white flex items-center">
-          <Palette size={16} className="mr-2 text-cyan-400" />Appearance
-        </h2>
+      <Section icon={Palette} title="Appearance">
 
         <PrefRow icon={Palette} label="Theme" value="Dark (system locked)" disabled />
         <PrefRow icon={Languages} label="Language" value="Bahasa Indonesia" disabled />
         <PrefRow icon={Type} label="Font Size" value="Medium" disabled />
-      </section>
+      </Section>
 
       {/* ═══════════ DATA & PRIVACY ═══════════ */}
-      <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
-        <h2 className="text-sm font-bold text-white flex items-center">
-          <Database size={16} className="mr-2 text-cyan-400" />Data & Privacy
-        </h2>
+      <Section icon={Database} title="Data & Privacy">
 
         <PrefRow icon={Download} label="Export My Data" value="JSON / CSV" disabled />
         <PrefRow icon={Database} label="Clear Cache" value="Free up local storage" disabled />
@@ -679,13 +672,10 @@ const AppSettingsTab: React.FC = () => {
             Deletes your Firestore profile, RTDB data, and Firebase Auth identity. This cannot be undone.
           </p>
         </div>
-      </section>
+      </Section>
 
       {/* ═══════════ EXPERIENCE ═══════════ */}
-      <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
-        <h2 className="text-sm font-bold text-white flex items-center">
-          <Sparkles size={16} className="mr-2 text-cyan-400" />Experience
-        </h2>
+      <Section icon={Sparkles} title="Experience">
         <button
           type="button"
           onClick={() => {
@@ -701,24 +691,20 @@ const AppSettingsTab: React.FC = () => {
         <p className="text-[10px] text-slate-500 font-mono">
           Memutar ulang Informasi Sistem · Heart Awakening · Player Welcome.
         </p>
-      </section>
+      </Section>
 
       {/* ═══════════ SESSION ═══════════ */}
-      <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-3">
-        <h2 className="text-sm font-bold text-white">Session</h2>
+      <Section icon={LogOut} title="Session">
         <button
           onClick={handleLogout}
           className="w-full py-3 bg-slate-800 border border-slate-700 rounded-xl text-slate-200 hover:bg-slate-700 transition-all flex items-center justify-center space-x-2"
         >
           <LogOut size={16} /><span className="text-sm font-bold">Log Out</span>
         </button>
-      </section>
+      </Section>
 
       {/* ═══════════ ABOUT ═══════════ */}
-      <section className="jarvis-card p-5 rounded-2xl border border-slate-800 space-y-2">
-        <h2 className="text-sm font-bold text-white flex items-center">
-          <Info size={16} className="mr-2 text-cyan-400" />About
-        </h2>
+      <Section icon={Info} title="About">
         <div className="text-xs text-slate-400 font-mono">Version: {APP_VERSION}</div>
         <div className="grid grid-cols-2 gap-2 pt-2">
           <AboutLink icon={FileText} label="Privacy Policy" />
@@ -726,7 +712,7 @@ const AppSettingsTab: React.FC = () => {
           <AboutLink icon={HelpCircle} label="Help Center" />
           <AboutLink icon={MessageCircle} label="Contact Support" />
         </div>
-      </section>
+      </Section>
     </div>
   );
 };
