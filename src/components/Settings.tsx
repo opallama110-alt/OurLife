@@ -653,7 +653,7 @@ const AppSettingsTab: React.FC = () => {
       </Section>
 
       {/* ═══════════ DATA & PRIVACY ═══════════ */}
-      <Section icon={Database} title="Data & Privacy">
+      <Section icon={Database} title="Data & Privacy" color="red">
 
         <PrefRow icon={Download} label="Export My Data" value="JSON / CSV" disabled />
         <PrefRow icon={Database} label="Clear Cache" value="Free up local storage" disabled />
@@ -694,7 +694,7 @@ const AppSettingsTab: React.FC = () => {
       </Section>
 
       {/* ═══════════ SESSION ═══════════ */}
-      <Section icon={LogOut} title="Session">
+      <Section icon={LogOut} title="Session" color="red">
         <button
           onClick={handleLogout}
           className="w-full py-3 bg-slate-800 border border-slate-700 rounded-xl text-slate-200 hover:bg-slate-700 transition-all flex items-center justify-center space-x-2"
