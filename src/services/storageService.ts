@@ -583,7 +583,6 @@ export const storageService = {
 
   getContextString: (): string => {
     const workouts = localCache.workouts;
-    const transactions = localCache.transactions;
     const habits = localCache.habits;
     const userState = localCache.userState;
     const profile = localCache.gymProfile;
@@ -591,8 +590,6 @@ export const storageService = {
     const lastWorkout = workouts?.length > 0 ? `${workouts[0].type} on ${workouts[0].date}` : 'No workouts logged.';
     const today = new Date().toISOString().split('T')[0];
     const todaysHabits = habits.filter(h => h.completedDates?.includes(today)).map(h => h.name).join(', ') || 'None';
-    const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-    const totalExpense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
 
     return `
       Current Date: ${today}
@@ -601,7 +598,6 @@ export const storageService = {
       Last Workout: ${lastWorkout}
       Gym Level: ${profile.level} (${profile.rank}) - ${profile.totalXP} XP
       Habits Completed Today: ${todaysHabits}
-      Financials: Income ${totalIncome}, Expense ${totalExpense}, Balance ${totalIncome - totalExpense}
       Active Habit Streaks: ${habits.map(h => `${h.name}: ${h.streak}`).join(' | ')}
     `.trim();
   }
