@@ -13,6 +13,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ profile }) => {
     const [entries, setEntries] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const user = storageService.getUserState();
+    const currentRank = getRankForLevel(profile.level || 1);
 
     useEffect(() => {
         const unsubscribe = storageService.subscribeToLeaderboard((data) => {
@@ -99,16 +100,24 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ profile }) => {
             {/* Rank Legend */}
             <div className="jarvis-card p-3 rounded-xl mt-4 border border-slate-800" style={{ transform: 'none' }}>
                 <div className="text-[10px] text-slate-500 font-mono uppercase mb-2 tracking-widest">Rank Boundaries</div>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {RANK_TIERS.map(r => (
-                        <div key={r.name} className="flex items-center gap-2 text-[10px] bg-slate-900/50 p-2 rounded-lg border border-slate-800/80 hover:border-slate-700 transition-colors">
-                            <RankBadge rank={rankFromTierName(r.name)} size="sm" />
-                            <div className="flex flex-col min-w-0">
-                                <span className={`font-bold ${r.color} text-xs truncate`}>{r.name}</span>
-                                <span className="text-slate-500 font-mono tracking-tight">Lv.{r.minLevel} - {r.maxLevel === Infinity ? '∞' : `Lv.${r.maxLevel}`}</span>
+                <div className="grid grid-cols-2 gap-2">
+                    {RANK_TIERS.map(r => {
+                        const isCurrent = currentRank.name === r.name;
+                        const isLast = r.maxLevel === Infinity;
+                        return (
+                            <div key={r.name}
+                                className={`flex items-center gap-2 text-[10px] p-2 rounded-lg border transition-colors ${isLast ? 'col-span-2 ' : ''}${isCurrent
+                                    ? 'border-orange-400/40 bg-orange-500/[0.06]'
+                                    : 'bg-[rgba(7,12,24,0.5)] border-[rgba(148,163,184,0.12)] hover:border-slate-700'
+                                    }`}>
+                                <RankBadge rank={rankFromTierName(r.name)} size="sm" />
+                                <div className="flex flex-col min-w-0">
+                                    <span className={`font-bold ${r.color} text-xs truncate`}>{r.name}</span>
+                                    <span className={`${isCurrent ? 'text-slate-400' : 'text-slate-500'} font-mono tracking-tight`}>Lv.{r.minLevel} - {r.maxLevel === Infinity ? '∞' : `Lv.${r.maxLevel}`}</span>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
 
