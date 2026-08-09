@@ -3846,6 +3846,7 @@ input, select, textarea {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+.ae-cancel:disabled { opacity: 0.45; cursor: wait; }
 
 /* Sticky action row */
 .ae-sticky {
@@ -3856,6 +3857,17 @@ input, select, textarea {
   gap: 8px;
   margin-top: 10px;
   z-index: 4;
+}
+.ae-save-error {
+  grid-column: 1 / -1;
+  padding: 9px 10px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 9px;
+  background: rgba(127, 29, 29, 0.28);
+  color: #fca5a5;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
 }
 .ae-act-edit {
   width: 38px; height: 44px;
@@ -3898,6 +3910,10 @@ input, select, textarea {
   box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.5), 0 10px 22px -8px rgba(16, 185, 129, 0.5);
 }
 .ae-act-log:active, .ae-act-finish:active { transform: scale(0.98); }
+.ae-act-edit:disabled, .ae-act-log:disabled, .ae-act-finish:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
 
 /* ============================================================
    ANALYTICS — prototype gym.css .an- / .hf- port

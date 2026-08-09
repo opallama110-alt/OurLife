@@ -1,17 +1,13 @@
 {
   "rules": {
+    ".read": false,
+    ".write": false,
     "users": {
-      ".read": "auth != null",
-      ".indexOn": ["xp", "totalXP", "level"],
-      
+      ".read": "auth != null && auth.token.admin === true",
+      ".write": "auth != null && auth.token.admin === true",
       "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid",
-        
-        "workouts": {
-          ".indexOn": ["date", "timestamp"]
-        },
-        ".indexOn": ["totalXP", "level"]
+        ".read": "auth != null && $uid === auth.uid",
+        ".write": "auth != null && $uid === auth.uid"
       }
     }
   }

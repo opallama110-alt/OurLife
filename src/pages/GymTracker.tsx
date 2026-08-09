@@ -27,6 +27,24 @@ import AnatomyViewer, { getViewForMuscle } from '../components/Anatomy/AnatomyVi
 import { RankBadge, rankFromTierName } from '../components/hud';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
 
+const createWorkoutId = (): string =>
+  globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const getWorkoutSaveError = (error: unknown): string => {
+  const details = error as { code?: string; message?: string };
+  const raw = `${details?.code || ''} ${details?.message || ''}`.toLowerCase();
+  if (raw.includes('not-authenticated') || raw.includes('unauthenticated')) {
+    return 'Sesi login sudah berakhir. Masuk kembali sebelum menyimpan workout.';
+  }
+  if (raw.includes('permission-denied') || raw.includes('permission_denied')) {
+    return 'Workout belum tersimpan karena akses database ditolak. Coba muat ulang setelah login.';
+  }
+  if (raw.includes('network') || raw.includes('unavailable') || raw.includes('offline')) {
+    return 'Workout belum tersimpan. Periksa koneksi internet lalu tekan Coba Simpan Lagi.';
+  }
+  return 'Workout belum tersimpan ke cloud. Datamu masih ada di layar ini; silakan coba lagi.';
+};
+
 // ═══════════ STEPPER SLIDER (workout.css .ae-step port) ═══════════
 const StepperSlider: React.FC<{
   label: string; value: number; onChange: (v: number) => void;
@@ -829,6 +847,9 @@ export const GymTracker: React.FC = () => {
   const [sessionXP, setSessionXP] = useState(0);
   const [notes, setNotes] = useState('');
   const [triggerTimer, setTriggerTimer] = useState(false);
+  const [isSavingWorkout, setIsSavingWorkout] = useState(false);
+  const [workoutSaveError, setWorkoutSaveError] = useState<string | null>(null);
+  const workoutIdRef = useRef<string>('');
   const [userEquipment, setUserEquipment] = useState<string[]>([]);
   const [userEnvironment, setUserEnvironment] = useState<'Home' | 'Gym' | null>(null);
   // Body-anatomy front/back toggle for the active exercise stage. Lives on the
@@ -919,6 +940,8 @@ export const GymTracker: React.FC = () => {
 
   const startWorkout = () => {
     if (selectedExercises.length === 0) return;
+    workoutIdRef.current = createWorkoutId();
+    setWorkoutSaveError(null);
     setCurrentExIndex(0);
     setSessionData([]);
     setSessionXP(0);
@@ -970,6 +993,8 @@ export const GymTracker: React.FC = () => {
   // Drop straight into the active session with a known exercise list.
   const launchActiveSession = (exercises: ExerciseDefinition[]) => {
     if (exercises.length === 0) return;
+    workoutIdRef.current = createWorkoutId();
+    setWorkoutSaveError(null);
     const muscles = Array.from(new Set(exercises.flatMap(e => [e.muscleGroup, ...(e.secondaryMuscles || [])])));
     setSelectedMuscles(muscles);
     setSelectedExercises(exercises);
@@ -1016,8 +1041,10 @@ export const GymTracker: React.FC = () => {
   };
 
   /** FIXED: finalMuscles always sourced from selectedExercises, never blank. */
-  const finishWorkout = () => {
-    if (selectedExercises.length === 0) return;
+  const finishWorkout = async () => {
+    if (selectedExercises.length === 0 || isSavingWorkout) return;
+    setIsSavingWorkout(true);
+    setWorkoutSaveError(null);
 
     const xpMap: Record<string, number> = {};
     for (const ex of selectedExercises) xpMap[ex.name] = ex.xpPerSet;
@@ -1047,8 +1074,10 @@ export const GymTracker: React.FC = () => {
       ? 'Full Body'
       : finalMuscles.map(m => MUSCLE_GROUP_CONFIG[m]?.label || m).join(', ');
 
+    const workoutId = workoutIdRef.current || createWorkoutId();
+    workoutIdRef.current = workoutId;
     const workout: WorkoutLog = {
-      id: Date.now().toString(),
+      id: workoutId,
       date: new Date().toISOString().split('T')[0],
       timestamp: new Date().toISOString(),
       type: typeLabel,
@@ -1059,29 +1088,35 @@ export const GymTracker: React.FC = () => {
       xpEarned: totalXP,
     };
 
-    const newLogs = [workout, ...logs];
-    setLogs(newLogs);
-    try { storageService.saveWorkouts(newLogs); } catch (e) { console.error('[GymTracker] saveWorkouts:', e); }
-
+    const newLogs = [workout, ...logs.filter(log => log.id !== workoutId)];
     const newProfile = updateProfileAfterWorkout(profile, totalXP, finalMuscles, totalSets, newLogs);
-    setProfile(newProfile);
-    try { storageService.saveGymProfile(newProfile); } catch (e) { console.error('[GymTracker] saveGymProfile:', e); }
 
     // Achievement check — workout-driven achievements (volume, muscle-group counts,
     // streak, XP, rank, etc.) re-evaluate against the freshly saved state.
     try {
+      await storageService.saveCompletedWorkout(newLogs, newProfile);
+      setLogs(newLogs);
+      setProfile(newProfile);
+
+      // Rewards only evaluate after both cloud writes are acknowledged, so an
+      // achievement can never get ahead of the workout history it depends on.
       const unlocks = achievementService.checkAndGrant();
       if (unlocks.length > 0) addUnlocks(unlocks);
-    } catch (e) { console.error('[GymTracker] achievement check:', e); }
 
-    // Reset
-    setFlowStep('idle');
-    setSelectedMuscles([]);
-    setSelectedExercises([]);
-    setSessionData([]);
-    setCurrentExIndex(0);
-    setSessionXP(0);
-    setNotes('');
+      workoutIdRef.current = '';
+      setFlowStep('idle');
+      setSelectedMuscles([]);
+      setSelectedExercises([]);
+      setSessionData([]);
+      setCurrentExIndex(0);
+      setSessionXP(0);
+      setNotes('');
+    } catch (error) {
+      console.error('[GymTracker] Failed to persist completed workout:', error);
+      setWorkoutSaveError(getWorkoutSaveError(error));
+    } finally {
+      setIsSavingWorkout(false);
+    }
   };
 
   const deleteLog = (id: string) => {
@@ -1421,24 +1456,38 @@ export const GymTracker: React.FC = () => {
 
             {/* Cancel link */}
             <button type="button" className="ae-cancel"
-              onClick={() => { setFlowStep('idle'); setSelectedMuscles([]); setSelectedExercises([]); setSessionData([]); }}>
+              disabled={isSavingWorkout}
+              onClick={() => {
+                workoutIdRef.current = '';
+                setWorkoutSaveError(null);
+                setFlowStep('idle');
+                setSelectedMuscles([]);
+                setSelectedExercises([]);
+                setSessionData([]);
+              }}>
               Batalkan Workout
             </button>
           </div>
 
           {/* Sticky bottom action row */}
           <div className="ae-sticky">
+            {workoutSaveError && (
+              <div className="ae-save-error" role="alert" aria-live="assertive">
+                {workoutSaveError}
+              </div>
+            )}
             <button type="button" className="ae-act-edit" aria-label="Tambah latihan"
+              disabled={isSavingWorkout}
               onClick={() => setFlowStep('addExercise')}>
               <ListPlus size={14} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'var(--t-2)' }} />
             </button>
-            <button type="button" className="ae-act-log" onClick={logExercise}>
+            <button type="button" className="ae-act-log" onClick={logExercise} disabled={isSavingWorkout}>
               <CheckSquare size={14} />
               <span>{currentExIndex < selectedExercises.length - 1 ? 'Log & Next' : 'Log Latihan'}</span>
             </button>
-            <button type="button" className="ae-act-finish" onClick={finishWorkout}>
-              <Save size={14} />
-              <span>Selesai</span>
+            <button type="button" className="ae-act-finish" onClick={finishWorkout} disabled={isSavingWorkout}>
+              {isSavingWorkout ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              <span>{isSavingWorkout ? 'Menyimpan...' : workoutSaveError ? 'Coba Simpan Lagi' : 'Selesai'}</span>
             </button>
           </div>
         </div>

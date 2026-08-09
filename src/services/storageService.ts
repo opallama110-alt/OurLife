@@ -321,6 +321,52 @@ export const storageService = {
     notifyCtx();
   },
 
+  /**
+   * Persists a completed workout as one acknowledged operation from the UI's
+   * perspective. Firestore is written first because it only mirrors aggregate
+   * leaderboard fields; RTDB remains the source of truth for the full workout.
+   * Callers must await this method before closing the active workout screen.
+   */
+  saveCompletedWorkout: async (logs: WorkoutLog[], profile: GymProfile): Promise<void> => {
+    const user = auth.currentUser;
+    if (!user) throw new Error('auth/not-authenticated');
+
+    const mirror = {
+      xp: profile.totalXP,
+      level: profile.level,
+      rank: profile.rank,
+      rankEmoji: profile.rankEmoji,
+      title: profile.title || 'Shadow Recruit',
+      name: localCache.userState?.name || user.displayName || 'User',
+      monthlyXP: profile.monthlyXP ?? 0,
+      monthlyWorkouts: profile.monthlyWorkouts ?? 0,
+      currentMonth: profile.currentMonth ?? '',
+      currentStreak: profile.currentStreak ?? 0,
+      longestStreak: profile.longestStreak ?? 0,
+    };
+
+    // A failed aggregate mirror leaves no workout behind, so retrying remains
+    // safe. The following RTDB update stores the complete workout + profile.
+    await setDoc(doc(db, 'users', user.uid), mirror, { merge: true });
+    await update(ref(rtdb, `users/${user.uid}`), {
+      workouts: logs,
+      gymProfile: profile,
+      ...mirror,
+    });
+
+    localCache.workouts = logs;
+    localCache.gymProfile = profile;
+    try {
+      localStorage.setItem('jarvis_workouts', JSON.stringify(logs));
+      localStorage.setItem('jarvis_gym_profile', JSON.stringify(profile));
+    } catch (error) {
+      // Cloud persistence already succeeded; a full localStorage quota must not
+      // turn a completed cloud save into a duplicate retry.
+      console.error('[saveCompletedWorkout] Local cache update failed:', error);
+    }
+    notifyCtx();
+  },
+
   getTransactions: (): Transaction[] => localCache.transactions || [],
   saveTransactions: (transactions: Transaction[]) => {
     localCache.transactions = transactions;
