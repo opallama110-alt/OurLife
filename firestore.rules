@@ -14,6 +14,65 @@ service cloud.firestore {
       return isSignedIn() && request.auth.token.admin == true;
     }
 
+    function isValidLeaderboardDocument() {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+          'name',
+          'photoURL',
+          'xp',
+          'level',
+          'rank',
+          'rankEmoji',
+          'title',
+          'monthlyXP',
+          'monthlyWorkouts',
+          'currentMonth',
+          'currentStreak',
+          'longestStreak'
+        ])
+        && data.keys().hasOnly([
+          'name',
+          'photoURL',
+          'xp',
+          'level',
+          'rank',
+          'rankEmoji',
+          'title',
+          'monthlyXP',
+          'monthlyWorkouts',
+          'currentMonth',
+          'currentStreak',
+          'longestStreak'
+        ])
+        && data.name is string
+        && data.name.size() > 0
+        && data.name.size() <= 80
+        && data.photoURL is string
+        && data.photoURL.size() <= 2048
+        && data.xp is number
+        && data.xp >= 0
+        && data.level is number
+        && data.level >= 1
+        && data.rank is string
+        && data.rank.size() > 0
+        && data.rank.size() <= 40
+        && data.rankEmoji is string
+        && data.rankEmoji.size() <= 16
+        && data.title is string
+        && data.title.size() > 0
+        && data.title.size() <= 80
+        && data.monthlyXP is number
+        && data.monthlyXP >= 0
+        && data.monthlyWorkouts is number
+        && data.monthlyWorkouts >= 0
+        && data.currentMonth is string
+        && data.currentMonth.matches('^[0-9]{4}-(0[1-9]|1[0-2])$')
+        && data.currentStreak is number
+        && data.currentStreak >= 0
+        && data.longestStreak is number
+        && data.longestStreak >= 0;
+    }
+
     // Exercise definitions are application-owned catalog data. The browser may
     // query them after login, but only trusted IAM tooling can seed or update
     // the collection because server credentials bypass client Security Rules.
@@ -22,12 +81,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Leaderboard and Compare still query this collection. Reads therefore
-    // remain authenticated-user-wide until public ranking fields are split from
-    // private profile data; writes are restricted to the owner or admin claim.
+    // Account/profile documents contain PII and preferences. Only the owner or
+    // a trusted custom-claim admin may read or mutate them.
     match /users/{uid} {
-      allow read: if isSignedIn();
+      allow read: if isOwner(uid) || isAdmin();
       allow create, update, delete: if isOwner(uid) || isAdmin();
+    }
+
+    // Only this allow-listed, validated projection is visible to other signed-in
+    // users. Clients cannot accidentally publish email, DOB, body data, or FCM.
+    match /leaderboard/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if (isOwner(uid) || isAdmin())
+        && isValidLeaderboardDocument();
+      allow delete: if isOwner(uid) || isAdmin();
     }
 
     match /{document=**} {

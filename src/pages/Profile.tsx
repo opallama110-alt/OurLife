@@ -63,7 +63,7 @@ export const Profile: React.FC = () => {
         setSaveStatus('saving');
         try {
             // saveUserState writes localCache → localStorage → RTDB → flattens name to RTDB
-            // syncToRemote pushes full payload to RTDB + Firestore (incl. height/weight for compare)
+            // syncToRemote updates private profile data plus the public ranking mirror.
             storageService.saveUserState(user);
             storageService.saveGymSchedule(user.gymSchedule || storageService.getGymSchedule());
             await storageService.syncToRemote();

@@ -183,9 +183,9 @@ export const AdminDashboard: React.FC = () => {
 
         setLoading(true);
 
-        // Phase 11d: Dual-source fetch — RTDB has rich nested data (workouts,
-        // transactions, gymProfile), Firestore has the canonical user list used
-        // by the leaderboard. Merge both so the admin table is never empty.
+        // RTDB holds rich nested data, the public leaderboard holds ranking
+        // fields, and the private Firestore directory holds account metadata.
+        // Security Rules only permit the directory query for an admin claim.
         const fetchUsers = async () => {
             try {
                 const rtdbSnap = await get(ref(rtdb, 'users'));
@@ -198,6 +198,13 @@ export const AdminDashboard: React.FC = () => {
                     console.warn('[AdminDashboard] getAllUsers fallback failed:', e);
                 }
 
+                let privateUsers: any[] = [];
+                try {
+                    privateUsers = await storageService.getPrivateUsersForAdmin();
+                } catch (e) {
+                    console.warn('[AdminDashboard] private directory fetch failed:', e);
+                }
+
                 const merged: Record<string, any> = {};
 
                 // Seed from RTDB (includes nested workouts/transactions/etc.)
@@ -205,7 +212,16 @@ export const AdminDashboard: React.FC = () => {
                     merged[uid] = { id: uid, ...(val as any) };
                 });
 
-                // Layer Firestore top-level fields (xp, level, rank, monthlyXP, …)
+                // Layer private metadata first, then public ranking fields.
+                privateUsers.forEach(privateUser => {
+                    if (!privateUser?.id) return;
+                    merged[privateUser.id] = {
+                        ...(merged[privateUser.id] || {}),
+                        ...privateUser,
+                        id: privateUser.id,
+                    };
+                });
+
                 firestoreUsers.forEach(fu => {
                     if (!fu?.id) return;
                     merged[fu.id] = { ...(merged[fu.id] || {}), ...fu, id: fu.id };

@@ -25,6 +25,37 @@ type StoreCache = {
   profile: UserProfile;
 };
 
+export interface LeaderboardUser {
+  id: string;
+  name: string;
+  photoURL: string;
+  xp: number;
+  level: number;
+  rank: string;
+  rankEmoji: string;
+  title: string;
+  monthlyXP: number;
+  monthlyWorkouts: number;
+  currentMonth: string;
+  currentStreak: number;
+  longestStreak: number;
+}
+
+interface PrivateUserDirectoryEntry {
+  id: string;
+  name: string;
+  email: string;
+  role: 'user' | 'admin';
+  budget: number;
+  weight: number;
+  height: number;
+  age: number;
+  dateOfBirth: string;
+  photoURL: string;
+}
+
+const LEADERBOARD_COLLECTION = 'leaderboard';
+
 const _safeParse = (key: string, fallback: any) => {
   try {
     const item = localStorage.getItem(key);
@@ -52,6 +83,42 @@ const localCache: StoreCache = {
   }),
   profile: _safeParse('jarvis_user_profile', { role: 'user' })
 };
+
+const normalizeCounter = (value: number | undefined, minimum = 0): number => {
+  if (!Number.isFinite(value)) return minimum;
+  return Math.max(minimum, Math.round(value as number));
+};
+
+const normalizePublicText = (value: string | null | undefined, fallback: string, maxLength: number): string => {
+  const normalized = value?.trim().slice(0, maxLength);
+  return normalized || fallback;
+};
+
+const buildLeaderboardDocument = (
+  profile: GymProfile,
+  identity?: { name?: string; photoURL?: string },
+): Omit<LeaderboardUser, 'id'> => ({
+  name: normalizePublicText(
+    identity?.name ?? localCache.userState?.name ?? auth.currentUser?.displayName,
+    'Anonymous',
+    80,
+  ),
+  photoURL: normalizePublicText(
+    identity?.photoURL ?? auth.currentUser?.photoURL,
+    '',
+    2048,
+  ),
+  xp: normalizeCounter(profile.totalXP),
+  level: normalizeCounter(profile.level, 1),
+  rank: normalizePublicText(profile.rank, 'E-Rank', 40),
+  rankEmoji: normalizePublicText(profile.rankEmoji, '', 16),
+  title: normalizePublicText(profile.title, 'Shadow Recruit', 80),
+  monthlyXP: normalizeCounter(profile.monthlyXP),
+  monthlyWorkouts: normalizeCounter(profile.monthlyWorkouts),
+  currentMonth: profile.currentMonth || getCurrentMonthKey(),
+  currentStreak: normalizeCounter(profile.currentStreak),
+  longestStreak: normalizeCounter(profile.longestStreak),
+});
 
 // Simple event emitter for data changes
 const listeners: (() => void)[] = [];
@@ -176,11 +243,10 @@ export const storageService = {
           // Keep Firestore mirror in lockstep for the Leaderboard / Compare UI
           const fsUser = auth.currentUser;
           if (fsUser) {
-            setDoc(doc(db, 'users', fsUser.uid), {
-              monthlyXP: 0,
-              monthlyWorkouts: 0,
-              currentMonth: thisMonth,
-            }, { merge: true }).catch(e => console.error('[syncUser] monthly rollover Firestore sync:', e));
+            setDoc(
+              doc(db, LEADERBOARD_COLLECTION, fsUser.uid),
+              buildLeaderboardDocument(localCache.gymProfile),
+            ).catch(e => console.error('[syncUser] monthly rollover Firestore sync:', e));
           }
         }
 
@@ -243,30 +309,28 @@ export const storageService = {
     };
 
     try {
-      await update(ref(rtdb, `users/${user.uid}`), payload);
-
-      // Sync strictly indexable data to Firestore for Leaderboard/Admin
-      await setDoc(doc(db, 'users', user.uid), {
+      const privateProfile = {
         name: payload.name,
         email: user.email || '',
-        xp: payload.xp,
-        level: payload.level,
-        rank: payload.rank,
-        rankEmoji: payload.rankEmoji,
-        title: payload.title,
+        photoURL: user.photoURL || '',
         role: payload.role || 'user',
         budget: localCache.userState?.dailyBudget || 0,
         weight: localCache.userState?.weight || 0,
         height: localCache.userState?.height || 0,
         age: calculateAge(localCache.userState?.dateOfBirth || ''),
         dateOfBirth: localCache.userState?.dateOfBirth || '',
-        // Monthly League fields — indexable for "top monthly XP" queries
-        monthlyXP: payload.monthlyXP,
-        monthlyWorkouts: payload.monthlyWorkouts,
-        currentMonth: payload.currentMonth,
-        currentStreak: payload.currentStreak,
-        longestStreak: payload.longestStreak,
-      }, { merge: true });
+      };
+
+      // Private account/profile data and public ranking data intentionally live
+      // in separate documents so Leaderboard reads never expose PII.
+      await Promise.all([
+        update(ref(rtdb, `users/${user.uid}`), payload),
+        setDoc(doc(db, 'users', user.uid), privateProfile, { merge: true }),
+        setDoc(
+          doc(db, LEADERBOARD_COLLECTION, user.uid),
+          buildLeaderboardDocument(gp, { name: payload.name, photoURL: user.photoURL || '' }),
+        ),
+      ]);
     } catch (e) {
       console.error("Optimistic RTDB/Firestore sync failed", e);
     }
@@ -295,13 +359,10 @@ export const storageService = {
         title: newProfile.title || 'Shadow Recruit',
       });
 
-      await setDoc(doc(db, 'users', user.uid), {
-        xp: newProfile.totalXP,
-        level: newProfile.level,
-        rank: newProfile.rank,
-        rankEmoji: newProfile.rankEmoji,
-        title: newProfile.title || 'Shadow Recruit',
-      }, { merge: true });
+      await setDoc(
+        doc(db, LEADERBOARD_COLLECTION, user.uid),
+        buildLeaderboardDocument(newProfile),
+      );
       
       alert("Sync Complete: Your stats now match your history exactly.");
       notifyCtx();
@@ -331,23 +392,11 @@ export const storageService = {
     const user = auth.currentUser;
     if (!user) throw new Error('auth/not-authenticated');
 
-    const mirror = {
-      xp: profile.totalXP,
-      level: profile.level,
-      rank: profile.rank,
-      rankEmoji: profile.rankEmoji,
-      title: profile.title || 'Shadow Recruit',
-      name: localCache.userState?.name || user.displayName || 'User',
-      monthlyXP: profile.monthlyXP ?? 0,
-      monthlyWorkouts: profile.monthlyWorkouts ?? 0,
-      currentMonth: profile.currentMonth ?? '',
-      currentStreak: profile.currentStreak ?? 0,
-      longestStreak: profile.longestStreak ?? 0,
-    };
+    const mirror = buildLeaderboardDocument(profile);
 
     // A failed aggregate mirror leaves no workout behind, so retrying remains
     // safe. The following RTDB update stores the complete workout + profile.
-    await setDoc(doc(db, 'users', user.uid), mirror, { merge: true });
+    await setDoc(doc(db, LEADERBOARD_COLLECTION, user.uid), mirror);
     await update(ref(rtdb, `users/${user.uid}`), {
       workouts: logs,
       gymProfile: profile,
@@ -399,6 +448,24 @@ export const storageService = {
     notifyCtx();
   },
 
+  savePublicIdentity: async (name: string, photoURL: string): Promise<void> => {
+    const user = auth.currentUser;
+    if (!user) throw new Error('auth/not-authenticated');
+
+    const publicIdentity = {
+      name: normalizePublicText(name, 'Anonymous', 80),
+      photoURL: normalizePublicText(photoURL, '', 2048),
+    };
+
+    await Promise.all([
+      setDoc(doc(db, 'users', user.uid), publicIdentity, { merge: true }),
+      setDoc(
+        doc(db, LEADERBOARD_COLLECTION, user.uid),
+        buildLeaderboardDocument(localCache.gymProfile, publicIdentity),
+      ),
+    ]);
+  },
+
   getGymProfile: (): GymProfile => localCache.gymProfile || DEFAULT_GYM_PROFILE,
   saveGymProfile: (profile: GymProfile) => {
     localCache.gymProfile = profile;
@@ -417,23 +484,13 @@ export const storageService = {
     storageService.saveData('currentStreak', profile.currentStreak ?? 0);
     storageService.saveData('longestStreak', profile.longestStreak ?? 0);
 
-    // ── Phase 3 fix: also push to Firestore so the Leaderboard (which
-    // reads from the `users` Firestore collection) stays in sync.
+    // Keep the public ranking document aligned with the RTDB source of truth.
     const user = auth.currentUser;
     if (user) {
-      setDoc(doc(db, 'users', user.uid), {
-        xp: profile.totalXP,
-        level: profile.level,
-        rank: profile.rank,
-        rankEmoji: profile.rankEmoji,
-        title: profile.title || 'Shadow Recruit',
-        name: localCache.userState?.name || 'User',
-        monthlyXP: profile.monthlyXP ?? 0,
-        monthlyWorkouts: profile.monthlyWorkouts ?? 0,
-        currentMonth: profile.currentMonth ?? '',
-        currentStreak: profile.currentStreak ?? 0,
-        longestStreak: profile.longestStreak ?? 0,
-      }, { merge: true }).catch(e => console.error('[saveGymProfile] Firestore sync:', e));
+      setDoc(
+        doc(db, LEADERBOARD_COLLECTION, user.uid),
+        buildLeaderboardDocument(profile),
+      ).catch(e => console.error('[saveGymProfile] Firestore sync:', e));
     }
 
     notifyCtx();
@@ -538,7 +595,7 @@ export const storageService = {
 
   getGlobalLeaderboard: async (): Promise<any[]> => {
     try {
-      const q = firestoreQuery(collection(db, 'users'), orderBy('xp', 'desc'), limit(20));
+      const q = firestoreQuery(collection(db, LEADERBOARD_COLLECTION), orderBy('xp', 'desc'), limit(20));
       const snapshot = await getDocs(q);
 
       const results: any[] = [];
@@ -562,7 +619,7 @@ export const storageService = {
   },
 
   subscribeToLeaderboard: (callback: (data: any[]) => void) => {
-    const q = firestoreQuery(collection(db, 'users'), orderBy('xp', 'desc'), limit(20));
+    const q = firestoreQuery(collection(db, LEADERBOARD_COLLECTION), orderBy('xp', 'desc'), limit(20));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const results: any[] = [];
@@ -586,40 +643,61 @@ export const storageService = {
     return unsubscribe;
   },
 
-  getAllUsers: async (): Promise<any[]> => {
+  getAllUsers: async (): Promise<LeaderboardUser[]> => {
     try {
-      const q = firestoreQuery(collection(db, 'users'), orderBy('xp', 'desc'));
+      const q = firestoreQuery(collection(db, LEADERBOARD_COLLECTION), orderBy('xp', 'desc'));
       const snapshot = await getDocs(q);
       
-      const results: any[] = [];
+      const results: LeaderboardUser[] = [];
+      snapshot.forEach(docSnap => {
+        const d = docSnap.data();
+        results.push({
+          id: docSnap.id,
+          name: d.name || 'Anonymous',
+          photoURL: d.photoURL || '',
+          level: d.level ?? 1,
+          xp: d.xp ?? 0,
+          monthlyXP: d.monthlyXP ?? 0,
+          monthlyWorkouts: d.monthlyWorkouts ?? 0,
+          currentMonth: d.currentMonth || getCurrentMonthKey(),
+          currentStreak: d.currentStreak ?? 0,
+          longestStreak: d.longestStreak ?? 0,
+          rank: d.rank || 'E-Rank',
+          rankEmoji: d.rankEmoji || '',
+          title: d.title || 'Shadow Recruit',
+        });
+      });
+      return results;
+    } catch (e) {
+      console.error("Error fetching all users:", e);
+      return [];
+    }
+  },
+
+  getPrivateUsersForAdmin: async (): Promise<PrivateUserDirectoryEntry[]> => {
+    try {
+      const snapshot = await getDocs(collection(db, 'users'));
+      const results: PrivateUserDirectoryEntry[] = [];
+
       snapshot.forEach(docSnap => {
         const d = docSnap.data();
         results.push({
           id: docSnap.id,
           name: d.name || 'Anonymous',
           email: d.email || '-',
-          level: d.level ?? 1,
-          xp: d.xp ?? 0,
+          role: d.role === 'admin' ? 'admin' : 'user',
           budget: d.budget || 0,
           weight: d.weight || 0,
           height: d.height || 0,
           age: d.age || 0,
           dateOfBirth: d.dateOfBirth || '',
-          role: d.role || 'user',
-          // Compare fields — monthly league + streak
-          monthlyXP: d.monthlyXP ?? 0,
-          monthlyWorkouts: d.monthlyWorkouts ?? 0,
-          currentStreak: d.currentStreak ?? 0,
-          longestStreak: d.longestStreak ?? 0,
-          rank: d.rank || 'E-Rank',
-          rankEmoji: d.rankEmoji || '🥉',
-          title: d.title || 'Shadow Recruit',
           photoURL: d.photoURL || '',
         });
       });
+
       return results;
     } catch (e) {
-      console.error("Error fetching all users:", e);
+      console.error('Error fetching private admin directory:', e);
       return [];
     }
   },

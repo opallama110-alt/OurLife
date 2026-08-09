@@ -124,6 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         await Promise.allSettled([
             remove(ref(rtdb, `users/${uid}`)),
             deleteDoc(doc(db, 'users', uid)),
+            deleteDoc(doc(db, 'leaderboard', uid)),
         ]);
 
         await deleteUser(current);

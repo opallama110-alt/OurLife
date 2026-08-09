@@ -182,7 +182,7 @@ const MyProfileTab: React.FC = () => {
       setUploadProgress(95);
 
       await updateProfile(user, { photoURL: url });
-      await setDoc(doc(db, 'users', user.uid), { photoURL: url }, { merge: true });
+      await storageService.savePublicIdentity(displayName, url);
       setPhotoURL(url);
       setUploadProgress(100);
     } catch (e: any) {
@@ -200,7 +200,7 @@ const MyProfileTab: React.FC = () => {
     setProfileError(null);
     try {
       await updateProfile(user, { displayName, photoURL });
-      await setDoc(doc(db, 'users', user.uid), { name: displayName, photoURL }, { merge: true });
+      await storageService.savePublicIdentity(displayName, photoURL);
 
       const state = storageService.getUserState();
       storageService.saveUserState({ ...state, name: displayName });
