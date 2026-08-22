@@ -3,6 +3,8 @@ import {
     User,
     onAuthStateChanged,
     signInWithPopup,
+    browserLocalPersistence,
+    setPersistence,
     GoogleAuthProvider,
     signOut,
     signInWithEmailAndPassword,
@@ -42,12 +44,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [emailVerified, setEmailVerified] = useState(false);
 
     useEffect(() => {
+        let active = true;
+
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
                 // Single Source of Truth: Fetch from Realtime Database exclusively
                 const userData = await storageService.getUserDetails(currentUser.uid);
 
-                // Set explicitly based on RTDB presence.
+                if (!active) return;
+
+                // Set explicitly based on presence.
                 setHasProfile(!!userData);
                 // Google sign-ins are auto-verified; email/password requires the link click.
                 setEmailVerified(currentUser.emailVerified || currentUser.providerData.some(p => p.providerId === 'google.com'));
@@ -56,19 +62,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setEmailVerified(false);
             }
 
+            if (!active) return;
             setUser(currentUser);
             setLoading(false);
         });
 
-        return () => unsubscribe();
+        return () => {
+            active = false;
+            unsubscribe();
+        };
     }, []);
 
     const signInWithGoogle = async () => {
         const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
         try {
+            // Make the Firebase session durable before opening Google. This avoids
+            // returning to /login after a successful popup when the route reloads.
+            await setPersistence(auth, browserLocalPersistence);
             await signInWithPopup(auth, provider);
-        } catch (error) {
-            console.error("Error signing in with Google", error);
+        } catch (error: unknown) {
+            console.error('[AuthContext] Google sign in error:', error);
             throw error;
         }
     };

@@ -71,7 +71,6 @@ export const Login: React.FC = () => {
       setError('');
       setLoading(true);
       await signInWithGoogle();
-      await notificationService.requestPermission();
     } catch (err) {
       setError(friendlyAuthError((err as Error)?.message || ''));
     } finally {
