@@ -26,6 +26,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineCh
 import AnatomyViewer, { getViewForMuscle } from '../components/Anatomy/AnatomyViewer';
 import { RankBadge, rankFromTierName } from '../components/hud';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
+import { getLocalDateString } from '../utils/dateUtils';
 
 const createWorkoutId = (): string =>
   globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -1078,7 +1079,7 @@ export const GymTracker: React.FC = () => {
     workoutIdRef.current = workoutId;
     const workout: WorkoutLog = {
       id: workoutId,
-      date: new Date().toISOString().split('T')[0],
+      date: getLocalDateString(),
       timestamp: new Date().toISOString(),
       type: typeLabel,
       muscleGroups: finalMuscles,

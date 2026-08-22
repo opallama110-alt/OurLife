@@ -5,6 +5,7 @@ import { storageService } from '../services/storageService';
 import { useAuth } from '../context/AuthContext';
 import { SystemChat } from './SystemChat';
 import { BottomNav, BottomNavTab, SystemFrameDefs } from './hud';
+import { getLocalDateString } from '../utils/dateUtils';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Layout — minimal top bar + content outlet + notched bottom nav + bot.
@@ -43,7 +44,7 @@ export const Layout: React.FC = () => {
     // Recompute habit pending dot on route change.
     useEffect(() => {
         const habits = storageService.getHabits();
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateString();
         const incomplete = (habits || []).some(h => !(h.completedDates?.includes(today)));
         setHabitsPending(incomplete);
     }, [location.pathname]);

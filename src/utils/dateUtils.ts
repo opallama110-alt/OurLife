@@ -43,8 +43,15 @@ export const formatDateForInput = (dateOfBirth: string): string => {
   return dateOfBirth.split('T')[0];
 };
 
+/**
+ * Return a local calendar date without converting through UTC first.
+ * This keeps workout and habit day keys aligned after midnight in UTC+7.
+ */
+export const getLocalDateString = (date: Date = new Date()): string =>
+  date.toLocaleDateString('en-CA');
+
 export const getTodayString = (): string => {
-  return new Date().toISOString().split('T')[0];
+  return getLocalDateString();
 };
 
 // Bounds for the date picker — birth dates beyond today are nonsensical,

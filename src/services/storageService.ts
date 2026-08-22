@@ -8,7 +8,7 @@ import {
   getRankForLevel,
   getTitleForLevel,
 } from './gamificationService';
-import { calculateAge } from '../utils/dateUtils';
+import { calculateAge, getLocalDateString } from '../utils/dateUtils';
 import { rtdb, auth, db } from '../../firebase-config';
 import { ref, get, set, update, onValue, off } from 'firebase/database';
 import { collection, query as firestoreQuery, orderBy, limit, getDocs, onSnapshot, doc, setDoc } from 'firebase/firestore';
@@ -730,7 +730,7 @@ export const storageService = {
     const profile = localCache.gymProfile;
 
     const lastWorkout = workouts?.length > 0 ? `${workouts[0].type} on ${workouts[0].date}` : 'No workouts logged.';
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     const todaysHabits = habits.filter(h => h.completedDates?.includes(today)).map(h => h.name).join(', ') || 'None';
 
     return `

@@ -9,14 +9,17 @@ import {
   Plus, Trash2, Trophy, Zap, Target, Loader2, Flame, Clock, Shield, Check, Sparkles,
 } from 'lucide-react';
 import { NewHabitModal, NewHabitPayload } from '../components/habits/NewHabitModal';
+import { getLocalDateString } from '../utils/dateUtils';
 
 // ── Streak helpers (preserved verbatim from prior implementation) ──
 const calculateStreak = (completedDates: string[] | undefined | null): number => {
   if (!completedDates || !Array.isArray(completedDates) || completedDates.length === 0) return 0;
 
   const sorted = [...(completedDates || [])].sort((a, b) => b.localeCompare(a));
-  const today = new Date().toISOString().split('T')[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const today = getLocalDateString();
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = getLocalDateString(yesterdayDate);
 
   const lastDate = sorted[0];
   if (lastDate !== today && lastDate !== yesterday) return 0;
@@ -57,15 +60,15 @@ const calculateLongestStreak = (completedDates: string[] | undefined | null): nu
 const WEEKDAY_INITIAL = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 /**
- * The 7 day-cells shown on every habit card: today−6 … today. ISO dates are
- * built the same UTC-day way `completedDates` is stored (toISOString) so the
- * membership checks line up exactly. Cheap; identical across all habits.
+ * The 7 day-cells shown on every habit card: today−6 … today. Local YYYY-MM-DD
+ * matches the storage format so membership checks line up exactly.
  */
 const buildWeekCells = (todayISO: string) =>
   Array.from({ length: 7 }, (_, k) => {
-    const d = new Date(Date.now() - (6 - k) * 86400000);
-    const iso = d.toISOString().split('T')[0];
-    return { iso, label: WEEKDAY_INITIAL[d.getUTCDay()], isToday: iso === todayISO };
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - k));
+    const iso = getLocalDateString(d);
+    return { iso, label: WEEKDAY_INITIAL[d.getDay()], isToday: iso === todayISO };
   });
 
 // ── DayCell — one cell of the weekly grid, with its own tap ripple ──
@@ -129,7 +132,7 @@ const DailyProtocolEvaluator: React.FC<{
       const workouts = storageService.getWorkouts();
       const fatigue = computeFatigue(workouts, Date.now(), userState.gender);
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       const habitLines = habits.map(h => {
         const done = h.completedDates?.includes(today) ? 'DONE' : 'pending';
         return `  - ${h.name} [${done}, streak ${h.streak}d]`;
@@ -206,7 +209,7 @@ const DailyProtocolEvaluator: React.FC<{
       {!verdict && !loading && !error && (
         <p className="h-system-body">
           Ketuk <strong className="fz-orange">Evaluate Now</strong> untuk menerima verdict yang
-          dipersonalisasi — System akan menganalisa penyelesaian habit, performa gym terakhir,
+          dipersonalisasi — System akan menganalisis penyelesaian habit, performa gym terakhir,
           streak saat ini, dan fatigue otot, lalu memberikan langkah berikutnya.
         </p>
       )}
@@ -247,7 +250,7 @@ export const HabitTracker: React.FC = () => {
     setHabits(recalculated);
   }, []);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
   const weekCells = buildWeekCells(today);
   const completedToday = habits.filter(h => h.completedDates?.includes(today))?.length;
   const totalHabits = habits?.length;
