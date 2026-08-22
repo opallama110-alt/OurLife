@@ -29,7 +29,11 @@ type CompareUser = {
     photoURL?: string;
 };
 
-export const Profile: React.FC = () => {
+interface ProfileProps {
+    achievementsDefaultExpanded?: boolean;
+}
+
+export const Profile: React.FC<ProfileProps> = ({ achievementsDefaultExpanded = true }) => {
     const [user, setUser] = useState<UserState & { gymSchedule?: any }>(() => ({
         ...storageService.getUserState(),
         gymSchedule: storageService.getGymSchedule()
@@ -84,7 +88,7 @@ export const Profile: React.FC = () => {
             <Penghargaan gymProfile={gymProfile} />
 
             {/* ═══════════════════ PHASE 5B: ACHIEVEMENT GALLERY ═══════════════════ */}
-            <AchievementGallery />
+            <AchievementGallery defaultExpanded={achievementsDefaultExpanded} />
 
             {/* ═══════════════════ PHASE 6: COMPARE UI ═══════════════════ */}
             <CompareSection gymProfile={gymProfile} displayName={user.name} />

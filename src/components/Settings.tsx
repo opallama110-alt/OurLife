@@ -299,7 +299,7 @@ const MyProfileTab: React.FC = () => {
       </Section>
 
       {/* ═══════════ EMBEDDED PROFILE (HunterCard / Penghargaan / Compare / Identity / DOB) ═══════════ */}
-      <Profile />
+      <Profile achievementsDefaultExpanded={false} />
 
       {/* ═══════════ ACCOUNT SECURITY (mostly stubs until wired through Firebase Auth) ═══════════ */}
       <Section icon={Shield} title="Account Security">

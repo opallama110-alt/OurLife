@@ -1085,7 +1085,7 @@ export const GymTracker: React.FC = () => {
       muscleGroups: finalMuscles,
       exercises: enrichedData,
       coreWork: finalMuscles.some(m => ['abs', 'obliques'].includes(m)),
-      notes: notes || undefined,
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
       xpEarned: totalXP,
     };
 
