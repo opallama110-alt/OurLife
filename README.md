@@ -7,10 +7,10 @@
 *Setiap workout dan habit yang lo kerjain = XP. Naik level. Naik rank. Develop character stats. Build streak. The System watches.*
 
 ![Status](https://img.shields.io/badge/status-private%20beta-orange)
-![Stack](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
-![Stack](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)
+![Stack](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
+![Stack](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)
 ![Stack](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
-![Stack](https://img.shields.io/badge/Tailwind-3-06B6D4?logo=tailwindcss&logoColor=white)
+![Stack](https://img.shields.io/badge/Tailwind-Play%20CDN-06B6D4?logo=tailwindcss&logoColor=white)
 ![Stack](https://img.shields.io/badge/Firebase-orange?logo=firebase&logoColor=white)
 ![PWA](https://img.shields.io/badge/PWA-ready-5A0FC8?logo=pwa&logoColor=white)
 
@@ -44,7 +44,7 @@ Web app (PWA) untuk fitness tracking + habit building yang ter-gamifikasi. Konse
 
 | Layer | Tech |
 |-------|------|
-| Frontend | React 18 + Vite + TypeScript (strict) + Tailwind CSS |
+| Frontend | React 19 + Vite 6 + TypeScript 5 + Tailwind Play CDN (runtime) |
 | State | Custom `services/storageService.ts` pattern + Firebase RTDB |
 | Backend-as-a-Service | Firebase (Auth + Firestore + Realtime Database + Storage) |
 | AI | Groq SDK + Llama 3.3 70B Versatile (function calling) |
