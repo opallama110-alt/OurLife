@@ -6708,6 +6708,114 @@ input, select, textarea {
   animation-delay: calc(var(--i, 0) * 50ms + 80ms);
 }
 
+/* ─── Streak Freeze tokens (TokenDisplay.tsx) ─── */
+.tok { display: flex; align-items: center; gap: 6px; }
+.tok--sm { gap: 4px; }
+.tok--lg { gap: 8px; }
+.tok-slot {
+  position: relative;
+  display: inline-grid; place-items: center;
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  border: 1px dashed var(--line-strong);
+  background: rgba(7, 12, 24, 0.5);
+  color: var(--t-mute);
+  transition: color var(--dur-2) ease, border-color var(--dur-2) ease, background-color var(--dur-2) ease, box-shadow var(--dur-3) ease;
+}
+.tok--sm .tok-slot { width: 20px; height: 20px; border-radius: 5px; }
+.tok--lg .tok-slot { width: 40px; height: 40px; border-radius: 10px; }
+.tok-slot.is-filled {
+  border: 1px solid rgba(103, 232, 249, 0.55);
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+  color: #fff;
+  box-shadow: 0 0 12px -2px rgba(34, 211, 238, 0.55);
+}
+/* Earned: the new shield pops into its slot. */
+.tok-slot.is-gain { animation: tokGain var(--dur-5) var(--ease-spring) var(--tok-fx-delay, 0ms) backwards; }
+/* Spent: a filled ghost shield sits over the vacated slot and shatters away
+   (`both` fill so it shows filled during the delay and stays gone after). */
+.tok-ghost {
+  position: absolute; inset: -1px;
+  display: grid; place-items: center;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+  color: #fff;
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.6);
+  pointer-events: none;
+  animation: tokSpend 650ms var(--ease-in) var(--tok-fx-delay, 0ms) both;
+}
+@keyframes tokGain  { 0% { opacity: 0; transform: scale(0.4) rotate(-20deg); } 60% { opacity: 1; transform: scale(1.15); } }
+@keyframes tokSpend {
+  0%   { opacity: 1; transform: none; }
+  30%  { opacity: 1; transform: scale(1.15) rotate(-6deg); }
+  100% { opacity: 0; transform: scale(0.3) rotate(20deg); }
+}
+
+/* ─── Streak-save moment (TokenUsedModal.tsx, inside HudDialog) ─── */
+.tok-dialog .hd-head { text-align: center; }
+.tok-hero {
+  position: relative;
+  width: 88px; height: 88px;
+  margin: 2px auto 14px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(103, 232, 249, 0.16), transparent 72%);
+}
+.tok-ice {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(103, 232, 249, 0.5);
+  animation: tokIce 9s linear infinite;
+}
+.tok-stamp {
+  position: absolute; right: 4px; bottom: 4px;
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+  box-shadow: 0 0 0 3px rgba(7, 11, 22, 0.95), 0 0 16px rgba(34, 211, 238, 0.6);
+  animation: tokStamp 560ms var(--ease-spring) 220ms backwards;
+}
+.tok-stamp-ring {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--cyan);
+  opacity: 0;
+  animation: tokRing 700ms var(--ease-out) 540ms;
+}
+.tok-copy { margin: 0 0 12px; text-align: center; }
+.tok-copy b { color: var(--t-hi); font-weight: 700; }
+.tok-saved {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: fit-content;
+  margin: 0 auto 14px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 146, 60, 0.35);
+  background: rgba(251, 146, 60, 0.07);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--t-1);
+}
+.tok-saved-num {
+  display: inline-block;
+  font-weight: 800;
+  color: var(--orange);
+  animation: tokNumPop 460ms var(--ease-spring) 760ms backwards;
+}
+.tok-remaining {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background: rgba(7, 12, 24, 0.55);
+}
+@keyframes tokIce    { to { transform: rotate(360deg); } }
+@keyframes tokStamp  { 0% { opacity: 0; transform: scale(1.9) rotate(-14deg); } 60% { opacity: 1; transform: scale(0.9) rotate(3deg); } }
+@keyframes tokRing   { from { opacity: 0.9; transform: scale(0.7); } to { opacity: 0; transform: scale(2.2); } }
+@keyframes tokNumPop { 0% { opacity: 0; transform: scale(0.6); } 60% { opacity: 1; transform: scale(1.25); } }
+
 /* ============================================================
    SYSTEM NOTIFICATION extras (sn-btn / sn-timer / sn-target / sn-warn)
    Ported from prototype system-notif.css — used by IntroSequence +

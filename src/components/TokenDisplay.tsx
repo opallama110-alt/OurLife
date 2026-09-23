@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Shield } from 'lucide-react';
 
 interface TokenDisplayProps {
@@ -6,46 +6,81 @@ interface TokenDisplayProps {
   max?: number;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
+  /**
+   * Count to animate FROM on mount. TokenUsedModal passes `remaining + 1`
+   * so the user actually watches the token that saved their streak get
+   * spent. Omit to start at `count` (no mount animation).
+   */
+  animateFrom?: number;
+  /** Delay (ms) before a gain/spend animation plays — lets a modal land first. */
+  fxDelay?: number;
 }
 
-const SIZE_MAP = {
-  sm: { icon: 12, gap: 'gap-1', wrapper: 'w-5 h-5' },
-  md: { icon: 16, gap: 'gap-1.5', wrapper: 'w-7 h-7' },
-  lg: { icon: 22, gap: 'gap-2', wrapper: 'w-10 h-10' },
-};
+const ICON_PX = { sm: 12, md: 16, lg: 22 } as const;
+
+type SlotFx = { i: number; kind: 'gain' | 'spend' };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TOKEN DISPLAY — visual counter for Streak Freeze Tokens.
-// Filled shields = available tokens; empty slate placeholders = unearned slots.
-// Used in Dashboard (sm) and Settings Goals tab (lg).
+// Filled shields = available tokens; empty slots = unearned.
+// Earning a token pops the new shield in; spending one shatters a ghost
+// shield out of the vacated slot. Presentation only — the count comes from
+// streakProtectionService via the caller.
+// Used in Settings Goals tab (lg) and TokenUsedModal (lg).
 // ═══════════════════════════════════════════════════════════════════════════
 export const TokenDisplay: React.FC<TokenDisplayProps> = ({
   count,
   max = 3,
   size = 'md',
   className = '',
+  animateFrom,
+  fxDelay = 0,
 }) => {
   const safeCount = Math.max(0, Math.min(max, count));
-  const dims = SIZE_MAP[size];
+  const prev = useRef(Math.max(0, Math.min(max, animateFrom ?? safeCount)));
+  const [fx, setFx] = useState<SlotFx | null>(null);
+
+  // Layout effect: the fx class lands in the same frame as the new count, so
+  // there's no one-frame flash of the already-empty slot before the ghost.
+  useLayoutEffect(() => {
+    const p = prev.current;
+    prev.current = safeCount;
+    if (safeCount > p) setFx({ i: safeCount - 1, kind: 'gain' });
+    else if (safeCount < p) setFx({ i: safeCount, kind: 'spend' });
+  }, [safeCount]);
+
+  // Safety net: animationend never fires in a backgrounded tab.
+  useEffect(() => {
+    if (!fx) return;
+    const t = window.setTimeout(() => setFx(null), fxDelay + 1400);
+    return () => window.clearTimeout(t);
+  }, [fx, fxDelay]);
+
+  const icon = ICON_PX[size];
 
   return (
-    <div className={`flex items-center ${dims.gap} ${className}`} aria-label={`${safeCount} of ${max} streak freeze tokens available`}>
+    <div
+      className={`tok tok--${size} ${className}`.trim()}
+      style={{ '--tok-fx-delay': `${fxDelay}ms` } as React.CSSProperties}
+      role="img"
+      aria-label={`${safeCount} dari ${max} token streak freeze tersedia`}
+    >
       {Array.from({ length: max }).map((_, i) => {
         const filled = i < safeCount;
+        const slotFx = fx && fx.i === i ? fx.kind : null;
         return (
-          <div
+          <span
             key={i}
-            className={`${dims.wrapper} rounded-md flex items-center justify-center transition-all ${filled
-              ? 'bg-gradient-to-br from-cyan-500 to-blue-600 shadow-[0_0_10px_rgba(6,182,212,0.45)]'
-              : 'bg-slate-800 border border-slate-700'
-              }`}
+            className={`tok-slot ${filled ? 'is-filled' : ''} ${slotFx === 'gain' ? 'is-gain' : ''}`}
+            onAnimationEnd={e => { if (e.target === e.currentTarget && slotFx === 'gain') setFx(null); }}
           >
-            <Shield
-              size={dims.icon}
-              className={filled ? 'text-white drop-shadow-[0_0_2px_rgba(255,255,255,0.9)]' : 'text-slate-600'}
-              strokeWidth={filled ? 2.4 : 1.8}
-            />
-          </div>
+            <Shield size={icon} strokeWidth={filled ? 2.4 : 1.8} aria-hidden="true" />
+            {slotFx === 'spend' && (
+              <span className="tok-ghost" aria-hidden="true" onAnimationEnd={() => setFx(null)}>
+                <Shield size={icon} strokeWidth={2.4} />
+              </span>
+            )}
+          </span>
         );
       })}
     </div>
