@@ -35,3 +35,9 @@ export type { BottomNavProps, BottomNavTab } from './BottomNav';
 
 export { default as SysToast, useSysToasts } from './SysToast';
 export type { SysToastItem, SysToastTone } from './SysToast';
+
+export { default as HudDialog, ConfirmDialog } from './HudDialog';
+export type { HudDialogProps, HudDialogTone, ConfirmDialogProps } from './HudDialog';
+
+export { default as CountUp } from './CountUp';
+export type { CountUpProps } from './CountUp';

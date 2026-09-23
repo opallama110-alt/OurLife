@@ -5296,6 +5296,156 @@ input, select, textarea {
 @keyframes sysToastIn  { from { opacity: 0; transform: translateY(14px) scale(0.96); } }
 @keyframes sysToastOut { to   { opacity: 0; transform: translateY(8px) scale(0.98); } }
 
+/* ============================================================
+   HUD DIALOG — hud/HudDialog.tsx (+ ConfirmDialog)
+   Shared modal/sheet primitive. Portaled to <body>. Enter uses
+   --ease-out-expo (no overshoot, so a sheet never lifts off the
+   bottom edge); exit is shorter with --ease-in. The backdrop only
+   fades opacity — animating backdrop-filter repaints the whole
+   screen every frame on mobile.
+   ============================================================ */
+.hd-root {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px;
+}
+.hd-root--sheet { align-items: flex-end; padding: 0; }
+.hd-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 4, 10, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.hd-panel {
+  --hd-accent: var(--cyan);
+  --hd-accent-soft: rgba(34, 211, 238, 0.35);
+  --hd-glow: rgba(34, 211, 238, 0.1);
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 18px 16px;
+  border-radius: var(--r-4);
+  border: 1px solid var(--hd-accent-soft);
+  background:
+    radial-gradient(120% 60% at 50% 0%, var(--hd-glow), transparent 70%),
+    linear-gradient(180deg, rgba(20, 28, 48, 0.96), rgba(7, 11, 22, 0.98));
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+  color: var(--t-1);
+  outline: none;
+}
+.hd-root--sheet .hd-panel {
+  max-width: 500px;
+  border-radius: 22px 22px 0 0;
+  border-bottom: 0;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+}
+.hd-panel--red    { --hd-accent: var(--red);          --hd-accent-soft: rgba(239, 68, 68, 0.4);  --hd-glow: rgba(239, 68, 68, 0.1); }
+.hd-panel--orange { --hd-accent: var(--orange);       --hd-accent-soft: rgba(251, 146, 60, 0.4); --hd-glow: rgba(251, 146, 60, 0.1); }
+.hd-panel--green  { --hd-accent: var(--green-bright); --hd-accent-soft: rgba(52, 211, 153, 0.4); --hd-glow: rgba(52, 211, 153, 0.1); }
+.hd-grabber {
+  display: block;
+  width: 38px; height: 4px;
+  margin: -6px auto 12px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+.hd-head { margin-bottom: 12px; }
+.hd-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--t-hi);
+}
+.hd-sub {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--t-3);
+}
+.hd-body { font-size: 13.5px; line-height: 1.55; color: var(--t-2); }
+.hd-message b, .hd-message strong { color: var(--t-hi); }
+.hd-foot { display: flex; gap: 10px; margin-top: 18px; }
+.hd-btn {
+  flex: 1;
+  min-height: 46px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--t-1);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-out), background var(--dur-2) ease, border-color var(--dur-2) ease, opacity var(--dur-2) ease;
+}
+.hd-btn:active:not(:disabled) { transform: scale(0.97); }
+.hd-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.hd-btn--ghost { color: var(--t-2); }
+.hd-btn--primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, #67E8F9, #22D3EE);
+  color: var(--bg-void);
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.35);
+}
+.hd-btn--danger {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.9));
+  color: #fff;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.3);
+}
+/* Form field for dialogs (weight / name edits, etc.). */
+.hd-field { position: relative; }
+.hd-input {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(4, 6, 13, 0.6);
+  color: var(--t-hi);
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  outline: none;
+  transition: border-color var(--dur-2) ease, box-shadow var(--dur-2) ease;
+}
+.hd-input:focus { border-color: var(--hd-accent); box-shadow: 0 0 0 3px var(--hd-accent-soft); }
+.hd-input-suffix {
+  position: absolute;
+  right: 16px; top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--t-3);
+  pointer-events: none;
+}
+/* Enter / exit */
+.hd-root[data-state="enter"] .hd-backdrop { animation: hdFadeIn var(--dur-3) ease-out both; }
+.hd-root[data-state="exit"]  .hd-backdrop { animation: hdFadeOut var(--dur-2) ease-in both; }
+.hd-root--center[data-state="enter"] .hd-panel { animation: hdPopIn var(--dur-3) var(--ease-out-expo) both; }
+.hd-root--center[data-state="exit"]  .hd-panel { animation: hdPopOut var(--dur-2) var(--ease-in) both; }
+.hd-root--sheet[data-state="enter"]  .hd-panel { animation: hdSheetIn var(--dur-4) var(--ease-out-expo) both; }
+.hd-root--sheet[data-state="exit"]   .hd-panel { animation: hdSheetOut var(--dur-2) var(--ease-in) both; }
+.hd-root[data-state="exit"] { pointer-events: none; }
+@keyframes hdFadeIn   { from { opacity: 0; } }
+@keyframes hdFadeOut  { to   { opacity: 0; } }
+@keyframes hdPopIn    { from { opacity: 0; transform: translateY(10px) scale(0.96); } }
+@keyframes hdPopOut   { to   { opacity: 0; transform: translateY(6px) scale(0.98); } }
+@keyframes hdSheetIn  { from { transform: translateY(100%); } }
+@keyframes hdSheetOut { to   { transform: translateY(100%); } }
+
 .h-empty {
   position: relative;
   padding: 22px;
