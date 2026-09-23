@@ -6416,6 +6416,129 @@ input, select, textarea {
 .am-tier-req { font-size: 10px; color: var(--t-mute); letter-spacing: 0.04em; font-family: var(--font-mono); }
 
 /* ============================================================
+   PROFILE & STATUS — Profile page (HunterCard / Penghargaan /
+   Compare / forms), StatusCard, AchievementGallery, Leaderboard,
+   achievement unlock toast, streak-freeze tokens.
+   Prefixes: .pf-* Profile · .stc-* StatusCard · .agl-* gallery ·
+   .lbr-* leaderboard · .ach-* unlock toast · .tok-* tokens.
+   Motion is transform/opacity with `backwards` fill (nothing keeps a
+   transform once settled) unless noted.
+   ============================================================ */
+
+/* ─── Achievement unlock toast (AchievementNotification.tsx) ─── */
+.ach-stack {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 0; right: 0;
+  z-index: 85;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+.ach-toast {
+  --ach-c: #94A3B8;
+  --ach-line: rgba(148, 163, 184, 0.35);
+  --ach-tint: rgba(148, 163, 184, 0.14);
+  --ach-glow: rgba(148, 163, 184, 0.35);
+  width: min(24rem, calc(100% - 2rem));
+  display: grid;
+  grid-template-rows: 1fr;
+  pointer-events: auto;
+  animation: achToastIn var(--dur-4) var(--ease-spring-soft) backwards;
+  transition:
+    grid-template-rows var(--dur-3) var(--ease-out-expo),
+    opacity var(--dur-2) var(--ease-in),
+    transform var(--dur-2) var(--ease-in);
+}
+.ach-toast[data-rarity="bronze"]    { --ach-c: #F0A77B; --ach-line: rgba(205, 127, 50, 0.5);  --ach-tint: rgba(205, 127, 50, 0.2);  --ach-glow: rgba(205, 127, 50, 0.45); }
+.ach-toast[data-rarity="silver"]    { --ach-c: #E2E8F0; --ach-line: rgba(203, 213, 225, 0.5); --ach-tint: rgba(203, 213, 225, 0.14); --ach-glow: rgba(226, 232, 240, 0.4); }
+.ach-toast[data-rarity="purple"]    { --ach-c: #C4B5FD; --ach-line: rgba(167, 139, 250, 0.55); --ach-tint: rgba(167, 139, 250, 0.2); --ach-glow: rgba(167, 139, 250, 0.5); }
+.ach-toast[data-rarity="gold"]      { --ach-c: #FBBF24; --ach-line: rgba(245, 197, 24, 0.55); --ach-tint: rgba(245, 197, 24, 0.18); --ach-glow: rgba(245, 197, 24, 0.5); }
+.ach-toast[data-rarity="legendary"] { --ach-c: #FDBA74; --ach-line: rgba(251, 146, 60, 0.65); --ach-tint: rgba(249, 115, 22, 0.24); --ach-glow: rgba(249, 115, 22, 0.6); }
+.ach-toast[data-rarity="mythic"]    { --ach-c: #F0ABFC; --ach-line: rgba(168, 85, 247, 0.7);  --ach-tint: rgba(168, 85, 247, 0.26); --ach-glow: rgba(168, 85, 247, 0.65); }
+/* Leaving: the slot collapses (toasts below glide up) while the card lifts
+   away. Clipping only while leaving so the rarity glow isn't cut off. */
+.ach-toast[data-state="exit"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-10px) scale(0.97);
+  pointer-events: none;
+}
+.ach-toast-clip { min-height: 0; }
+.ach-toast[data-state="exit"] .ach-toast-clip { overflow: hidden; }
+.ach-toast-card {
+  position: relative;
+  margin-bottom: 8px;           /* the gap lives inside the clip, so it collapses too */
+  border-radius: 16px;
+  border: 1px solid var(--ach-line);
+  background:
+    radial-gradient(120% 100% at 0% 0%, var(--ach-tint), transparent 62%),
+    linear-gradient(180deg, rgba(20, 28, 48, 0.97), rgba(7, 11, 22, 0.98));
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.9), 0 0 28px -10px var(--ach-glow);
+  overflow: hidden;             /* sheen + countdown clip to the rounded card */
+}
+.ach-toast-body { display: flex; align-items: flex-start; gap: 12px; padding: 14px 44px 16px 14px; }
+.ach-toast-emblem {
+  display: inline-flex;
+  flex-shrink: 0;
+  animation: achEmblemPop var(--dur-5) var(--ease-spring) 140ms backwards;
+}
+.ach-toast-info { min-width: 0; flex: 1; }
+.ach-toast-kicker {
+  display: flex; align-items: center; gap: 5px;
+  margin-bottom: 2px;
+  font-family: var(--font-mono);
+  font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ach-c);
+}
+.ach-toast-rarity { color: var(--t-3); }
+.ach-toast-title { margin: 0; font-size: 14px; font-weight: 800; line-height: 1.25; color: var(--t-hi); }
+.ach-toast-desc { margin: 2px 0 0; font-size: 11.5px; line-height: 1.4; color: var(--t-2); }
+.ach-toast-rewards { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 7px; }
+.ach-toast-reward {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+  color: var(--cyan-bright);
+}
+.ach-toast-close {
+  position: absolute; top: 6px; right: 6px; z-index: 2;
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 10px;
+  background: transparent;
+  color: var(--t-3);
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-out), color var(--dur-2) ease, background-color var(--dur-2) ease;
+}
+.ach-toast-close::after { content: ''; position: absolute; inset: -6px; }   /* 44px hit area */
+.ach-toast-close:active { transform: scale(0.9); color: var(--t-hi); background: rgba(255, 255, 255, 0.06); }
+/* Visual countdown; pauses with the JS timer while pressed/hovered. */
+.ach-toast-timer {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: var(--ach-c);
+  opacity: 0.55;
+  transform-origin: 0 50%;
+  animation: achTimer 5s linear forwards;
+}
+.ach-toast[data-paused] .ach-toast-timer { animation-play-state: paused; }
+/* Legendary / mythic get a one-shot sheen across the card. */
+.ach-toast[data-rarity="legendary"] .ach-toast-card::after,
+.ach-toast[data-rarity="mythic"] .ach-toast-card::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.2) 50%, transparent 65%);
+  transform: translateX(-100%);
+  animation: achSheen 900ms var(--ease-out) 350ms forwards;
+}
+@keyframes achToastIn   { from { opacity: 0; transform: translateY(-28px) scale(0.94); } }
+@keyframes achEmblemPop { 0% { opacity: 0; transform: scale(0.3) rotate(-20deg); } 70% { transform: scale(1.1); } }
+@keyframes achTimer     { to { transform: scaleX(0); } }
+@keyframes achSheen     { to { transform: translateX(100%); } }
+
+/* ============================================================
    SYSTEM NOTIFICATION extras (sn-btn / sn-timer / sn-target / sn-warn)
    Ported from prototype system-notif.css — used by IntroSequence +
    FirstDailyQuest.
