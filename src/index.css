@@ -359,13 +359,20 @@ button, a, [role="button"], label, summary { touch-action: manipulation; }
   background: #1e293b;
   border-radius: 1rem;
   border: 1px solid #334155;
-  transition: all 0.3s ease;
+  /* Only the hover properties tween — `transition: all` made every incidental
+     class swap (borders, backgrounds) lag for 300ms. */
+  transition: border-color var(--dur-2) ease, box-shadow var(--dur-3) ease;
 }
 
-.jarvis-card:hover {
-  border-color: #475569;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  transform: translateY(-1px);
+/* Hover lift only on real hover devices. On touch, :hover sticks after a tap,
+   and the old translateY(-1px) left a transform on the card — turning it into
+   the containing block for any position:fixed child (the achievement sheet
+   anchored to the card instead of the viewport). No transform at all now. */
+@media (hover: hover) and (pointer: fine) {
+  .jarvis-card:hover {
+    border-color: #475569;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
 }
 
 .jarvis-card-glow:hover {
@@ -6205,7 +6212,10 @@ input, select, textarea {
   cursor: pointer;
   text-align: left;
   color: inherit;
+  /* Tap feedback before the sheet rises — without it the row feels dead. */
+  transition: transform var(--dur-1) var(--ease-out), border-color var(--dur-2) ease, background-color var(--dur-2) ease;
 }
+.s-ach:active { transform: scale(0.985); border-color: var(--line-cyan-soft); background-color: rgba(34, 211, 238, 0.04); }
 .s-ach.is-featured { border-color: rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.04); }
 .s-ach.is-locked { opacity: 0.65; }
 .s-ach.is-done { background: linear-gradient(90deg, rgba(251, 191, 36, 0.04), transparent 80%), rgba(7, 12, 24, 0.5); }
@@ -6213,7 +6223,15 @@ input, select, textarea {
 .s-ach-name { font-size: 13px; font-weight: 700; color: var(--t-hi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .s-ach-desc { font-size: 11px; color: var(--t-3); margin-top: 1px; line-height: 1.35; }
 .s-ach-bar { margin-top: 6px; height: 3px; border-radius: 999px; background: rgba(251, 191, 36, 0.08); overflow: hidden; }
-.s-ach-bar-fill { height: 100%; background: linear-gradient(90deg, #FBBF24, #FB923C); }
+.s-ach-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #FBBF24, #FB923C);
+  transform-origin: 0 50%;
+  /* Charges from empty when the row mounts; later progress tweens width. */
+  animation: sAchFill 700ms var(--ease-out-expo) 200ms backwards;
+  transition: width 600ms var(--ease-out-expo);
+}
+@keyframes sAchFill { from { transform: scaleX(0); } }
 .s-ach-right { text-align: right; display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
 .s-ach-xp {
   font-size: 11px; font-weight: 700;
@@ -6244,28 +6262,33 @@ input, select, textarea {
 .s-ach-viewall:hover { background: rgba(34, 211, 238, 0.1); }
 .s-ach-viewall-arr { font-size: 16px; }
 
-/* Achievement modal */
+/* Achievement modal — portaled to <body> (AchievementModal.tsx) with a
+   usePresence enter/exit. The sheet arrives on --ease-out-expo (no overshoot,
+   so it never lifts off the bottom edge and shows a strip of backdrop) and
+   leaves ~30% faster on --ease-in. The backdrop blur stays constant; only
+   its opacity animates, because re-blurring the whole screen every frame is
+   the most expensive thing you can animate on a mid-range Android phone. */
 .am-root {
   position: fixed; inset: 0; z-index: 300;
-  pointer-events: none;
 }
+.am-root[data-state="exit"] { pointer-events: none; }
 .am-backdrop {
   position: absolute; inset: 0;
-  background: rgba(4, 6, 13, 0);
-  backdrop-filter: blur(0px);
-  transition: background 240ms ease, backdrop-filter 240ms ease;
-  pointer-events: none;
-}
-.am-root.is-open .am-backdrop {
   background: rgba(4, 6, 13, 0.7);
   backdrop-filter: blur(8px);
-  pointer-events: auto;
+  -webkit-backdrop-filter: blur(8px);
 }
+.am-root[data-state="enter"] .am-backdrop { animation: amFadeIn var(--dur-3) ease-out backwards; }
+.am-root[data-state="exit"]  .am-backdrop { animation: amFadeOut var(--dur-2) var(--ease-in) forwards; }
 .am-panel {
   position: absolute;
   left: 0; right: 0; bottom: 0;
+  margin: 0 auto;
+  max-width: 560px;
   max-height: 86vh;
+  max-height: 86dvh;
   overflow-y: auto;
+  overscroll-behavior: contain;       /* a fling inside the sheet never scrolls the page behind */
   scrollbar-width: none;
   border-top-left-radius: 22px;
   border-top-right-radius: 22px;
@@ -6274,28 +6297,52 @@ input, select, textarea {
     linear-gradient(180deg, rgba(15, 21, 37, 0.96), rgba(7, 11, 22, 0.99));
   border: 1px solid var(--line-cyan-soft);
   border-bottom: 0;
-  padding: 22px 18px 24px;
-  transform: translateY(100%);
-  transition: transform 360ms var(--ease-spring);
-  pointer-events: auto;
+  padding: 26px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+  outline: none;
   box-shadow:
     inset 0 1px 0 rgba(34, 211, 238, 0.18),
     0 -20px 60px -10px rgba(0, 0, 0, 0.85),
     0 0 50px -10px rgba(34, 211, 238, 0.35);
 }
 .am-panel::-webkit-scrollbar { display: none; }
-.am-root.is-open .am-panel { transform: translateY(0); }
+.am-root[data-state="enter"] .am-panel { animation: amSheetIn var(--dur-4) var(--ease-out-expo) backwards; }
+.am-root[data-state="exit"]  .am-panel { animation: amSheetOut var(--dur-2) var(--ease-in) forwards; }
+@keyframes amFadeIn   { from { opacity: 0; } }
+@keyframes amFadeOut  { to   { opacity: 0; } }
+@keyframes amSheetIn  { from { transform: translateY(100%); } }
+@keyframes amSheetOut { to   { transform: translateY(100%); } }
+.am-grabber {
+  position: absolute;
+  top: 8px; left: 50%;
+  width: 36px; height: 4px;
+  margin-left: -18px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
 .am-close {
   position: absolute;
-  top: 14px; right: 14px;
-  width: 30px; height: 30px;
+  top: 12px; right: 12px;
+  width: 36px; height: 36px;
   border-radius: 50%;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.04);
   color: var(--t-2);
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-out), color var(--dur-2) ease, border-color var(--dur-2) ease;
 }
+.am-close::after { content: ''; position: absolute; inset: -4px; }   /* 44px hit area */
+.am-close:active { transform: scale(0.92); color: var(--t-hi); border-color: var(--line-strong); }
+/* Contents land after the sheet: emblem pops, tier cells cascade, the
+   progress bar charges from empty. All `backwards` fill, so nothing keeps a
+   transform once settled. */
+.am-root[data-state="enter"] .am-emblem-wrap { animation: amEmblemPop var(--dur-5) var(--ease-spring) 120ms backwards; }
+.am-root[data-state="enter"] .am-tier {
+  animation: amTierIn 420ms var(--ease-out-expo) backwards;
+  animation-delay: calc(220ms + var(--i, 0) * 45ms);
+}
+@keyframes amEmblemPop { from { opacity: 0; transform: scale(0.6) rotate(-10deg); } }
+@keyframes amTierIn    { from { opacity: 0; transform: translateY(8px) scale(0.96); } }
 .am-header { text-align: center; }
 .am-emblem-wrap {
   display: inline-flex;
@@ -6339,8 +6386,11 @@ input, select, textarea {
   height: 100%;
   background: linear-gradient(90deg, #67E8F9, #22D3EE 60%, #3B82F6);
   box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
-  transition: width 600ms var(--ease-spring);
+  transform-origin: 0 50%;
+  transition: width 600ms var(--ease-out-expo);
 }
+.am-root[data-state="enter"] .am-next-progress-fill { animation: amFill 800ms var(--ease-out-expo) 280ms backwards; }
+@keyframes amFill { from { transform: scaleX(0); } }
 .am-next-meta {
   margin-top: 6px;
   font-size: 10.5px; letter-spacing: 0.1em;

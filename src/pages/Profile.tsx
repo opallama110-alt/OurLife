@@ -79,19 +79,33 @@ export const Profile: React.FC<ProfileProps> = ({ achievementsDefaultExpanded = 
         }
     };
 
+    // Sections stagger in with `.reveal` (backwards fill → no lingering
+    // transform once settled). The old root `animate-slide-up` used `both`
+    // fill, which kept translateY(0) on the whole Profile forever and trapped
+    // position:fixed overlays inside it.
+    const revealStyle = (i: number) => ({ '--reveal-i': i } as React.CSSProperties);
+
     return (
-        <div className="space-y-6 pb-24 animate-slide-up">
+        <div className="space-y-6 pb-24">
             {/* ═══════════════════ PHASE 6: PUBLIC HUNTER CARD ═══════════════════ */}
-            <HunterCard gymProfile={gymProfile} displayName={user.name} />
+            <div className="reveal" style={revealStyle(0)}>
+                <HunterCard gymProfile={gymProfile} displayName={user.name} />
+            </div>
 
             {/* ═══════════════════ PENGHARGAAN — Hunter Rank + Consistency Tracks ═══════════════════ */}
-            <Penghargaan gymProfile={gymProfile} />
+            <div className="reveal" style={revealStyle(1)}>
+                <Penghargaan gymProfile={gymProfile} />
+            </div>
 
             {/* ═══════════════════ PHASE 5B: ACHIEVEMENT GALLERY ═══════════════════ */}
-            <AchievementGallery defaultExpanded={achievementsDefaultExpanded} />
+            <div className="reveal" style={revealStyle(2)}>
+                <AchievementGallery defaultExpanded={achievementsDefaultExpanded} />
+            </div>
 
             {/* ═══════════════════ PHASE 6: COMPARE UI ═══════════════════ */}
-            <CompareSection gymProfile={gymProfile} displayName={user.name} />
+            <div className="reveal" style={revealStyle(3)}>
+                <CompareSection gymProfile={gymProfile} displayName={user.name} />
+            </div>
 
             {/* Save Status Indicator */}
             <div className="flex items-center justify-end text-xs font-mono">
