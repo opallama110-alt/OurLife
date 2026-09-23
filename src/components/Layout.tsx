@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, Outlet } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { storageService } from '../services/storageService';
@@ -40,6 +40,14 @@ export const Layout: React.FC = () => {
     const [chatOpen, setChatOpen] = useState(false);
 
     const activeTab = useMemo(() => pathToTab(location.pathname), [location.pathname]);
+
+    // .ol-main is the scroll container (not window), so the browser never
+    // resets it on navigation — without this, switching tabs lands you
+    // halfway down the next screen. Layout effect = reset before paint.
+    const mainRef = useRef<HTMLElement>(null);
+    useLayoutEffect(() => {
+        if (mainRef.current) mainRef.current.scrollTop = 0;
+    }, [location.pathname]);
 
     // Recompute habit pending dot on route change.
     useEffect(() => {
@@ -83,8 +91,12 @@ export const Layout: React.FC = () => {
             </header>
 
             {/* Main content */}
-            <main className="ol-main">
-                <div className="ol-main-inner">
+            <main className="ol-main" ref={mainRef}>
+                {/* Keyed on the path so each tab switch replays a short
+                    fade-rise (.ol-route) instead of hard-cutting between
+                    screens. Pages remount on route change anyway, so the key
+                    costs nothing extra. */}
+                <div className="ol-main-inner ol-route" key={location.pathname}>
                     <Outlet />
                 </div>
             </main>

@@ -16,6 +16,41 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* --- Touch polish ---
+   Kill the grey Android/iOS tap flash (every control already has its own
+   :active feedback) and opt controls out of double-tap-zoom delay. */
+html { -webkit-tap-highlight-color: transparent; }
+button, a, [role="button"], label, summary { touch-action: manipulation; }
+
+/* Keyboard focus ring — only for keyboard/switch users (:focus-visible), so
+   taps never leave a ring behind. */
+:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.75);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) { outline: none; }
+
+/* Counters that tick/animate must not jitter horizontally. */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* --- Reduced motion ---
+   Respect the OS setting globally: animations/transitions resolve to their
+   end state instantly, staggered reveals don't wait on delays, and infinite
+   loops stop. Components that drive motion from JS (body turntable, streak
+   burst) also check `prefers-reduced-motion` themselves. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* --- Scrollbar --- */
 ::-webkit-scrollbar {
   width: 6px;
@@ -785,6 +820,20 @@ input, select, textarea {
   /* Easing */
   --ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Motion system — one vocabulary for every screen. `--ease-out-expo` is
+     the default for things arriving, `--ease-in` for things leaving (exits
+     should be ~30% shorter than enters so dismissals feel snappy), and
+     `--ease-spring-soft` gives a gentle settle without the cartoonish
+     overshoot of `--ease-spring`. */
+  --ease-out-expo:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:      cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-in:          cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring-soft: cubic-bezier(0.2, 1.25, 0.4, 1);
+  --dur-1: 120ms;  /* press feedback, color swaps */
+  --dur-2: 180ms;  /* small state changes, exits */
+  --dur-3: 260ms;  /* modals / sheets / route enter */
+  --dur-4: 380ms;  /* emphasis: pops, expands */
+  --dur-5: 560ms;  /* celebrations, big reveals */
 }
 
 /* --- HUD Keyframes (camelCase keyframe + kebab-case utility per CLAUDE.md) --- */
@@ -1892,15 +1941,8 @@ input, select, textarea {
   flex-direction: column;
   gap: 14px;
 }
-.dashboard > .reveal {
-  opacity: 0;
-  transform: translateY(10px);
-  animation: dashboard-reveal-in 460ms var(--ease-out) forwards;
-  animation-delay: calc(var(--reveal-i, 0) * 70ms + 60ms);
-}
-@keyframes dashboard-reveal-in {
-  to { opacity: 1; transform: translateY(0); }
-}
+/* Dashboard sections share the global `.reveal` stagger (see HABITS SCREEN
+   below) — the old duplicate `dashboard-reveal-in` system was merged into it. */
 
 /* ─── Greeting ─── */
 .d-greet { padding: 16px 0 4px; }
@@ -2627,6 +2669,17 @@ input, select, textarea {
 .ol-main-inner {
   max-width: 64rem;        /* matches existing max-w-5xl behaviour */
   margin: 0 auto;
+}
+/* Route enter — replays on every tab switch (Layout keys this wrapper on the
+   pathname). `backwards` fill + opacity/transform only: once finished the
+   wrapper carries no transform, so fixed-position modals inside pages keep
+   anchoring to the viewport. Kept short and subtle because each page's own
+   `.reveal` stagger layers on top. */
+.ol-route {
+  animation: ol-route-in var(--dur-3) var(--ease-out-expo) backwards;
+}
+@keyframes ol-route-in {
+  from { opacity: 0; transform: translateY(6px); }
 }
 
 /* ─── Bottom nav (Q1=B: max-width 500px centered, all viewports) ─── */
@@ -4442,14 +4495,19 @@ input, select, textarea {
 /* ============================================================
    HABITS SCREEN — prototype habits.css port
    ============================================================ */
+/* Staggered entrance shared by every screen (Dashboard sections, Habit
+   cards, …). `backwards` fill applies the `from` state during the delay and
+   then lets go completely, so a revealed element keeps NO lingering
+   transform — a leftover translateY(0) would silently turn every card into a
+   containing block for position:fixed children and a new stacking context.
+   The index is capped so a long habit list doesn't make the last card wait
+   over a second. */
 .reveal {
-  opacity: 0;
-  transform: translateY(10px);
-  animation: h-reveal-in 460ms var(--ease-out) forwards;
-  animation-delay: calc(var(--reveal-i, 0) * 70ms + 60ms);
+  animation: h-reveal-in 520ms var(--ease-out-expo) backwards;
+  animation-delay: calc(min(var(--reveal-i, 0), 8) * 55ms + 40ms);
 }
 @keyframes h-reveal-in {
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
 }
 
 .h-hero { padding: 4px 0; }
