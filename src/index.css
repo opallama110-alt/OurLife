@@ -1930,9 +1930,8 @@ input, select, textarea {
      - .d-card-hunter / .d-hunter-* / .d-statbar-* (using StatusCard)
      - .bn-* bottom nav (Layout owns it)
    Adapted:
-     - .d-body-3d: dropped `transform-style: preserve-3d` per §6.8
-       (filter brightness on inline style — flat element + opacity
-       face-switch achieves the rotation effect safely)
+     - body flip: replaced by the shared BodyTurntable (.bt-*), a real
+       preserve-3d card with no filter/blend on the 3D chain (§5.3)
      - reveal stagger: --reveal-i set via inline style per section
        instead of nth-of-type selectors (works regardless of wrapper)
    ============================================================ */
@@ -2267,10 +2266,14 @@ input, select, textarea {
   opacity: 0.5;
 }
 
+/* FRONT/BACK segmented control (BodyViewToggle). Equal-width grid cells so
+   the ::before thumb can slide exactly one cell with a soft spring instead
+   of the highlight blinking from one button to the other. */
 .d-body-toggle {
   position: absolute;
   top: 12px; right: 12px;
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
   padding: 3px;
   background: rgba(239, 68, 68, 0.06);
   border: 1px solid rgba(239, 68, 68, 0.4);
@@ -2278,40 +2281,296 @@ input, select, textarea {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.18em;
-  z-index: 2;
+  z-index: 4;
+  isolation: isolate;
 }
+.d-body-toggle::before {
+  content: "";
+  position: absolute;
+  top: 3px; bottom: 3px; left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #EF4444, #DC2626);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.3);
+  transition: transform var(--dur-4) var(--ease-spring-soft);
+  z-index: -1;
+}
+.d-body-toggle[data-view="back"]::before { transform: translateX(100%); }
 .d-body-toggle-opt {
+  position: relative;
+  min-height: 30px;
   padding: 5px 12px;
   border: 0;
   background: transparent;
   color: var(--t-3);
   cursor: pointer;
   border-radius: 999px;
-  transition: all 200ms ease;
+  transition: color var(--dur-2) ease, transform var(--dur-1) ease;
   font-family: inherit;
   font-size: inherit;
   letter-spacing: inherit;
 }
+.d-body-toggle-opt:active { transform: scale(0.94); }
+/* Invisible hit-area extension → ~44px tall touch target. */
+.d-body-toggle-opt::after { content: ""; position: absolute; inset: -7px -2px; }
 .d-body-toggle-opt.is-on {
-  background: linear-gradient(135deg, #EF4444, #DC2626);
   color: white;
   text-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.3);
 }
 
+/* ─── BodyTurntable (hud/BodyTurntable.tsx) ───
+   Real 3D turntable. The stage owns the perspective; `.bt-card` is the
+   preserve-3d card whose transform is written per-frame from JS (spring).
+   §5.3: no filter / mix-blend-mode / opacity on .bt-card or any ancestor
+   up to .bt-stage — depth cues live in SIBLING layers (floor, rim, scan)
+   and in face pseudo-elements instead. */
+.bt-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  perspective: 1100px;
+  perspective-origin: 50% 42%;
+  touch-action: pan-y;          /* vertical scroll stays native */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.bt-stage.is-swipeable { cursor: grab; }
+.bt-stage[data-dragging] { cursor: grabbing; }
+.bt-card {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.bt-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.bt-face > * { width: 100%; height: 100%; }
+/* Explicit rotateY(0) on the front face: Safari only culls backfaces
+   reliably when both faces carry a 3D transform. */
+.bt-face--front { transform: rotateY(0deg); }
+.bt-face--back { transform: rotateY(180deg); }
+/* Faces dim toward edge-on (opacity written per frame from JS). */
+.bt-face { will-change: opacity; }
+/* Floor glow — an ellipse under the feet that squashes when edge-on. */
+.bt-floor {
+  position: absolute;
+  left: 50%;
+  bottom: 3%;
+  width: 62%;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(34, 211, 238, 0.32), rgba(34, 211, 238, 0.08) 60%, transparent);
+  transform: translateX(-50%);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+/* Rim light — a thin beam of light that sweeps across during a turn and
+   peaks on the body's edge at 90°. Vertically feathered so it never reads
+   as a solid capsule. */
+.bt-rim {
+  position: absolute;
+  top: 7%; bottom: 7%;
+  left: 50%;
+  width: 16%;
+  margin-left: -8%;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(90deg,
+    transparent 0%, rgba(34, 211, 238, 0.08) 30%, rgba(207, 250, 254, 0.7) 50%,
+    rgba(34, 211, 238, 0.08) 70%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent);
+          mask-image: linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent);
+  z-index: 2;
+  will-change: transform, opacity;
+}
+/* Hologram scan band — only runs while the body is turning. */
+.bt-scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--dur-2) ease;
+  z-index: 2;
+}
+.bt-scan::before {
+  content: "";
+  position: absolute;
+  left: 8%; right: 8%;
+  top: -14%;
+  height: 14%;
+  background: linear-gradient(180deg, transparent, rgba(34, 211, 238, 0.05) 60%, rgba(103, 232, 249, 0.28) 97%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+}
+.bt-stage[data-turning] .bt-scan,
+.bt-stage[data-dragging] .bt-scan { opacity: 1; }
+.bt-stage[data-turning] .bt-scan::before,
+.bt-stage[data-dragging] .bt-scan::before { animation: bt-scan-sweep 900ms linear infinite; }
+@keyframes bt-scan-sweep {
+  from { transform: translateY(0); }
+  to   { transform: translateY(820%); }
+}
+/* One-time swipe affordance; disappears after the first drag. */
+/* Top-left: the toggle owns top-right and page readouts own bottom-left. */
+.bt-hint {
+  position: absolute;
+  left: 12px;
+  top: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--cyan-bright);
+  background: rgba(7, 12, 24, 0.7);
+  border: 1px solid var(--line-cyan-soft);
+  border-radius: 999px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 3;
+  animation: bt-hint-in var(--dur-4) var(--ease-out-expo) 900ms backwards;
+}
+.bt-hint-arrow {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1;
+  animation: bt-hint-nudge 1.6s var(--ease-in-out) infinite;
+}
+.bt-hint-arrow:last-child { --bt-nudge: 3px; }
+@keyframes bt-hint-in {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+@keyframes bt-hint-nudge {
+  0%, 100% { transform: translateX(0); opacity: 0.5; }
+  50%      { transform: translateX(var(--bt-nudge, -3px)); opacity: 1; }
+}
+
+/* ─── AnatomyViewer (Anatomy/AnatomyViewer.tsx) ───
+   Replaces the old raw-Tailwind slate card + remote carbon-fibre texture
+   with design-system tokens. `.av-root` = chromeless/minimal wrapper that
+   fills its parent; `.av-card` = framed standalone card. */
+.av-root { position: relative; width: 100%; height: 100%; }
+.av-root.is-minimal { overflow: hidden; }
+.av-inner { position: relative; width: 100%; height: 100%; }
+.av-single,
+.av-face {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.av-card {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  padding: 16px;
+  border: 1px solid var(--line-cyan-soft);
+  border-radius: var(--r-4);
+  background:
+    radial-gradient(closest-side at 50% 40%, rgba(239, 68, 68, 0.05), transparent 70%),
+    rgba(7, 12, 24, 0.7);
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.05);
+  overflow: hidden;
+}
+.av-corner {
+  position: absolute;
+  width: 12px; height: 12px;
+  border: 0 solid rgba(239, 68, 68, 0.45);
+  pointer-events: none;
+  z-index: 4;
+}
+.av-corner--tl { top: 8px; left: 8px; border-top-width: 1px; border-left-width: 1px; }
+.av-corner--tr { top: 8px; right: 8px; border-top-width: 1px; border-right-width: 1px; }
+.av-corner--bl { bottom: 8px; left: 8px; border-bottom-width: 1px; border-left-width: 1px; }
+.av-corner--br { bottom: 8px; right: 8px; border-bottom-width: 1px; border-right-width: 1px; }
+.av-readout {
+  position: absolute;
+  left: 12px; bottom: 12px;
+  z-index: 4;
+  padding: 3px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 4px;
+  pointer-events: none;
+}
+.av-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.av-overlay--error {
+  padding: 0 16px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(248, 113, 113, 0.85);
+}
+.av-spinner {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 2px solid rgba(239, 68, 68, 0.18);
+  border-top-color: var(--red);
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.3);
+  animation: av-spin 800ms linear infinite;
+}
+@keyframes av-spin { to { transform: rotate(360deg); } }
+
+/* Sizing box for the BodyTurntable (which owns the perspective). */
 .d-body-fig-wrap {
   position: relative;
   width: 100%;
   height: 420px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  perspective: 1200px;
 }
 .body-anatomy { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: #67E8F9; }
 .body-anatomy-svg { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
 .body-anatomy-svg > svg { width: auto; height: 100%; max-width: 100%; display: block; }
 .body-anatomy-loading { display: flex; align-items: center; justify-content: center; height: 100%; opacity: 0.6; }
+.body-anatomy-loading-text {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--t-3);
+}
+.body-anatomy-retry {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  opacity: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: rgba(248, 113, 113, 0.9);
+}
+/* Freshly fetched SVG materialises instead of popping in. */
+.body-anatomy-svg.is-fresh { animation: body-svg-in var(--dur-5) var(--ease-out-expo) backwards; }
+@keyframes body-svg-in {
+  from { opacity: 0; transform: scale(0.97); }
+}
 
 /* Default fills for the body SVG class layers.
    The exported SVG uses .ba-0..ba-8 classes but ships NO style block defining
@@ -2347,82 +2606,14 @@ input, select, textarea {
   background: rgba(239, 68, 68, 0.08);
   border: 1px solid rgba(239, 68, 68, 0.35);
   border-radius: 4px;
-  z-index: 2;
+  z-index: 4;
   font-family: var(--font-mono);
-}
-
-/* ─── Body 3D rotation ───
-   §6.8: NO `transform-style: preserve-3d` here because the inline style
-   on .d-body-3d uses `filter: brightness(...)`. The rotation works via
-   the parent's rotateY + scaleX compression + opacity face-switching
-   (showFront ? 1 : 0). Children render flat in the parent's plane,
-   which is what we want for opacity face toggle. */
-.d-body-3d {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-origin: center center;
-  will-change: transform;
-}
-.d-body-face-real {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 80ms linear;
-}
-.d-body-face-real > * { width: 100%; height: 100%; }
-.d-body-face-mirror { transform: scaleX(-1); }
-.d-body-face-real::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg,
-    rgba(0, 0, 0, 0.45) 0%,
-    rgba(0, 0, 0, 0.15) 25%,
-    transparent 50%,
-    rgba(0, 0, 0, 0.15) 75%,
-    rgba(0, 0, 0, 0.45) 100%);
-  mix-blend-mode: multiply;
   pointer-events: none;
-  opacity: var(--rotate-shade, 0);
+  /* Re-keyed per body face, so the count re-enters after each turn. */
+  animation: d-body-active-in var(--dur-4) var(--ease-out-expo) 160ms backwards;
 }
-.d-body-edge {
-  position: absolute;
-  top: 4%; bottom: 4%;
-  left: 50%;
-  width: 22px;
-  transform: translateX(-50%);
-  border-radius: 18px;
-  background:
-    linear-gradient(180deg,
-      rgba(34, 211, 238, 0.05) 0%,
-      rgba(34, 211, 238, 0.35) 20%,
-      rgba(103, 232, 249, 0.55) 50%,
-      rgba(34, 211, 238, 0.35) 80%,
-      rgba(34, 211, 238, 0.05) 100%),
-    linear-gradient(90deg,
-      rgba(7, 12, 24, 0.6),
-      rgba(34, 211, 238, 0.5) 50%,
-      rgba(7, 12, 24, 0.6));
-  box-shadow:
-    inset 0 0 22px rgba(34, 211, 238, 0.4),
-    0 0 24px rgba(34, 211, 238, 0.55),
-    0 0 50px rgba(34, 211, 238, 0.25);
-  filter: blur(0.6px);
-  pointer-events: none;
-  z-index: 3;
-}
-.d-body-edge::before {
-  content: "";
-  position: absolute; inset: 0;
-  background:
-    radial-gradient(closest-side at 50% 10%, rgba(34, 211, 238, 0.6), transparent 60%),
-    radial-gradient(closest-side at 50% 26%, rgba(34, 211, 238, 0.7), transparent 50%),
-    radial-gradient(closest-side at 50% 70%, rgba(34, 211, 238, 0.55), transparent 55%);
-  mix-blend-mode: screen;
-  opacity: 0.85;
+@keyframes d-body-active-in {
+  from { opacity: 0; transform: translateY(4px); }
 }
 
 /* ─── Ready muscles chip list ─── */

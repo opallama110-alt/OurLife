@@ -24,6 +24,7 @@ import { useAchievements } from '../context/AchievementContext';
 import { achievementService } from '../services/achievementService';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 import AnatomyViewer, { getViewForMuscle } from '../components/Anatomy/AnatomyViewer';
+import { BodyViewToggle } from '../components/hud/BodyTurntable';
 import { RankBadge, rankFromTierName } from '../components/hud';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
 import { getLocalDateString } from '../utils/dateUtils';
@@ -854,8 +855,15 @@ export const GymTracker: React.FC = () => {
   const [userEquipment, setUserEquipment] = useState<string[]>([]);
   const [userEnvironment, setUserEnvironment] = useState<'Home' | 'Gym' | null>(null);
   // Body-anatomy front/back toggle for the active exercise stage. Lives on the
-  // root so it survives between exercises in a session.
+  // root so it survives re-renders within an exercise.
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
+  // Each new exercise turns the body to the side where its primary muscle is
+  // visible (e.g. hamstring curl → back), so the red highlight is never hidden
+  // on the far face. The user can still tap/swipe freely within an exercise.
+  const activeExerciseMuscle = flowStep === 'active' ? selectedExercises[currentExIndex]?.muscleGroup : undefined;
+  useEffect(() => {
+    if (activeExerciseMuscle) setBodyView(getViewForMuscle(activeExerciseMuscle));
+  }, [activeExerciseMuscle, currentExIndex]);
   // Heart-Fire tier preview (Analytics streak). Defaults to the user's current tier,
   // user can tap any tier in the roadmap to simulate visuals at that level.
   const [previewTier, setPreviewTier] = useState<1 | 2 | 3 | 4 | 5>(1);
@@ -1375,23 +1383,23 @@ export const GymTracker: React.FC = () => {
                 style={{ width: `${(currentExIndex / Math.max(1, selectedExercises.length)) * 100}%` }} />
             </div>
 
-            {/* Body highlight stage — preserve-3d toggle around AnatomyViewer */}
+            {/* Body highlight stage — the stage owns the frame + toggle; the
+                viewer is chromeless and controlled, so the toggle and swipe
+                both turn the same shared BodyTurntable. */}
             <section className="ae-bodystage">
               <span className="brk-c brk-tl" /><span className="brk-c brk-tr" />
               <span className="brk-c brk-bl" /><span className="brk-c brk-br" />
-              <div className="d-body-toggle ae-bodystage-toggle">
-                <button type="button" className={`d-body-toggle-opt ${bodyView === 'front' ? 'is-on' : ''}`}
-                  onClick={() => setBodyView('front')}>FRONT</button>
-                <button type="button" className={`d-body-toggle-opt ${bodyView === 'back' ? 'is-on' : ''}`}
-                  onClick={() => setBodyView('back')}>BACK</button>
-              </div>
+              <BodyViewToggle view={bodyView} onChange={setBodyView} className="ae-bodystage-toggle" />
               <div className="ae-bodystage-fig">
                 <AnatomyViewer
                   trainedMuscles={getTrainedMuscleIds([
                     currentExercise.muscleGroup,
                     ...(currentExercise.secondaryMuscles || []),
                   ])}
-                  defaultView={bodyView}
+                  view={bodyView}
+                  onViewChange={setBodyView}
+                  chrome={false}
+                  showToggle={false}
                 />
               </div>
               <div className="ae-bodystage-tag">

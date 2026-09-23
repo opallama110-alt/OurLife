@@ -1,28 +1,22 @@
 import React, { useEffect, useId, useMemo, useState } from 'react';
 import { getTrainedMuscleIds } from '../../constants/muscleMapping';
+import BodyTurntable, { BodyViewToggle, TurntableView } from '../hud/BodyTurntable';
 
 /**
- * AnatomyViewer (Phase 2 — Solo Leveling Aesthetic + Depth-Illusion Flip)
+ * AnatomyViewer (Solo Leveling aesthetic + shared 3D turntable)
  * ───────────────────────────────────────────────────────────────────────
- * High-performance interactive anatomy viewer that loads BOTH full-body
- * SVG files (front + back) and renders them on opposite faces of a 3D
- * perspective card.  The Front/Back toggle triggers a continuous-forward
- * flip animation with TWO depth-illusion tricks layered on top of the
- * `rotateY`:
- *
- *   1. SCALE pulse — the card eases down to 0.86 at the 90° flat moment
- *      and back up to 1.0 at the end, hiding the zero-thickness edge of
- *      a 2D SVG.
- *   2. DYNAMIC SHADOW — a `drop-shadow()` whose X-offset sweeps from 0
- *      → +30 → 0 → -30 → 0 across the rotation, simulating directional
- *      light catching the body as it turns. A second `drop-shadow()`
- *      pulses red glow at the midpoint to add visual weight when the
- *      body is edge-on.
+ * Interactive anatomy viewer that loads BOTH full-body SVG files (front +
+ * back) and mounts them on the two faces of the shared <BodyTurntable> —
+ * the same real-3D, swipeable turn used by the Dashboard Muscle Recovery
+ * card, so the body turns identically everywhere in the app.
  *
  * "Trained" muscles light up red-neon (Solo Leveling); "rest" muscles
  * fall back to a dark inactive state. Trained muscles are matched by
  * SVG <path>/<g> id PREFIX (Illustrator appended a unique suffix to
  * every id, so we use `[id^="..."]` attribute selectors).
+ *
+ * View can be uncontrolled (`defaultView`) or controlled (`view` +
+ * `onViewChange`) — the Gym active session drives it from its own toggle.
  *
  * No external SVG libraries — fetch + dangerouslySetInnerHTML.
  *
@@ -36,6 +30,19 @@ const SVG_URLS: Record<'front' | 'back', string> = {
   back:  '/assets/anatomy/back/Full_body_back_muscles.svg',
 };
 
+// ── Per-file class scoping ──
+// Both Illustrator exports ship a <style> with the SAME generic class names
+// (.st0 … .st8) but different meanings. Inlined into one document those
+// rules go global, so with both faces mounted the back file's
+// `.st0{display:none}` also hid the front file's `.st0` body piece. Prefixing
+// every class with the view keeps each file's rules to itself.
+const scopeSvgClasses = (text: string, view: 'front' | 'back'): string =>
+  text
+    .replace(/<style([^>]*)>([\s\S]*?)<\/style>/g, (_m, attrs: string, css: string) =>
+      `<style${attrs}>${css.replace(/\.st(\d+)/g, `.${view}-st$1`)}</style>`)
+    .replace(/class="([^"]*)"/g, (_m, cls: string) =>
+      `class="${cls.replace(/\bst(\d+)\b/g, `${view}-st$1`)}"`);
+
 // ── Module-level cache so the SVG text is fetched at most once per view ──
 const svgTextCache: Record<'front' | 'back', string | null> = { front: null, back: null };
 const svgPromiseCache: Record<'front' | 'back', Promise<string> | null> = { front: null, back: null };
@@ -48,7 +55,8 @@ const loadSvg = (view: 'front' | 'back'): Promise<string> => {
       if (!r.ok) throw new Error(`Failed to load ${SVG_URLS[view]}`);
       return r.text();
     })
-    .then(text => {
+    .then(raw => {
+      const text = scopeSvgClasses(raw, view);
       svgTextCache[view] = text;
       return text;
     })
@@ -84,11 +92,23 @@ interface AnatomyViewerProps {
    * over ready when a muscle appears in both lists.
    */
   readyMuscles?: string[];
-  /** Initial view */
+  /** Initial view (uncontrolled mode) */
   defaultView?: 'front' | 'back';
-  /** Hide the front/back toggle button (e.g. for thumbnails or twin-card layouts) */
+  /** Controlled view. When set, pair with `onViewChange`. */
+  view?: 'front' | 'back';
+  /** Fires on toggle taps and on swipe-to-rotate snaps. */
+  onViewChange?: (view: 'front' | 'back') => void;
+  /** Show the built-in FRONT/BACK toggle (card chrome only). */
   showToggle?: boolean;
-  /** Strip the card chrome (border, padding, background) so the viewer fills its parent */
+  /**
+   * Draw the viewer's own card frame (border, corners, readout). Turn off
+   * when the host already provides a stage (e.g. Gym active session).
+   */
+  chrome?: boolean;
+  /**
+   * Single static face, no turntable — for thumbnails where many viewers
+   * are mounted at once (exercise lists, onboarding preview).
+   */
   minimal?: boolean;
   /** Optional className passed to the outer wrapper */
   className?: string;
@@ -102,17 +122,16 @@ interface AnatomyViewerProps {
   mode?: 'target' | 'recovery';
 }
 
-// Total flip duration in ms — used for both the animation and the cleanup
-// timer that releases the temporary `<animation>` rule.
-const FLIP_DURATION_MS = 1000;
-
 const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
   trainedMuscles,
   readyMuscles,
   highlightedMuscle,
   highlightedMuscles,
   defaultView = 'front',
+  view: viewProp,
+  onViewChange,
   showToggle = true,
+  chrome = true,
   minimal = false,
   className = '',
 }) => {
@@ -129,23 +148,17 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
     return getTrainedMuscleIds(legacy);
   }, [trainedMuscles, highlightedMuscles, highlightedMuscle]);
 
-  // ── 3D flip mode is enabled only when the toggle is visible AND we're not
-  // in minimal/thumbnail mode (which renders just one static face to keep
-  // the DOM light when many viewers are mounted at once, e.g. exercise lists).
-  const enableFlip = showToggle && !minimal;
+  // Turntable (both faces mounted) everywhere except minimal thumbnails,
+  // which render just one static face to keep list DOM light.
+  const enableFlip = !minimal;
 
-  // Continuously-increasing rotation (always rotates FORWARD on every toggle —
-  // never reverses — so the body turns naturally regardless of which button
-  // the user taps). Even multiples of 360 → front; odd multiples of 180 → back.
-  const [rotation, setRotation] = useState<number>(defaultView === 'back' ? 180 : 0);
-  const view: 'front' | 'back' = (((rotation % 360) + 360) % 360) === 180 ? 'back' : 'front';
-
-  // The flip animation is driven by an inline @keyframes rule that uses the
-  // *previous* rotation as the start angle. While `animFromAngle !== null`
-  // the keyframe is active; after the duration we clear it and let the static
-  // transform take over.
-  const [animFromAngle, setAnimFromAngle] = useState<number | null>(null);
-  const [flipId, setFlipId] = useState<number>(0); // unique animation-name per flip
+  // Controlled when `view` is passed; otherwise own the state.
+  const [innerView, setInnerView] = useState<TurntableView>(defaultView);
+  const view: TurntableView = viewProp ?? innerView;
+  const setView = (v: TurntableView) => {
+    if (viewProp === undefined) setInnerView(v);
+    onViewChange?.(v);
+  };
 
   const [frontText, setFrontText] = useState<string | null>(svgTextCache.front);
   const [backText,  setBackText]  = useState<string | null>(svgTextCache.back);
@@ -162,6 +175,9 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
   const instanceId = useMemo(() => `anatomy-${rawId.replace(/[:]/g, '-')}`, [rawId]);
 
   // ── Fetch SVG(s) ──
+  // Single-face mode depends on `view`; flip mode loads both once and must
+  // NOT refetch/re-render per turn, hence the conditional dependency.
+  const fetchKey = enableFlip ? 'both' : view;
   useEffect(() => {
     let cancelled = false;
     setError(null);
@@ -190,7 +206,7 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
       return () => { cancelled = true; };
     }
 
-    // Dual-face flip mode: load BOTH up-front so the flip is instant.
+    // Dual-face turntable mode: load BOTH up-front so the turn is instant.
     if (svgTextCache.front && svgTextCache.back) {
       setFrontText(svgTextCache.front);
       setBackText(svgTextCache.back);
@@ -211,25 +227,9 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
         setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [enableFlip, view]);
-
-  // ── Cleanup the active flip after its duration so the static transform
-  // takes over (without it, the @keyframes rule would linger forever) ──
-  useEffect(() => {
-    if (animFromAngle === null) return;
-    const t = window.setTimeout(() => setAnimFromAngle(null), FLIP_DURATION_MS + 30);
-    return () => window.clearTimeout(t);
-  }, [animFromAngle, flipId]);
-
-  // ── Toggle handler: always rotate FORWARD by 180° ──
-  const handleToggle = (target: 'front' | 'back') => {
-    if (target === view) return;
-    if (animFromAngle !== null) return; // ignore clicks mid-flip
-    const from = rotation;
-    setAnimFromAngle(from);
-    setFlipId(id => id + 1);
-    setRotation(from + 180);
-  };
+    // `view` is folded into `fetchKey` for single-face mode only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enableFlip, fetchKey]);
 
   // ── Generate scoped CSS overriding the SVG's inline classes ──
   const css = useMemo(() => {
@@ -262,33 +262,6 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
 
     const trainedSelectors = buildSelectors(trained);
     const readySelectors = buildSelectors(ready);
-
-    // ── Flip keyframes ──
-    // Each click bumps `flipId` so the animation-name changes — that's how
-    // the browser knows to restart the animation rather than continue an
-    // existing run. The rule is only injected while a flip is in progress.
-    const animName = `anatomy-flip-${instanceId}-${flipId}`;
-    const flipping = animFromAngle !== null;
-    const a0 = animFromAngle ?? 0;
-    const a25 = a0 + 45;
-    const a50 = a0 + 90;
-    const a75 = a0 + 135;
-    const a100 = a0 + 180;
-
-    const flipperRest = `transform: rotateY(${rotation}deg) scale(1);`;
-
-    const flipperAnim = flipping ? `
-      ${scope} .anatomy-flipper {
-        animation: ${animName} ${FLIP_DURATION_MS}ms cubic-bezier(0.65, 0.0, 0.25, 1) forwards;
-      }
-      @keyframes ${animName} {
-        0%   { transform: rotateY(${a0}deg) scale(1); }
-        25%  { transform: rotateY(${a25}deg) scale(0.95); }
-        50%  { transform: rotateY(${a50}deg) scale(0.86); }
-        75%  { transform: rotateY(${a75}deg) scale(0.95); }
-        100% { transform: rotateY(${a100}deg) scale(1); }
-      }
-    ` : '';
 
     return `
       ${scope} svg {
@@ -342,98 +315,43 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
         opacity: 1 !important;
       }
       ` : ''}
-
-      /* ── FLIPPER (3D card) ─────────────────────────────────────────── */
-      ${scope} .anatomy-flipper {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        transform-style: preserve-3d;
-        ${flipperRest}
-        will-change: transform;
-      }
-      ${flipperAnim}
     `;
-  }, [resolvedTrainedIds, readyMuscles, instanceId, rotation, animFromAngle, flipId]);
+  }, [resolvedTrainedIds, readyMuscles, instanceId]);
 
   // ── Spinner / error overlays ──
   const overlays = (
     <>
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
-          <div className="w-10 h-10 border-2 border-red-500/20 border-t-red-500 rounded-full animate-spin shadow-[0_0_18px_rgba(255,0,0,0.4)]" />
+        <div className="av-overlay" aria-hidden="true">
+          <span className="av-spinner" />
         </div>
       )}
       {error && !loading && (
-        <div className="absolute inset-0 flex items-center justify-center text-center px-4 z-30">
-          <span className="text-[10px] font-mono uppercase tracking-widest text-red-400/80">
-            {error}
-          </span>
+        <div className="av-overlay av-overlay--error">
+          <span>{error}</span>
         </div>
       )}
     </>
   );
 
-  // ── Inner SVG renderer ──
-  // In flip mode: both faces are rendered on opposite sides of a 3D card.
-  // In single-face mode: just the active SVG.
-  const svgStage = enableFlip ? (
-    <div
-      className="relative w-full h-full"
-      style={{ perspective: '1600px' }}
-    >
-      <div className="anatomy-flipper">
-        {/* FRONT FACE */}
-        <div
-          className="absolute inset-0 w-full h-full flex items-center justify-center"
-          style={{
-            backfaceVisibility: 'hidden',
-            WebkitBackfaceVisibility: 'hidden',
-            transform: 'rotateY(0deg)',
-          }}
-        >
-          {frontText && (
-            <div
-              className="w-full h-full flex items-center justify-center"
-              dangerouslySetInnerHTML={{ __html: frontText }}
-            />
-          )}
-        </div>
+  const face = (text: string | null) => (
+    text ? <div className="av-face" dangerouslySetInnerHTML={{ __html: text }} /> : <div className="av-face" />
+  );
 
-        {/* BACK FACE — pre-rotated 180° in local space; the parent's flip
-            un-mirrors it so the back-anatomy SVG appears as drawn. */}
-        <div
-          className="absolute inset-0 w-full h-full flex items-center justify-center"
-          style={{
-            backfaceVisibility: 'hidden',
-            WebkitBackfaceVisibility: 'hidden',
-            transform: 'rotateY(180deg)',
-          }}
-        >
-          {backText && (
-            <div
-              className="w-full h-full flex items-center justify-center"
-              dangerouslySetInnerHTML={{ __html: backText }}
-            />
-          )}
-        </div>
-      </div>
-    </div>
+  // ── Inner SVG renderer ──
+  // Turntable mode: both faces on the shared 3D card (tap or swipe to turn).
+  // Single-face mode: just the active SVG.
+  const svgStage = enableFlip ? (
+    <BodyTurntable
+      view={view}
+      onViewChange={setView}
+      front={face(frontText)}
+      back={face(backText)}
+    />
   ) : (
-    <div className="relative w-full h-full flex items-center justify-center">
-      {view === 'front' && frontText && (
-        <div
-          className="w-full h-full flex items-center justify-center"
-          dangerouslySetInnerHTML={{ __html: frontText }}
-        />
-      )}
-      {view === 'back' && backText && (
-        <div
-          className="w-full h-full flex items-center justify-center"
-          dangerouslySetInnerHTML={{ __html: backText }}
-        />
-      )}
+    <div className="av-single">
+      {view === 'front' && frontText && face(frontText)}
+      {view === 'back' && backText && face(backText)}
     </div>
   );
 
@@ -441,20 +359,17 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
   const inner = (
     <>
       <style dangerouslySetInnerHTML={{ __html: css }} />
-      <div
-        id={instanceId}
-        className="relative w-full h-full"
-      >
+      <div id={instanceId} className="av-inner">
         {svgStage}
         {overlays}
       </div>
     </>
   );
 
-  // ── Minimal mode: no chrome, fills parent (used by GymTracker thumbnails) ──
-  if (minimal) {
+  // ── Minimal / chromeless: no frame, fills parent ──
+  if (minimal || !chrome) {
     return (
-      <div className={`relative w-full h-full overflow-hidden ${className}`}>
+      <div className={`av-root ${minimal ? 'is-minimal' : ''} ${className}`.trim()}>
         {inner}
       </div>
     );
@@ -462,50 +377,20 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
 
   // ── Full card mode with toggle ──
   return (
-    <div
-      className={`relative w-full aspect-[2/3] bg-slate-950/70 rounded-3xl p-4 border border-slate-800 shadow-[0_0_40px_rgba(255,0,0,0.05)] overflow-hidden group ${className}`}
-    >
-      {/* subtle carbon-fibre texture */}
-      <div className="absolute inset-0 opacity-10 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]" />
-
+    <div className={`av-card ${className}`.trim()}>
       {/* corner crosshair ornaments */}
-      <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-red-500/40 pointer-events-none z-20" />
-      <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-red-500/40 pointer-events-none z-20" />
-      <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-red-500/40 pointer-events-none z-20" />
-      <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-red-500/40 pointer-events-none z-20" />
+      <span className="av-corner av-corner--tl" aria-hidden="true" />
+      <span className="av-corner av-corner--tr" aria-hidden="true" />
+      <span className="av-corner av-corner--bl" aria-hidden="true" />
+      <span className="av-corner av-corner--br" aria-hidden="true" />
 
       {inner}
 
-      {/* Front / Back toggle */}
-      {showToggle && (
-        <div className="absolute top-3 right-3 z-30 flex bg-slate-900/85 backdrop-blur-sm rounded-full p-1 border border-slate-700 shadow-lg">
-          {(['front', 'back'] as const).map(v => {
-            const active = view === v;
-            return (
-              <button
-                key={v}
-                type="button"
-                onClick={() => handleToggle(v)}
-                className={`px-3 py-1 text-[10px] font-mono uppercase tracking-[0.15em] rounded-full transition-all duration-300 ${
-                  active
-                    ? 'bg-red-600 text-white shadow-[0_0_14px_rgba(255,0,0,0.7)]'
-                    : 'text-slate-400 hover:text-slate-100'
-                }`}
-              >
-                {v}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {showToggle && <BodyViewToggle view={view} onChange={setView} className="av-toggle" />}
 
       {/* trained-count readout */}
       {resolvedTrainedIds && resolvedTrainedIds.length > 0 && (
-        <div className="absolute bottom-3 left-3 z-30">
-          <span className="text-[10px] font-mono text-red-400 uppercase tracking-widest bg-red-500/10 px-2 py-1 rounded border border-red-500/30 shadow-[0_0_10px_rgba(255,0,0,0.15)]">
-            {resolvedTrainedIds.length} Active
-          </span>
-        </div>
+        <div className="av-readout">{resolvedTrainedIds.length} Active</div>
       )}
     </div>
   );

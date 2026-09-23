@@ -87,7 +87,10 @@ async function fetchSVG(gender: BodyGender, view: BodyView): Promise<string> {
     const pending = bucket.pending[view];
     if (pending) return pending;
     const p = fetch(svgURL(gender, view))
-        .then(r => r.text())
+        .then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.text();
+        })
         .then(t => {
             // Strip width/height so the SVG scales to its container.
             const cleaned = t
@@ -95,6 +98,12 @@ async function fetchSVG(gender: BodyGender, view: BodyView): Promise<string> {
                 .replace(/(<svg[^>]*)\sheight="[^"]*"/, '$1');
             bucket[view] = cleaned;
             return cleaned;
+        })
+        .catch(err => {
+            // Drop the rejected promise so the next mount retries instead of
+            // awaiting the same failure forever (stuck on "SCANNING…").
+            bucket.pending[view] = null;
+            throw err;
         });
     bucket.pending[view] = p;
     return p;
@@ -108,21 +117,35 @@ export default function BodyAnatomy({
     className = '',
 }: BodyAnatomyProps) {
     const [svg, setSvg] = useState<string | null>(() => SVG_CACHE[gender]?.[view] ?? null);
+    const [failed, setFailed] = useState(false);
+    const [attempt, setAttempt] = useState(0);
+    // Only fade in SVGs that actually arrive over the network; a cached SVG
+    // (e.g. revisiting the Dashboard) should appear instantly.
+    const [fadeIn, setFadeIn] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         let cancelled = false;
+        setFailed(false);
         const cached = SVG_CACHE[gender]?.[view];
         if (cached) {
             setSvg(cached);
             return;
         }
         setSvg(null);
-        fetchSVG(gender, view).then(t => {
-            if (!cancelled) setSvg(t);
-        });
+        fetchSVG(gender, view)
+            .then(t => {
+                if (cancelled) return;
+                setFadeIn(true);
+                setSvg(t);
+            })
+            .catch(err => {
+                if (cancelled) return;
+                console.error('[BodyAnatomy] SVG load failed:', err);
+                setFailed(true);
+            });
         return () => { cancelled = true; };
-    }, [gender, view]);
+    }, [gender, view, attempt]);
 
     // Per-instance scoped CSS — tint exhausted muscle groups red.
     // The SVG generator emits randomized id suffixes per export, so we use
@@ -162,14 +185,22 @@ export default function BodyAnatomy({
             <style>{scopedCSS}</style>
             {svg ? (
                 <div
-                    className="body-anatomy-svg"
+                    className={`body-anatomy-svg ${fadeIn ? 'is-fresh' : ''}`.trim()}
                     // SVG content is from our own /public/assets; not user input.
                     dangerouslySetInnerHTML={{ __html: svg }}
                 />
+            ) : failed ? (
+                <button
+                    type="button"
+                    className="body-anatomy-loading body-anatomy-retry"
+                    onClick={() => setAttempt(a => a + 1)}
+                >
+                    Gagal memuat — ketuk untuk ulang
+                </button>
             ) : (
                 <div className="body-anatomy-loading">
                     <span className="dot-pulse" style={{ color: 'var(--cyan)' }} />
-                    <span className="mono ml-2 text-[10px] tracking-[0.2em] text-slate-500">SCANNING…</span>
+                    <span className="body-anatomy-loading-text">SCANNING…</span>
                 </div>
             )}
         </div>

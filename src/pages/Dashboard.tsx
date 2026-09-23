@@ -6,7 +6,7 @@ import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 import { calculateStreak } from '../services/gamificationService';
 import { computeFatigue } from '../services/fatigueService';
 import { StatusCard } from '../components/StatusCard';
-import { SystemNotification, BodyAnatomy, splitExhaustedByView, CornerBracket } from '../components/hud';
+import { SystemNotification, BodyAnatomy, splitExhaustedByView, CornerBracket, BodyTurntable, BodyViewToggle } from '../components/hud';
 import { useNavigate } from 'react-router-dom';
 
 // Maps free-form schedule strings ("Push — Chest, Shoulders, Triceps") to MuscleGroup keys.
@@ -166,9 +166,9 @@ export const Dashboard: React.FC = () => {
   const [verdictExpanded, setVerdictExpanded] = useState(false);
   useEffect(() => { setVerdictExpanded(false); }, [systemMessage]);
 
-  // Muscle Recovery 3D flip state (Q4: 600ms cubic ease-out)
+  // Muscle Recovery body view. The turn itself is animated inside
+  // BodyTurntable (DOM-driven spring), so this page never re-renders per frame.
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
-  const [bodyAngle, setBodyAngle] = useState(0);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
@@ -198,25 +198,6 @@ export const Dashboard: React.FC = () => {
     });
     return unsubscribe;
   }, []);
-
-  // Body flip RAF — interpolate to target angle (600ms cubic ease-out)
-  useEffect(() => {
-    const target = bodyView === 'back' ? 180 : 0;
-    const from = bodyAngle;
-    if (Math.abs(target - from) < 0.1) return;
-    const start = performance.now();
-    const dur = 600;
-    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
-    let raf = 0;
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / dur);
-      setBodyAngle(from + (target - from) * ease(t));
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bodyView]);
 
   const launchTodaysPlan = () => {
     const label = schedule[currentDayKey];
@@ -351,15 +332,7 @@ export const Dashboard: React.FC = () => {
   // Split exhausted muscles by view (front/back) — feeds BodyAnatomy
   const exhaustedSplit = splitExhaustedByView(recoveringMuscles);
 
-  // 3D body flip transform math
-  const rad = bodyAngle * Math.PI / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const scaleX = 0.04 + 0.96 * Math.abs(cos);
-  const showFront = cos >= 0;
-  const edgeIntensity = Math.pow(1 - Math.abs(cos), 1.5);
-  const rotateShade = Math.abs(sin) * 0.85;
-  const visibleExhausted = showFront ? exhaustedSplit.front : exhaustedSplit.back;
+  const visibleExhausted = bodyView === 'front' ? exhaustedSplit.front : exhaustedSplit.back;
   const exhaustedCount = visibleExhausted.length;
 
   const gender: 'male' | 'female' = (userState?.gender === 'Female' ? 'female' : 'male');
@@ -565,43 +538,20 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <CornerBracket className="d-body-stage" tone="cyan" size={11} inset={6}>
-          <div className="d-body-toggle">
-            <button className={`d-body-toggle-opt ${bodyView === 'front' ? 'is-on' : ''}`} onClick={() => setBodyView('front')}>FRONT</button>
-            <button className={`d-body-toggle-opt ${bodyView === 'back' ? 'is-on' : ''}`} onClick={() => setBodyView('back')}>BACK</button>
-          </div>
+          <BodyViewToggle view={bodyView} onChange={setBodyView} />
 
           <div className="d-body-fig-wrap">
             <div className="d-body-scan" />
-            <div
-              className="d-body-3d"
-              style={{
-                transform: `rotateY(${bodyAngle}deg) scaleX(${scaleX})`,
-                filter: `brightness(${0.6 + 0.4 * Math.abs(cos)})`,
-              }}
-            >
-              <div
-                className="d-body-face-real"
-                style={{ opacity: showFront ? 1 : 0, '--rotate-shade': rotateShade } as React.CSSProperties}
-              >
-                <BodyAnatomy view="front" exhausted={exhaustedSplit.front} gender={gender} />
-              </div>
-              <div
-                className="d-body-face-real d-body-face-mirror"
-                style={{ opacity: showFront ? 0 : 1, '--rotate-shade': rotateShade } as React.CSSProperties}
-              >
-                <BodyAnatomy view="back" exhausted={exhaustedSplit.back} gender={gender} />
-              </div>
-            </div>
-            <div
-              className="d-body-edge"
-              style={{
-                opacity: edgeIntensity * 0.9,
-                transform: `translateX(-50%) scaleY(${1 - edgeIntensity * 0.05})`,
-              }}
+            <BodyTurntable
+              view={bodyView}
+              onViewChange={setBodyView}
+              front={<BodyAnatomy view="front" exhausted={exhaustedSplit.front} gender={gender} />}
+              back={<BodyAnatomy view="back" exhausted={exhaustedSplit.back} gender={gender} />}
             />
           </div>
 
-          <div className="d-body-active">
+          {/* Keyed on the face so the count re-enters when the body turns. */}
+          <div className="d-body-active" key={bodyView}>
             <span style={{ color: 'var(--red)' }}>●</span> {exhaustedCount} LELAH
           </div>
         </CornerBracket>

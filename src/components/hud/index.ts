@@ -24,6 +24,9 @@ export { default as SystemFrameDefs } from './SystemFrameDefs';
 export { default as BodyAnatomy, splitExhaustedByView } from './BodyAnatomy';
 export type { BodyAnatomyProps, BodyView, BodyGender } from './BodyAnatomy';
 
+export { default as BodyTurntable, BodyViewToggle } from './BodyTurntable';
+export type { BodyTurntableProps, BodyViewToggleProps, TurntableView } from './BodyTurntable';
+
 export { default as SystemBot, BotFace } from './SystemBot';
 export type { SystemBotProps, BotFaceProps, BotMood } from './SystemBot';
 
