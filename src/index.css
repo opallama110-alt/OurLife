@@ -4740,15 +4740,23 @@ input, select, textarea {
   transition: transform 160ms var(--ease-spring);
 }
 .h-newproto:active { transform: scale(0.97); }
+/* Sheen = a translated highlight strip (compositor-only) with a rest pause,
+   instead of repainting the whole CTA via background-position + blend every
+   frame. Paused while the CTA is off screen (useInViewPause). */
 .h-newproto-glow {
-  position: absolute; inset: 0;
-  background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.35) 50%, transparent 70%);
-  background-size: 200% 100%;
-  animation: hn-sheen 3s linear infinite;
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 60%;
+  background: linear-gradient(115deg, transparent, rgba(255, 255, 255, 0.28) 50%, transparent);
+  transform: translateX(-120%);
+  animation: hnSheenX 4.5s var(--ease-in-out) 1.2s infinite;
   pointer-events: none;
-  mix-blend-mode: overlay;
 }
-@keyframes hn-sheen { 0% { background-position: -100% 0; } 100% { background-position: 200% 0; } }
+@keyframes hnSheenX {
+  0%       { transform: translateX(-120%); }
+  35%, 100% { transform: translateX(220%); }
+}
+.h-newproto[data-paused] .h-newproto-glow { animation-play-state: paused; }
 .h-newproto-ico {
   width: 22px; height: 22px;
   border-radius: 50%;
@@ -4770,6 +4778,7 @@ input, select, textarea {
   display: flex; flex-direction: column;
   align-items: center; gap: 6px;
   text-align: center;
+  transition: border-color var(--dur-4) ease, box-shadow var(--dur-4) ease;
 }
 .h-stat-cyan   { border-color: var(--line-cyan-soft); box-shadow: inset 0 0 18px rgba(34, 211, 238, 0.04); }
 .h-stat-orange { border-color: rgba(251, 146, 60, 0.25); box-shadow: inset 0 0 18px rgba(251, 146, 60, 0.04); }
@@ -4781,11 +4790,19 @@ input, select, textarea {
 }
 .h-stat-cyan   .h-stat-icon { color: var(--cyan); border: 1px solid var(--line-cyan-soft); }
 .h-stat-orange .h-stat-icon { color: var(--xp-1); border: 1px solid rgba(251, 191, 36, 0.3); }
+/* 100% today: the completion tile lights up green with the rest of the reward. */
+.h-stat-cyan.is-full {
+  border-color: rgba(52, 211, 153, 0.4);
+  box-shadow: inset 0 0 18px rgba(52, 211, 153, 0.08), 0 0 18px -8px rgba(52, 211, 153, 0.45);
+}
+.h-stat-cyan.is-full .h-stat-val { color: var(--green-bright); transition: color var(--dur-4) ease; }
 .h-stat-val {
   font-size: 26px; font-weight: 800;
   color: var(--t-hi);
   letter-spacing: -0.02em;
   line-height: 1;
+  /* Values tick/roll on change — fixed-width digits keep them centred. */
+  font-variant-numeric: tabular-nums;
 }
 .h-stat-orange .h-stat-val { color: var(--xp-1); text-shadow: 0 0 10px rgba(251, 191, 36, 0.45); }
 .h-stat-sub {
@@ -4834,6 +4851,7 @@ input, select, textarea {
   pointer-events: none;
   z-index: -1;
 }
+.h-system[data-paused] .h-system-icon-halo { animation-play-state: paused; }
 .h-system-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .h-system-text .hud-label {
   color: var(--orange);
@@ -4848,7 +4866,12 @@ input, select, textarea {
   font-family: var(--font-mono);
 }
 .h-system-eval {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  flex-shrink: 0;
+  /* Fits the longest label ("Evaluate Now") so switching to "Deliberating" /
+     "Re-evaluate" doesn't resize the pill and reflow the header text. */
+  min-width: 132px;
+  min-height: 36px;
   padding: 8px 12px;
   font-family: var(--font-mono);
   font-size: 10px; font-weight: 700;
@@ -4888,7 +4911,45 @@ input, select, textarea {
 }
 .h-system-verdict-body { font-size: 13px; color: var(--t-1); line-height: 1.5; white-space: pre-line; }
 .h-system-verdict-meta { font-size: 9px; color: var(--t-mute); margin-top: 4px; font-family: var(--font-mono); }
+/* A new verdict fades up into the space the skeleton held. */
+.h-system-verdict.is-fresh { animation: hVerdictIn var(--dur-4) var(--ease-out-expo) backwards; }
+@keyframes hVerdictIn { from { opacity: 0; transform: translateY(6px); } }
+.h-system-verdict.is-loading { animation: hVerdictIn var(--dur-3) var(--ease-out-expo) backwards; }
+/* Skeleton lines (~a 3-4 sentence verdict) with a sweeping highlight. */
+.h-skel {
+  display: block;
+  height: 10px;
+  margin-top: 8px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+.h-skel:nth-child(2) { width: 92%; }
+.h-skel:nth-child(3) { width: 78%; }
+.h-skel:nth-child(4) { width: 54%; }
+.h-skel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(251, 146, 60, 0.16), transparent);
+  animation: hSkelSweep 1.2s var(--ease-in-out) infinite;
+}
+@keyframes hSkelSweep { to { transform: translateX(100%); } }
+.h-system-error { position: relative; z-index: 2; margin-top: 10px; animation: hVerdictIn var(--dur-3) var(--ease-out-expo) backwards; }
 
+/* All-done freeze banner. Sits below the habit list and glides its height
+   open/closed (grid 0fr↔1fr), so neither the check that completes the day
+   nor the un-check that re-opens it shifts the cards above. Engines without
+   grid-row transitions simply snap, which is the old behaviour. */
+.h-freeze-shell {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-4) var(--ease-out-expo);
+}
+.h-freeze-shell.is-open { grid-template-rows: 1fr; }
+.h-freeze-inner { min-height: 0; overflow: hidden; }
 .h-freeze {
   display: flex; align-items: center; gap: 10px;
   margin: 12px 0 0;
@@ -4899,20 +4960,31 @@ input, select, textarea {
     linear-gradient(90deg, rgba(34, 197, 94, 0.10), transparent 80%),
     rgba(7, 12, 24, 0.55);
   box-shadow: inset 0 0 18px rgba(34, 197, 94, 0.08);
-  animation: h-freeze-in 460ms var(--ease-spring);
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  transition: opacity var(--dur-2) ease, transform var(--dur-3) var(--ease-in);
 }
-@keyframes h-freeze-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.96); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+.h-freeze-shell.is-open .h-freeze {
+  opacity: 1;
+  transform: none;
+  transition: opacity var(--dur-3) ease 80ms, transform var(--dur-4) var(--ease-spring-soft) 80ms;
 }
 .h-freeze-shield {
   width: 32px; height: 32px;
+  flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--green-bright);
   background: rgba(34, 197, 94, 0.1);
   border: 1px solid rgba(34, 197, 94, 0.45);
   border-radius: 8px;
-  filter: drop-shadow(0 0 6px rgba(34, 197, 94, 0.45));
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.35);
+}
+/* Shield stamps in each time the banner opens. */
+.h-freeze-shell.is-open .h-freeze-shield svg { animation: hShieldIn 700ms var(--ease-spring) 160ms backwards; }
+@keyframes hShieldIn {
+  0%   { transform: scale(0.3) rotate(-25deg); opacity: 0; }
+  60%  { transform: scale(1.2) rotate(6deg); opacity: 1; }
+  100% { transform: none; opacity: 1; }
 }
 .h-freeze-title { font-size: 13px; font-weight: 700; color: var(--green-bright); }
 .h-freeze-sub {
@@ -4923,6 +4995,11 @@ input, select, textarea {
 }
 
 .h-list { display: flex; flex-direction: column; gap: 10px; margin: 14px 0 0; }
+/* The list is the page's main content: tighter, shorter-capped stagger than
+   the global .reveal so the first cards don't queue behind the header. */
+.h-list .reveal { animation-delay: calc(min(var(--reveal-i, 0), 6) * 45ms + 40ms); }
+/* No backdrop-filter: the shell behind is a flat fill, so the blur was
+   invisible yet cost a backdrop surface per card while scrolling. */
 .h-card {
   position: relative;
   padding: 14px;
@@ -4930,9 +5007,21 @@ input, select, textarea {
   border-radius: 14px;
   background:
     linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0) 30%),
-    rgba(15, 21, 37, 0.55);
-  backdrop-filter: blur(10px);
+    rgba(15, 21, 37, 0.62);
   box-shadow: 0 14px 28px -18px rgba(0, 0, 0, 0.7);
+  transition: border-color var(--dur-3) ease, box-shadow var(--dur-4) ease;
+}
+/* A habit created from the sheet enters on its own (not the page stagger)
+   with a brief cyan ping so Save visibly lands. */
+.h-card.is-new { animation: hCardNew var(--dur-5) var(--ease-out-expo) both; }
+@keyframes hCardNew {
+  0%  {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+    border-color: var(--cyan);
+    box-shadow: 0 0 0 1px var(--cyan), 0 0 24px -6px rgba(34, 211, 238, 0.6);
+  }
+  60% { opacity: 1; transform: none; }
 }
 .h-card-cyan { border-color: var(--line-cyan-soft); }
 .h-card-orange { border-color: rgba(251, 146, 60, 0.25); }
@@ -4952,26 +5041,64 @@ input, select, textarea {
   align-items: start;
   margin-bottom: 12px;
 }
-.h-card-check { width: 26px; height: 26px; padding: 0; background: transparent; border: 0; cursor: pointer; }
+.h-card-check {
+  position: relative;
+  width: 26px; height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+/* Invisible hit-area → 44px target on the most-tapped control in the app. */
+.h-card-check::after { content: ""; position: absolute; inset: -9px; }
 .h-card-check-circle {
   display: flex; align-items: center; justify-content: center;
   width: 26px; height: 26px;
   border-radius: 50%;
   border: 1.5px solid var(--line);
   color: var(--cyan);
-  transition: all 200ms var(--ease-spring);
+  transition:
+    background-color var(--dur-2) ease,
+    border-color var(--dur-2) ease,
+    box-shadow var(--dur-3) ease,
+    color var(--dur-2) ease,
+    transform var(--dur-1) ease;
 }
+.h-card-check:active .h-card-check-circle { transform: scale(0.9); }
 .h-card-check-circle.is-on {
   background: var(--green-bright);
   border-color: var(--green-bright);
   color: var(--bg-1, #04060D);
   box-shadow: 0 0 10px rgba(34, 197, 94, 0.6);
-  animation: h-check-pop 320ms var(--ease-spring);
+  animation: h-check-pop var(--dur-4) var(--ease-spring-soft);
 }
+/* Shared check "pop" (habit card, sub-task, Dashboard protocol rows) — a
+   gentle overshoot rather than a cartoonish 0.4→1.25 bounce. */
 @keyframes h-check-pop {
-  0%   { transform: scale(0.4); }
-  60%  { transform: scale(1.25); }
+  0%   { transform: scale(0.8); }
+  55%  { transform: scale(1.12); }
   100% { transform: scale(1); }
+}
+/* The tick is always mounted: it scales/fades and draws its stroke in, and
+   runs the same way in reverse when un-checking. */
+.h-card-check-ico {
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity var(--dur-1) ease, transform var(--dur-2) ease;
+}
+.h-card-check-ico :is(path, polyline) {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  transition: stroke-dashoffset var(--dur-3) var(--ease-out-expo);
+}
+.h-card-check-circle.is-on > .h-card-check-ico {
+  opacity: 1;
+  transform: none;
+  transition: opacity var(--dur-1) ease, transform var(--dur-3) var(--ease-spring-soft);
+}
+.h-card-check-circle.is-on > .h-card-check-ico :is(path, polyline) {
+  stroke-dashoffset: 0;
+  transition-delay: 60ms;
 }
 .h-card-title {
   margin: 0;
@@ -4979,8 +5106,27 @@ input, select, textarea {
   color: var(--t-hi);
   line-height: 1.35;
   letter-spacing: -0.005em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  transition: color var(--dur-3) ease;
 }
-.h-card-title.is-done { color: var(--green-bright); text-decoration: line-through; text-decoration-color: rgba(34, 197, 94, 0.4); }
+.h-card-title.is-done { color: var(--green-bright); }
+/* Animated strike-through (text-decoration can't animate). A 1.5px
+   background line sweeps across the text; box-decoration-break makes it
+   follow every line of a wrapped title. Shared by habit titles, sub-task
+   labels and the Dashboard protocol rows. */
+.h-strike {
+  background: linear-gradient(currentColor, currentColor) no-repeat 0 58% / 0% 1.5px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-size var(--dur-4) var(--ease-out-expo);
+}
+.h-card-title.is-done > .h-strike,
+.h-subtask.is-on .h-strike { background-size: 100% 1.5px; }
+.h-card-title.is-done > .h-strike,
+.h-subtask.is-on .h-strike {
+  background-image: linear-gradient(rgba(34, 197, 94, 0.55), rgba(34, 197, 94, 0.55));
+}
 .h-card-cue {
   font-size: 11px;
   color: var(--t-3);
@@ -4989,6 +5135,8 @@ input, select, textarea {
 }
 .h-card-cue-ico { color: var(--orange); }
 .h-card-meta { display: flex; gap: 6px; align-items: center; }
+/* Streak chip: tiered StreakFlame + rolling number. The chip itself warms up
+   with the flame level (data-lvl mirrors constants/streak flameLevel). */
 .h-card-streak {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 4px 8px;
@@ -4998,16 +5146,18 @@ input, select, textarea {
   border-radius: 999px;
   background: rgba(7, 12, 24, 0.5);
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur-3) ease, color var(--dur-3) ease, background var(--dur-3) ease;
 }
-.h-card-flame {
-  color: var(--orange);
-  animation: h-flame-pulse 1.6s ease-in-out infinite;
-  filter: drop-shadow(0 0 4px rgba(251, 146, 60, 0.5));
+.h-card-streak[data-lvl="0"] { color: var(--t-3); }
+.h-card-streak:is([data-lvl="3"], [data-lvl="4"]) {
+  color: var(--t-hi);
+  border-color: rgba(251, 146, 60, 0.35);
+  background: linear-gradient(90deg, rgba(251, 146, 60, 0.12), rgba(7, 12, 24, 0.5));
 }
-@keyframes h-flame-pulse {
-  0%, 100% { transform: scale(1); opacity: 0.85; }
-  50%      { transform: scale(1.18); opacity: 1; }
-}
+.h-card-streak[data-lvl="5"] { color: var(--cyan-bright); border-color: var(--line-cyan); }
+/* Alive but today not done yet — a dashed "don't break the chain" nudge. */
+.h-card-streak.is-risk { border-style: dashed; }
 .h-card-xp {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 4px 8px;
@@ -5017,8 +5167,10 @@ input, select, textarea {
   background: rgba(251, 191, 36, 0.06);
   border-radius: 6px;
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 .h-card-trash {
+  position: relative;
   width: 26px; height: 26px;
   background: transparent;
   border: 1px solid var(--line-soft);
@@ -5026,10 +5178,12 @@ input, select, textarea {
   color: var(--t-mute);
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
-  transition: all 160ms ease;
+  transition: color var(--dur-2) ease, border-color var(--dur-2) ease, background var(--dur-2) ease, transform var(--dur-1) ease;
 }
+/* Taller hit-area (the delete itself is behind a confirm dialog). */
+.h-card-trash::after { content: ""; position: absolute; inset: -9px -3px; }
 .h-card-trash:hover { color: var(--red); border-color: rgba(239, 68, 68, 0.4); }
-.h-card-trash:active { transform: scale(0.9); }
+.h-card-trash:active { transform: scale(0.9); color: var(--red); background: rgba(239, 68, 68, 0.08); }
 
 /* ─── Week row (.h-week / .h-day) ──────────────────────────────────────
    7 day-cells = the trailing 7 days (today−6 … today). Ported back from
@@ -5055,9 +5209,30 @@ input, select, textarea {
   border: 0;
   cursor: pointer;
   border-radius: 8px;
-  transition: background 140ms ease;
+  transition: background var(--dur-1) ease, transform var(--dur-2) var(--ease-out);
   position: relative;
+  /* Left-to-right cascade right after the card itself reveals
+     (--reveal-i inherits from the article; --d-i is the cell index). */
+  animation: hDayIn var(--dur-3) var(--ease-out-expo) backwards;
+  animation-delay: calc(min(var(--reveal-i, 0), 6) * 45ms + 240ms + var(--d-i, 0) * 35ms);
 }
+@keyframes hDayIn { from { opacity: 0; transform: translateY(4px); } }
+/* Streak chain: a green link drawn from the previous done day's box to this
+   one (gap 6px, box 22px centred; box centre sits 15px above the cell bottom). */
+.h-day.is-chain::before {
+  content: "";
+  position: absolute;
+  left: calc(-50% + 5px);
+  right: calc(50% + 11px);
+  bottom: 14px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.35), rgba(52, 211, 153, 0.9));
+  transform-origin: left center;
+  pointer-events: none;
+  animation: hChainIn var(--dur-3) var(--ease-out-expo) both;
+}
+@keyframes hChainIn { from { transform: scaleX(0); } }
 .h-day-label {
   font-size: 11px;
   font-weight: 700;
@@ -5093,25 +5268,40 @@ input, select, textarea {
   color: var(--bg-1, #04060D);
   box-shadow: 0 0 10px rgba(34, 197, 94, 0.55);
 }
-.h-day-check { animation: h-day-pop 380ms var(--ease-spring); }
+.h-day-check { animation: h-day-pop 380ms var(--ease-spring-soft); }
+/* The tick draws itself in (pathLength=1 on the path). */
+.h-day-check path {
+  stroke-dasharray: 1;
+  animation: hCheckDraw var(--dur-3) var(--ease-out-expo) 60ms backwards;
+}
+@keyframes hCheckDraw { from { stroke-dashoffset: 1; } }
 @keyframes h-day-pop {
-  0%   { transform: scale(0.4); opacity: 0; }
-  60%  { transform: scale(1.3); opacity: 1; }
+  0%   { transform: scale(0.5); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
+/* Ripple ring around the box — anchored to the cell (not inside the
+   overflow:hidden box, which used to clip it to a flash). Green when the tap
+   completes the day, grey when it un-completes it. */
 .h-day-ripple {
   position: absolute;
-  inset: -8px;
+  left: 50%;
+  bottom: 4px;
+  width: 22px;
+  height: 22px;
+  margin-left: -11px;
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(34, 197, 94, 0.55), transparent 65%);
+  border: 2px solid rgba(52, 211, 153, 0.85);
   pointer-events: none;
-  animation: h-day-ripple 600ms ease-out forwards;
+  opacity: 0;
+  animation: hDayRipple 520ms var(--ease-out-expo) forwards;
 }
-@keyframes h-day-ripple {
-  0%   { opacity: 0.9; transform: scale(0.4); }
-  100% { opacity: 0;   transform: scale(2.2); }
+.h-day-ripple.is-off { border-color: rgba(148, 163, 184, 0.5); }
+@keyframes hDayRipple {
+  from { opacity: 0.9; transform: scale(0.6); }
+  to   { opacity: 0;   transform: scale(2.1); }
 }
-.h-day:active { transform: scale(0.94); }
+.h-day:active { transform: scale(0.9); transition-duration: 60ms; }
 
 /* ============================================================
    STREAK MOTION SYSTEM — components/streak/* + hud/SysToast
@@ -5476,6 +5666,35 @@ input, select, textarea {
   color: var(--t-3);
   text-transform: none;
 }
+.h-empty-ico {
+  width: 40px; height: 40px;
+  margin: 0 auto 10px;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  color: var(--cyan);
+  background: rgba(34, 211, 238, 0.06);
+  border: 1px solid var(--line-cyan-soft);
+}
+/* The empty state carries its own CTA instead of pointing back up the page. */
+.h-empty-cta {
+  margin-top: 14px;
+  min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-cyan);
+  background: rgba(34, 211, 238, 0.08);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform var(--dur-1) ease, background var(--dur-2) ease, border-color var(--dur-2) ease;
+}
+.h-empty-cta:hover { background: rgba(34, 211, 238, 0.14); border-color: var(--cyan); }
+.h-empty-cta:active { transform: scale(0.96); }
 
 /* ─── Sub-task list (.h-subtasks*) ──────────────────────────────────── */
 .h-subtasks { margin-top: 14px; }
@@ -5489,15 +5708,35 @@ input, select, textarea {
   color: var(--sys-ink-dim);
   text-transform: uppercase;
 }
-.h-subtasks-flame { color: var(--orange); }
+/* ListChecks glyph — the flame is reserved for streaks. */
+.h-subtasks-ico { color: var(--sys-cyan-1); }
 .h-subtasks-count {
   margin-left: auto;
   color: var(--sys-cyan-1);
   font-weight: 700;
+  transition: color var(--dur-3) ease;
 }
+/* Progress toward the parent's auto-complete (last sub-task = habit done). */
+.h-subtasks-bar {
+  height: 3px;
+  margin: -2px 0 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.08);
+  overflow: hidden;
+}
+.h-subtasks-bar > i {
+  display: block;
+  height: 100%;
+  transform-origin: 0 50%;
+  transform: scaleX(var(--p, 0));
+  background: linear-gradient(90deg, var(--sys-cyan-2), var(--sys-cyan-1));
+  transition: transform var(--dur-4) var(--ease-out-expo), background var(--dur-3) ease;
+}
+.h-subtasks-bar.is-full > i { background: linear-gradient(90deg, var(--green), var(--green-bright)); }
 .h-subtask-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .h-subtask {
   width: 100%;
+  min-height: 44px;
   display: flex; align-items: center; gap: 10px;
   padding: 10px 12px;
   background: rgba(7, 12, 24, 0.45);
@@ -5508,9 +5747,14 @@ input, select, textarea {
   font-size: 14px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+  transition:
+    border-color var(--dur-2) ease,
+    background var(--dur-2) ease,
+    color var(--dur-2) ease,
+    transform var(--dur-1) ease;
 }
 .h-subtask:hover { border-color: rgba(125, 217, 245, 0.45); }
+.h-subtask:active { transform: scale(0.985); }
 .h-subtask.is-on {
   border-color: rgba(34, 197, 94, 0.45);
   background:
@@ -5519,8 +5763,6 @@ input, select, textarea {
 }
 .h-subtask.is-on .h-subtask-label {
   color: var(--green-bright);
-  text-decoration: line-through;
-  text-decoration-color: rgba(34, 197, 94, 0.45);
   opacity: 0.85;
 }
 .h-subtask-box {
@@ -5529,18 +5771,36 @@ input, select, textarea {
   border-radius: 6px;
   border: 1.5px solid rgba(125, 217, 245, 0.45);
   background: rgba(7, 12, 24, 0.55);
-  color: transparent;
+  color: var(--bg-1, #04060D);
   display: inline-flex; align-items: center; justify-content: center;
-  transition: all 180ms var(--ease-spring);
+  transition:
+    background-color var(--dur-2) ease,
+    border-color var(--dur-2) ease,
+    box-shadow var(--dur-3) ease;
 }
 .h-subtask-box.is-on {
   background: var(--green-bright);
   border-color: var(--green-bright);
-  color: var(--bg-1, #04060D);
   box-shadow: 0 0 8px rgba(34, 197, 94, 0.55);
-  animation: h-check-pop 320ms var(--ease-spring);
+  animation: h-check-pop var(--dur-4) var(--ease-spring-soft);
 }
-.h-subtask-label { flex: 1; }
+/* Always-mounted tick (same language as the habit-card check). */
+.h-subtask-ico {
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity var(--dur-1) ease, transform var(--dur-2) ease;
+}
+.h-subtask-box.is-on > .h-subtask-ico {
+  opacity: 1;
+  transform: none;
+  transition: opacity var(--dur-1) ease, transform var(--dur-3) var(--ease-spring-soft);
+}
+.h-subtask-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  transition: color var(--dur-2) ease, opacity var(--dur-2) ease;
+}
 .h-subtask-target {
   font-family: var(--font-mono);
   font-size: 11px;

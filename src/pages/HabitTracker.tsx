@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Habit, HabitSubTask } from '../types';
 import { storageService } from '../services/storageService';
 import { aiService } from '../services/aiService';
@@ -6,9 +6,14 @@ import { computeFatigue } from '../services/fatigueService';
 import { achievementService } from '../services/achievementService';
 import { useAchievements } from '../context/AchievementContext';
 import {
-  Plus, Trash2, Trophy, Zap, Target, Loader2, Flame, Clock, Shield, Check, Sparkles,
+  Plus, Trash2, Trophy, Zap, Target, Loader2, Clock, Shield, Check, Sparkles, ListChecks,
 } from 'lucide-react';
 import { NewHabitModal, NewHabitPayload } from '../components/habits/NewHabitModal';
+import { ConfirmDialog, CountUp, SysToast, useSysToasts } from '../components/hud';
+import { StreakFlame, StreakNumber } from '../components/streak';
+import { crossedMilestone, flameLevel, hashId, MILESTONE_COPY } from '../constants/streak';
+import { useInViewPause } from '../hooks/useInViewPause';
+import { prefersReducedMotion } from '../hooks/usePresence';
 import { getLocalDateString } from '../utils/dateUtils';
 import { calculateHabitStreak as calculateStreak, calculateHabitLongestStreak as calculateLongestStreak } from '../utils/habitStreak';
 
@@ -29,38 +34,84 @@ const buildWeekCells = (todayISO: string) =>
     return { iso, label: WEEKDAY_INITIAL[d.getDay()], isToday: iso === todayISO };
   });
 
+/** Short tactile tick on completions (Android; iOS ignores it). */
+const haptic = (pattern: number | number[]) => {
+  if (prefersReducedMotion()) return;
+  try { navigator.vibrate?.(pattern); } catch { /* vibration unsupported */ }
+};
+
+/**
+ * Card exit for a confirmed delete: slide/fade out, then collapse the height
+ * so the cards below glide up instead of jumping ~150px in one frame. WAAPI
+ * one-shots on a single element — no React state per frame. `done` (the real
+ * delete) runs once the collapse finishes, or immediately under reduced motion.
+ */
+const collapseThen = (el: HTMLElement | undefined, done: () => void) => {
+  if (!el || prefersReducedMotion() || typeof el.animate !== 'function') { done(); return; }
+  const height = el.offsetHeight;
+  const cs = getComputedStyle(el);
+  el.style.pointerEvents = 'none';
+  el.animate(
+    [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(-28px) scale(0.97)' }],
+    { duration: 180, easing: 'cubic-bezier(0.4, 0, 1, 1)', fill: 'forwards' },
+  ).finished
+    .then(() => {
+      el.style.overflow = 'hidden';
+      return el.animate(
+        [
+          { height: `${height}px`, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, borderTopWidth: cs.borderTopWidth, borderBottomWidth: cs.borderBottomWidth, marginBottom: '0px' },
+          // -10px swallows the .h-list gap so the next card lands exactly where
+          // it will sit once this one unmounts (no final 10px snap).
+          { height: '0px', paddingTop: '0px', paddingBottom: '0px', borderTopWidth: '0px', borderBottomWidth: '0px', marginBottom: '-10px' },
+        ],
+        { duration: 240, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' },
+      ).finished;
+    })
+    .then(() => done(), () => done());
+};
+
 // ── DayCell — one cell of the weekly grid, with its own tap ripple ──
 const DayCell: React.FC<{
   label: string;
   checked: boolean;
   isToday: boolean;
+  /** The previous day is also done → draw the streak chain into this cell. */
+  chainPrev: boolean;
+  index: number;
   onToggle: () => void;
-  animDelay?: number;
-}> = ({ label, checked, isToday, onToggle, animDelay = 0 }) => {
-  const [ripple, setRipple] = useState(false);
+}> = ({ label, checked, isToday, chainPrev, index, onToggle }) => {
+  // Keyed per tap so a quick double-tap restarts the ripple instead of being
+  // swallowed; grey when the tap un-completes the day, green when it completes.
+  const [burst, setBurst] = useState<{ n: number; off: boolean } | null>(null);
   const handle = () => {
-    setRipple(true);
-    window.setTimeout(() => setRipple(false), 600);
+    setBurst(b => ({ n: (b?.n ?? 0) + 1, off: checked }));
+    if (!checked) haptic(10);
     onToggle();
   };
   return (
     <button
       type="button"
-      className={`h-day ${checked ? 'is-on' : ''} ${isToday ? 'is-today' : ''}`}
+      className={`h-day${checked ? ' is-on' : ''}${isToday ? ' is-today' : ''}${chainPrev ? ' is-chain' : ''}`}
       onClick={handle}
-      style={{ animationDelay: `${animDelay}ms` }}
+      style={{ ['--d-i' as string]: index }}
       aria-pressed={checked}
-      aria-label={`${label}${isToday ? ' (hari ini)' : ''}`}
+      aria-label={`${label}${isToday ? ' (hari ini)' : ''}${checked ? ', selesai' : ''}`}
     >
       <span className="h-day-label">{label}</span>
       <span className="h-day-box">
         {checked && (
           <svg className="h-day-check" width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M5 12.5 L10 17.5 L19 8.5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M5 12.5 L10 17.5 L19 8.5" pathLength={1} stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
-        {ripple && <span className="h-day-ripple" />}
       </span>
+      {burst && (
+        <span
+          key={burst.n}
+          className={`h-day-ripple${burst.off ? ' is-off' : ''}`}
+          onAnimationEnd={() => setBurst(null)}
+        />
+      )}
     </button>
   );
 };
@@ -79,6 +130,9 @@ const DailyProtocolEvaluator: React.FC<{
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [evaluatedAt, setEvaluatedAt] = useState<number | null>(null);
+  // Pause the icon halo loop while the card is scrolled away.
+  const cardRef = useRef<HTMLElement>(null);
+  useInViewPause(cardRef);
 
   const runEvaluation = async () => {
     setLoading(true);
@@ -146,7 +200,7 @@ const DailyProtocolEvaluator: React.FC<{
   };
 
   return (
-    <article className="h-system reveal" style={{ ['--reveal-i' as string]: 3 }}>
+    <article ref={cardRef} className="h-system reveal" style={{ ['--reveal-i' as string]: 3 }}>
       <div className="h-system-glow" />
       <div className="h-system-head">
         <div className="h-system-icon">
@@ -171,9 +225,19 @@ const DailyProtocolEvaluator: React.FC<{
           streak saat ini, dan fatigue otot, lalu memberikan langkah berikutnya.
         </p>
       )}
-      {error && <div className="sys-chat-error">{error}</div>}
+      {error && <div className="sys-chat-error h-system-error">{error}</div>}
+      {/* Skeleton holds the verdict's space while the System thinks, so the
+          card doesn't collapse and then jump back open when the reply lands. */}
+      {loading && (
+        <div className="h-system-verdict is-loading" aria-live="polite" aria-busy="true">
+          <div className="h-system-verdict-label">THE SYSTEM · MENGANALISIS…</div>
+          <span className="h-skel" />
+          <span className="h-skel" />
+          <span className="h-skel" />
+        </div>
+      )}
       {verdict && !loading && (
-        <div className="h-system-verdict">
+        <div className="h-system-verdict is-fresh" key={evaluatedAt ?? 0}>
           <div className="h-system-verdict-label">THE SYSTEM</div>
           <div className="h-system-verdict-body">{verdict}</div>
           {evaluatedAt && (
@@ -195,18 +259,45 @@ const DailyProtocolEvaluator: React.FC<{
 // ═══════════════════════════════════════════════════════════════
 export const HabitTracker: React.FC = () => {
   const { addUnlocks } = useAchievements();
-  const [habits, setHabits] = useState<Habit[]>([]);
+  // Read synchronously from the storage cache on first render (same data the
+  // old mount effect loaded) so the empty state never flashes for one frame
+  // before the cards replace it.
+  const [habits, setHabits] = useState<Habit[]>(() =>
+    storageService.getHabits().map(h => ({ ...h, streak: calculateStreak(h.completedDates) })),
+  );
   const [showAddModal, setShowAddModal] = useState(false);
-  const [tokenToast, setTokenToast] = useState<string | null>(null);
+  const { current: toast, push: pushToast } = useSysToasts();
+  const [pendingDelete, setPendingDelete] = useState<Habit | null>(null);
+  // The confirm dialog keeps rendering the last target while it plays its
+  // exit, so its text doesn't blank out mid-fade.
+  const lastDeleteRef = useRef<Habit | null>(null);
+  if (pendingDelete) lastDeleteRef.current = pendingDelete;
+  const deleteTarget = pendingDelete ?? lastDeleteRef.current;
+  const [leavingId, setLeavingId] = useState<string | null>(null);
+  const [justAddedId, setJustAddedId] = useState<string | null>(null);
 
+  // Cards present on first paint join the page's reveal stagger; habits
+  // created later get their own entrance (.is-new) instead of waiting in it.
+  const initialIdsRef = useRef<Set<string> | null>(null);
+  if (initialIdsRef.current === null) initialIdsRef.current = new Set(habits.map(h => h.id));
+  const cardRefs = useRef(new Map<string, HTMLElement>());
+
+  const ctaRef = useRef<HTMLButtonElement>(null);
+  useInViewPause(ctaRef);
+
+  // A freshly created habit is appended at the bottom — often below the fold.
+  // Bring it into view once the sheet has slid away so Save visibly "lands".
   useEffect(() => {
-    const loadedHabits = storageService.getHabits();
-    const recalculated = loadedHabits.map(h => ({
-      ...h,
-      streak: calculateStreak(h.completedDates),
-    }));
-    setHabits(recalculated);
-  }, []);
+    if (!justAddedId) return;
+    const t = window.setTimeout(() => {
+      cardRefs.current.get(justAddedId)?.scrollIntoView({
+        block: 'center',
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+      });
+      setJustAddedId(null);
+    }, 240);
+    return () => window.clearTimeout(t);
+  }, [justAddedId]);
 
   const today = getLocalDateString();
   const weekCells = buildWeekCells(today);
@@ -218,6 +309,33 @@ export const HabitTracker: React.FC = () => {
   );
   const allTimeCompletions = habits.reduce((sum, h) => sum + (h.completedDates?.length || 0), 0);
   const allDone = totalHabits > 0 && completedToday === totalHabits;
+
+  // Freeze banner copy reflects what actually happened: grantStreakToken()
+  // refuses when already earned today or at the 3/3 cap, so "all done" alone
+  // doesn't mean a token was given. Read-only.
+  const gymProfile = storageService.getGymProfile();
+  const freezeTokens = gymProfile.streakFreezeTokens ?? 0;
+  const tokenEarnedToday = gymProfile.lastTokenEarned === today;
+  const freezeTitle = tokenEarnedToday
+    ? '+1 Token Freeze diperoleh'
+    : freezeTokens >= 3 ? 'Token Freeze penuh (3/3)' : 'Semua protokol selesai';
+  const freezeSub = tokenEarnedToday || freezeTokens >= 3
+    ? `${freezeTokens}/3 token tersimpan · streak aman hari ini`
+    : 'Selesaikan semua habit harian → bekukan streak satu hari';
+
+  /** Toast when a toggle carries a habit's streak across a milestone (3/7/30/100/365). */
+  const announceMilestone = (before: Habit[], after: Habit[], habitId: string) => {
+    const prev = before.find(h => h.id === habitId)?.streak ?? 0;
+    const next = after.find(h => h.id === habitId)?.streak ?? 0;
+    const m = crossedMilestone(prev, next);
+    if (m == null) return;
+    pushToast({
+      tone: m >= 30 ? 'cyan' : 'orange',
+      icon: <StreakFlame streak={m} size={16} celebrate={false} />,
+      title: `Streak ${m} hari!`,
+      sub: MILESTONE_COPY[m],
+    });
+  };
 
   /**
    * Persist updated habit list and run the "all daily habits done" side-effects:
@@ -232,8 +350,12 @@ export const HabitTracker: React.FC = () => {
       const granted = storageService.grantStreakToken();
       if (granted) {
         const remaining = storageService.getGymProfile().streakFreezeTokens || 0;
-        setTokenToast(`+1 Streak Freeze Token  (${remaining}/3)`);
-        window.setTimeout(() => setTokenToast(null), 2800);
+        pushToast({
+          tone: 'cyan',
+          icon: <Shield size={14} />,
+          title: '+1 Token Freeze',
+          sub: `${remaining}/3 tersimpan`,
+        });
       }
     }
 
@@ -258,6 +380,7 @@ export const HabitTracker: React.FC = () => {
         : [...(h.completedDates || []), dateISO];
       return { ...h, completedDates: newDates, streak: calculateStreak(newDates) };
     });
+    announceMilestone(habits, updated, habitId);
     persist(updated);
   };
 
@@ -300,6 +423,7 @@ export const HabitTracker: React.FC = () => {
         streak: calculateStreak(newDates),
       };
     });
+    announceMilestone(habits, updated, habitId);
     persist(updated);
   };
 
@@ -319,17 +443,30 @@ export const HabitTracker: React.FC = () => {
     const updated = [...habits, newHabit];
     setHabits(updated);
     storageService.saveHabits(updated);
+    setJustAddedId(newHabit.id);
   };
 
-  const deleteHabit = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
+  const deleteHabit = (id: string) => {
     const updated = habits.filter(h => h.id !== id);
     setHabits(updated);
     storageService.saveHabits(updated);
   };
 
+  // Tier 0.6: deleting wipes the habit's whole history, so it goes through a
+  // confirm first; the card then animates out before the (unchanged) delete.
+  const confirmDelete = () => {
+    const target = pendingDelete;
+    setPendingDelete(null);
+    if (!target || leavingId) return;
+    setLeavingId(target.id);
+    collapseThen(cardRefs.current.get(target.id), () => {
+      deleteHabit(target.id);
+      setLeavingId(null);
+    });
+  };
+
   return (
-    <div className="pb-24">
+    <div className="h-page">
       {/* Hero */}
       <section className="h-hero reveal" style={{ ['--reveal-i' as string]: 0 }}>
         <h1 className="h-title">
@@ -340,6 +477,7 @@ export const HabitTracker: React.FC = () => {
 
       {/* New Protocol CTA */}
       <button type="button" className="h-newproto reveal"
+        ref={ctaRef}
         style={{ ['--reveal-i' as string]: 1 }}
         onClick={() => setShowAddModal(true)}>
         <span className="h-newproto-glow" />
@@ -349,19 +487,19 @@ export const HabitTracker: React.FC = () => {
 
       {/* Stats */}
       <div className="h-stats reveal" style={{ ['--reveal-i' as string]: 2 }}>
-        <div className="h-stat h-stat-cyan">
+        <div className={`h-stat h-stat-cyan${allDone ? ' is-full' : ''}`}>
           <div className="h-stat-icon"><Target size={16} /></div>
-          <div className="h-stat-val">{percentage}%</div>
-          <div className="h-stat-sub">{completedToday}/{totalHabits} HARI INI</div>
+          <div className="h-stat-val"><CountUp value={percentage} />%</div>
+          <div className="h-stat-sub tnum">{completedToday}/{totalHabits} HARI INI</div>
         </div>
         <div className="h-stat h-stat-orange">
           <div className="h-stat-icon"><Trophy size={16} /></div>
-          <div className="h-stat-val">{bestStreakOverall}</div>
+          <div className="h-stat-val"><StreakNumber value={bestStreakOverall} /></div>
           <div className="h-stat-sub">STREAK TERBAIK</div>
         </div>
         <div className="h-stat h-stat-cyan">
           <div className="h-stat-icon"><Zap size={16} /></div>
-          <div className="h-stat-val">{allTimeCompletions}</div>
+          <div className="h-stat-val"><CountUp value={allTimeCompletions} /></div>
           <div className="h-stat-sub">SEPANJANG WAKTU</div>
         </div>
       </div>
@@ -374,33 +512,31 @@ export const HabitTracker: React.FC = () => {
         percentage={percentage}
       />
 
-      {/* Freeze banner when all habits done */}
-      {allDone && (
-        <div className="h-freeze reveal" style={{ ['--reveal-i' as string]: 4 }}>
-          <span className="h-freeze-shield"><Shield size={16} /></span>
-          <div>
-            <div className="h-freeze-title">+1 Token Freeze diperoleh</div>
-            <div className="h-freeze-sub">Selesaikan semua habit harian → bekukan streak satu hari</div>
-          </div>
-        </div>
-      )}
-
       {/* Habit cards — design-reference .h-card with weekly grid */}
       <div className="h-list">
         {habits.map((h, idx) => {
-          const isDoneToday = h.completedDates?.includes(today);
+          const isDoneToday = !!h.completedDates?.includes(today);
           const todaysSubs = new Set(h.completedSubTasks?.[today] || []);
           const hasSubTasks = !!h.subTasks && h.subTasks.length > 0;
           const subDone = hasSubTasks
             ? (h.subTasks || []).filter(st => todaysSubs.has(st.id)).length
             : 0;
           const subTotal = hasSubTasks ? (h.subTasks || []).length : 0;
+          const isNew = !initialIdsRef.current?.has(h.id);
+          // Streak alive (yesterday done) but today not checked yet.
+          const atRisk = !isDoneToday && h.streak > 0;
+          const completions = h.completedDates?.length || 0;
 
           return (
             <article
               key={h.id}
-              className={`h-card reveal h-card-cyan ${isDoneToday ? 'is-done' : ''}`}
-              style={{ ['--reveal-i' as string]: 5 + idx }}
+              ref={el => {
+                if (el) cardRefs.current.set(h.id, el);
+                else cardRefs.current.delete(h.id);
+              }}
+              className={`h-card h-card-cyan ${isNew ? 'is-new' : 'reveal'}${isDoneToday ? ' is-done' : ''}`}
+              style={{ ['--reveal-i' as string]: 4 + idx }}
+              aria-busy={leavingId === h.id || undefined}
             >
               <div className="h-card-top">
                 {/* Top-left circle: quick-toggle TODAY (mirrors the last
@@ -410,31 +546,42 @@ export const HabitTracker: React.FC = () => {
                 <button
                   type="button"
                   className="h-card-check"
-                  onClick={() => togglePerDay(h.id, today)}
+                  onClick={() => {
+                    if (!isDoneToday) haptic(12);
+                    togglePerDay(h.id, today);
+                  }}
                   aria-pressed={isDoneToday}
                   aria-label={isDoneToday ? 'Batalkan selesai hari ini' : 'Tandai selesai hari ini'}
                 >
+                  {/* Tick stays mounted so un-checking can animate out too. */}
                   <span className={`h-card-check-circle ${isDoneToday ? 'is-on' : ''}`}>
-                    {isDoneToday && <Check size={14} strokeWidth={2.8} />}
+                    <Check size={14} strokeWidth={2.8} className="h-card-check-ico" />
                   </span>
                 </button>
 
-                <h3 className={`h-card-title ${isDoneToday ? 'is-done' : ''}`}>{h.name}</h3>
+                <h3 className={`h-card-title ${isDoneToday ? 'is-done' : ''}`}>
+                  <span className="h-strike">{h.name}</span>
+                </h3>
 
                 <div className="h-card-meta">
-                  <span className="h-card-streak" title="Streak saat ini">
-                    <span className="h-card-flame"><Flame size={11} /></span>
-                    <span>{h.streak}</span>
+                  <span
+                    className={`h-card-streak${atRisk ? ' is-risk' : ''}`}
+                    data-lvl={flameLevel(h.streak)}
+                    title={atRisk ? 'Selesaikan hari ini untuk menjaga streak' : 'Streak saat ini'}
+                    aria-label={`Streak ${h.streak} hari`}
+                  >
+                    <StreakFlame streak={h.streak} atRisk={atRisk} phase={hashId(h.id) % 1200} />
+                    <StreakNumber value={h.streak} />
                   </span>
-                  <span className="h-card-xp" title="Total selesai sepanjang waktu">
+                  <span className="h-card-xp" title="Total selesai sepanjang waktu" aria-label={`${completions} kali selesai`}>
                     <Trophy size={12} />
-                    <span>{h.completedDates?.length || 0}</span>
+                    <StreakNumber value={completions} />
                   </span>
                   <button
                     type="button"
                     className="h-card-trash"
-                    onClick={(e) => deleteHabit(e, h.id)}
-                    aria-label="Hapus habit"
+                    onClick={() => { if (!leavingId) setPendingDelete(h); }}
+                    aria-label={`Hapus habit ${h.name}`}
                   >
                     <Trash2 size={12} />
                   </button>
@@ -444,16 +591,20 @@ export const HabitTracker: React.FC = () => {
               {/* 7-day week grid (today−6 … today). Each cell toggles that
                   date's completion via togglePerDay → completedDates + streak. */}
               <div className="h-week">
-                {weekCells.map((cell, i) => (
-                  <DayCell
-                    key={cell.iso}
-                    label={cell.label}
-                    checked={!!h.completedDates?.includes(cell.iso)}
-                    isToday={cell.isToday}
-                    onToggle={() => togglePerDay(h.id, cell.iso)}
-                    animDelay={50 * i}
-                  />
-                ))}
+                {weekCells.map((cell, i) => {
+                  const checked = !!h.completedDates?.includes(cell.iso);
+                  return (
+                    <DayCell
+                      key={cell.iso}
+                      label={cell.label}
+                      checked={checked}
+                      isToday={cell.isToday}
+                      chainPrev={checked && i > 0 && !!h.completedDates?.includes(weekCells[i - 1].iso)}
+                      index={i}
+                      onToggle={() => togglePerDay(h.id, cell.iso)}
+                    />
+                  );
+                })}
               </div>
 
               {/* TODO (Tier 6 — defer): dashboard grafik perkembangan habit
@@ -466,9 +617,17 @@ export const HabitTracker: React.FC = () => {
               {hasSubTasks && (
                 <div className="h-subtasks">
                   <div className="h-subtasks-head">
-                    <Flame size={11} className="h-subtasks-flame" />
+                    <ListChecks size={11} className="h-subtasks-ico" />
                     <span>SUB-TASK HARI INI</span>
-                    <span className="h-subtasks-count">{subDone}/{subTotal}</span>
+                    <span className="h-subtasks-count tnum">{subDone}/{subTotal}</span>
+                  </div>
+                  {/* Build-up toward the auto-complete of the parent habit. */}
+                  <div
+                    className={`h-subtasks-bar${subDone === subTotal ? ' is-full' : ''}`}
+                    style={{ ['--p' as string]: subTotal > 0 ? subDone / subTotal : 0 }}
+                    aria-hidden="true"
+                  >
+                    <i />
                   </div>
                   <ul className="h-subtask-list">
                     {(h.subTasks || []).map(st => {
@@ -478,15 +637,18 @@ export const HabitTracker: React.FC = () => {
                           <button
                             type="button"
                             className={`h-subtask ${checked ? 'is-on' : ''}`}
-                            onClick={() => toggleSubTask(h.id, st.id)}
+                            onClick={() => {
+                              if (!checked) haptic(8);
+                              toggleSubTask(h.id, st.id);
+                            }}
                             aria-pressed={checked}
                           >
                             <span className={`h-subtask-box ${checked ? 'is-on' : ''}`}>
-                              {checked && <Check size={12} />}
+                              <Check size={12} className="h-subtask-ico" />
                             </span>
-                            <span className="h-subtask-label">{st.label}</span>
+                            <span className="h-subtask-label"><span className="h-strike">{st.label}</span></span>
                             {st.target !== undefined && (
-                              <span className="h-subtask-target">
+                              <span className="h-subtask-target tnum">
                                 [{checked ? st.target : 0}/{st.target}]
                               </span>
                             )}
@@ -510,22 +672,57 @@ export const HabitTracker: React.FC = () => {
         })}
 
         {habits.length === 0 && (
-          <div className="h-empty">
+          <div className="h-empty reveal" style={{ ['--reveal-i' as string]: 4 }}>
             <span className="brk-c brk-tl" /><span className="brk-c brk-tr" />
             <span className="brk-c brk-bl" /><span className="brk-c brk-br" />
-            <div className="h-empty-title">Belum ada habit</div>
-            <div className="h-empty-sub">Ketuk &ldquo;Protokol Baru&rdquo; untuk memulai.</div>
+            <span className="h-empty-ico"><Target size={18} /></span>
+            <div className="h-empty-title">Belum ada protokol</div>
+            <div className="h-empty-sub">Mulai dari satu kebiasaan kecil — konsistensi &gt; intensitas.</div>
+            <button type="button" className="h-empty-cta" onClick={() => setShowAddModal(true)}>
+              <Plus size={14} /> Buat Protokol Pertama
+            </button>
           </div>
         )}
       </div>
 
-      {/* Freeze token toast */}
-      {tokenToast && (
-        <div className="fixed left-1/2 -translate-x-1/2 bottom-24 z-[70] px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-sm shadow-[0_0_25px_rgba(6,182,212,0.55)] flex items-center gap-2">
-          <Shield size={14} />
-          {tokenToast}
+      {/* Freeze banner when all habits are done. Lives BELOW the list and
+          glides its height open, so checking the last habit never shoves the
+          card under the user's finger. */}
+      <div
+        className={`h-freeze-shell reveal${allDone ? ' is-open' : ''}`}
+        style={{ ['--reveal-i' as string]: 4 + habits.length }}
+        aria-hidden={!allDone}
+      >
+        <div className="h-freeze-inner">
+          <div className="h-freeze" role="status">
+            <span className="h-freeze-shield"><Shield size={16} /></span>
+            <div>
+              <div className="h-freeze-title">{freezeTitle}</div>
+              <div className="h-freeze-sub">{freezeSub}</div>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
+
+      {/* Freeze-token + streak-milestone toasts (FIFO queue). */}
+      <SysToast item={toast} />
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        title="Hapus habit ini?"
+        message={deleteTarget && (
+          <>
+            <b>{deleteTarget.name}</b> beserta seluruh riwayatnya
+            {(deleteTarget.completedDates?.length ?? 0) > 0
+              ? <> ({deleteTarget.completedDates?.length} kali selesai, streak {deleteTarget.streak} hari)</>
+              : null}
+            {' '}akan dihapus permanen.
+          </>
+        )}
+        confirmLabel="Hapus"
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
 
       {/* New habit modal (slide-up) */}
       <NewHabitModal
