@@ -5235,21 +5235,21 @@ input, select, textarea {
 .sf[data-paused] :is(.sf-glow, .sf-layer, .sf-ember) { animation-play-state: paused; }
 
 /* ── Rolling number (StreakNumber) ── */
-.sn {
+.stn {
   display: inline-grid;
   overflow: hidden;
   line-height: 1.15;
   vertical-align: bottom;
 }
-.sn > * { grid-area: 1 / 1; }
-.sn.is-up .sn-new   { animation: snInUp var(--dur-4) var(--ease-spring-soft) both; }
-.sn.is-up .sn-old   { animation: snOutUp var(--dur-3) var(--ease-in) both; }
-.sn.is-down .sn-new { animation: snInDown var(--dur-3) var(--ease-out-expo) both; }
-.sn.is-down .sn-old { animation: snOutDown var(--dur-2) var(--ease-in) both; }
-@keyframes snInUp    { from { transform: translateY(90%);  opacity: 0; } }
-@keyframes snOutUp   { to   { transform: translateY(-90%); opacity: 0; } }
-@keyframes snInDown  { from { transform: translateY(-90%); opacity: 0; } }
-@keyframes snOutDown { to   { transform: translateY(90%);  opacity: 0; } }
+.stn > * { grid-area: 1 / 1; }
+.stn.is-up .stn-new   { animation: stnInUp var(--dur-4) var(--ease-spring-soft) both; }
+.stn.is-up .stn-old   { animation: stnOutUp var(--dur-3) var(--ease-in) both; }
+.stn.is-down .stn-new { animation: stnInDown var(--dur-3) var(--ease-out-expo) both; }
+.stn.is-down .stn-old { animation: stnOutDown var(--dur-2) var(--ease-in) both; }
+@keyframes stnInUp    { from { transform: translateY(90%);  opacity: 0; } }
+@keyframes stnOutUp   { to   { transform: translateY(-90%); opacity: 0; } }
+@keyframes stnInDown  { from { transform: translateY(-90%); opacity: 0; } }
+@keyframes stnOutDown { to   { transform: translateY(90%);  opacity: 0; } }
 
 /* ── HUD toast (SysToast) ──
    Centered with the individual `translate` property so the enter/exit

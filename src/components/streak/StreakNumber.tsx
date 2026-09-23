@@ -27,11 +27,11 @@ export const StreakNumber = memo(function StreakNumber({ value, className = '' }
   }, [ghost]);
 
   return (
-    <span className={`sn tnum ${ghost ? (ghost.up ? 'is-up' : 'is-down') : ''} ${className}`.trim()}>
+    <span className={`stn tnum ${ghost ? (ghost.up ? 'is-up' : 'is-down') : ''} ${className}`.trim()}>
       {ghost && (
-        <span className="sn-old" aria-hidden="true" onAnimationEnd={() => setGhost(null)}>{ghost.from}</span>
+        <span className="stn-old" aria-hidden="true" onAnimationEnd={() => setGhost(null)}>{ghost.from}</span>
       )}
-      <span key={key.current} className="sn-new">{value}</span>
+      <span key={key.current} className="stn-new">{value}</span>
     </span>
   );
 });
