@@ -5113,6 +5113,189 @@ input, select, textarea {
 }
 .h-day:active { transform: scale(0.94); }
 
+/* ============================================================
+   STREAK MOTION SYSTEM — components/streak/* + hud/SysToast
+   One flame (.sf), one rolling number (.sn), one toast (.sys-toast)
+   for every streak surface. Transform/opacity only, no filters, so
+   it is also safe inside 3D contexts (§5.3).
+   ============================================================ */
+.sf {
+  --sf-c1: #F97316;          /* outer */
+  --sf-c2: #FBBF24;          /* inner */
+  --sf-c3: #FFF7ED;          /* core  */
+  --sf-glow: rgba(251, 146, 60, 0.45);
+  --sf-speed: 1.5s;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--sf-size, 14px);
+  height: var(--sf-size, 14px);
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.sf > *, .sf-pop > * { grid-area: 1 / 1; }
+.sf-pop { display: grid; width: 100%; height: 100%; }
+.sf-layer {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform-origin: 50% 92%;           /* flicker from the base, like real fire */
+}
+.sf-outer path { fill: var(--sf-c1); transition: fill var(--dur-4) ease; }
+.sf-inner path { fill: var(--sf-c2); transition: fill var(--dur-4) ease; }
+.sf-core  path { fill: var(--sf-c3); transition: fill var(--dur-4) ease; }
+/* Three layers on different, non-harmonic periods = organic flicker.
+   Every keyframe starts/ends on the rest pose so a frozen loop (reduced
+   motion / paused) always shows a clean flame. */
+.sf-outer { animation: sfFlickA var(--sf-speed) ease-in-out var(--sf-phase, 0ms) infinite; }
+.sf-inner { animation: sfFlickB calc(var(--sf-speed) * 0.8) ease-in-out calc(var(--sf-phase, 0ms) - 300ms) infinite; }
+.sf-core  { animation: sfFlickC calc(var(--sf-speed) * 0.6) ease-in-out calc(var(--sf-phase, 0ms) - 150ms) infinite; }
+@keyframes sfFlickA {
+  0%, 100% { transform: none; }
+  30%      { transform: scale(0.94, 1.06) skewX(-3deg); }
+  65%      { transform: scale(1.04, 0.96) skewX(2deg); }
+}
+@keyframes sfFlickB {
+  0%, 100% { transform: none; }
+  40%      { transform: scale(0.9, 1.1) skewX(3deg); }
+  75%      { transform: scale(1.05, 0.95); }
+}
+@keyframes sfFlickC {
+  0%, 100% { transform: none; opacity: 0.95; }
+  50%      { transform: scale(0.85, 1.12); opacity: 0.75; }
+}
+.sf-glow {
+  width: 190%;
+  height: 190%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--sf-glow), transparent 70%);
+  pointer-events: none;
+  animation: sfGlow calc(var(--sf-speed) * 1.3) ease-in-out var(--sf-phase, 0ms) infinite;
+}
+@keyframes sfGlow {
+  0%, 100% { opacity: 0.55; transform: scale(0.92); }
+  50%      { opacity: 0.9;  transform: scale(1.05); }
+}
+.sf-ember {
+  position: absolute;
+  left: 50%;
+  bottom: 55%;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--sf-c2);
+  opacity: 0;
+  pointer-events: none;
+  animation: sfEmber 1.8s ease-out infinite;
+}
+.sf-ember.e2 { animation-delay: 0.6s; margin-left: -3px; }
+.sf-ember.e3 { animation-delay: 1.2s; margin-left: 3px; }
+@keyframes sfEmber {
+  0%   { opacity: 0; transform: none; }
+  20%  { opacity: 0.95; }
+  100% { opacity: 0; transform: translate(2px, calc(var(--sf-size, 14px) * -0.95)) scale(0.4); }
+}
+/* Burst pieces (created by playStreakBurst). */
+.sf-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--sf-c2);
+  pointer-events: none;
+  opacity: 0;          /* WAAPI drives it; invisible once the burst ends */
+}
+.sf-spark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  margin: -1.5px;
+  border-radius: 50%;
+  background: var(--sf-c2);
+  box-shadow: 0 0 4px var(--sf-c1);
+  pointer-events: none;
+  opacity: 0;
+}
+/* ── Tiers ── */
+.sf-l0 { --sf-c1: #334155; --sf-c2: #475569; --sf-c3: #64748B; --sf-glow: transparent; }
+.sf-l0 :is(.sf-layer, .sf-glow) { animation: none; }
+.sf-l0 .sf-core { opacity: 0.35; }
+.sf-l1 { --sf-speed: 2s; --sf-glow: rgba(251, 146, 60, 0.25); }
+.sf-l1 .sf-pop { transform: scale(0.86); }
+.sf-l2 { --sf-speed: 1.6s; }
+.sf-l3 { --sf-c1: var(--red); --sf-c2: var(--orange); --sf-c3: #FDE68A; --sf-speed: 1.35s; --sf-glow: rgba(239, 68, 68, 0.45); }
+.sf-l4 { --sf-c1: #DC2626; --sf-c2: var(--xp-3); --sf-c3: #FEF3C7; --sf-speed: 1.15s; --sf-glow: rgba(249, 115, 22, 0.6); }
+.sf-l5 { --sf-c1: var(--cyan-dim); --sf-c2: var(--cyan); --sf-c3: #ECFEFF; --sf-speed: 1.05s; --sf-glow: rgba(34, 211, 238, 0.55); }
+.sf-legend { --sf-c1: #7C3AED; --sf-c2: var(--purple); --sf-c3: var(--gold); --sf-glow: rgba(167, 139, 250, 0.6); }
+.sf.is-risk { opacity: 0.6; }
+.sf.is-risk .sf-layer { animation-duration: calc(var(--sf-speed) * 2); }
+.sf.is-frozen { --sf-c1: var(--cyan-dim); --sf-c2: var(--cyan-bright); --sf-c3: #FFFFFF; --sf-glow: rgba(103, 232, 249, 0.5); }
+.sf.is-frozen :is(.sf-layer, .sf-glow) { animation-duration: 4s; }
+.sf[data-paused] :is(.sf-glow, .sf-layer, .sf-ember) { animation-play-state: paused; }
+
+/* ── Rolling number (StreakNumber) ── */
+.sn {
+  display: inline-grid;
+  overflow: hidden;
+  line-height: 1.15;
+  vertical-align: bottom;
+}
+.sn > * { grid-area: 1 / 1; }
+.sn.is-up .sn-new   { animation: snInUp var(--dur-4) var(--ease-spring-soft) both; }
+.sn.is-up .sn-old   { animation: snOutUp var(--dur-3) var(--ease-in) both; }
+.sn.is-down .sn-new { animation: snInDown var(--dur-3) var(--ease-out-expo) both; }
+.sn.is-down .sn-old { animation: snOutDown var(--dur-2) var(--ease-in) both; }
+@keyframes snInUp    { from { transform: translateY(90%);  opacity: 0; } }
+@keyframes snOutUp   { to   { transform: translateY(-90%); opacity: 0; } }
+@keyframes snInDown  { from { transform: translateY(-90%); opacity: 0; } }
+@keyframes snOutDown { to   { transform: translateY(90%);  opacity: 0; } }
+
+/* ── HUD toast (SysToast) ──
+   Centered with the individual `translate` property so the enter/exit
+   keyframes can own `transform` without breaking the centering. Sits above
+   the 96px notched bottom nav. */
+.sys-toast {
+  position: fixed;
+  left: 50%;
+  translate: -50% 0;
+  bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line-cyan);
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.12), transparent 70%), rgba(7, 12, 24, 0.94);
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.85), var(--glow-cyan-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--t-1);
+  pointer-events: none;
+}
+.sys-toast--orange {
+  border-color: rgba(251, 146, 60, 0.5);
+  background: linear-gradient(90deg, rgba(251, 146, 60, 0.14), transparent 70%), rgba(7, 12, 24, 0.94);
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.85), var(--glow-orange);
+}
+.sys-toast--green {
+  border-color: rgba(52, 211, 153, 0.45);
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.12), transparent 70%), rgba(7, 12, 24, 0.94);
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.85), var(--glow-green);
+}
+.sys-toast-ico { display: inline-flex; color: var(--cyan-bright); }
+.sys-toast--orange .sys-toast-ico { color: var(--orange); }
+.sys-toast--green .sys-toast-ico { color: var(--green-bright); }
+.sys-toast-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sys-toast-txt strong { font-weight: 700; letter-spacing: 0.02em; }
+.sys-toast-txt span { color: var(--t-3); font-size: 10.5px; letter-spacing: 0.06em; }
+.sys-toast[data-state="enter"] { animation: sysToastIn var(--dur-4) var(--ease-spring-soft) both; }
+.sys-toast[data-state="exit"]  { animation: sysToastOut var(--dur-2) var(--ease-in) both; }
+@keyframes sysToastIn  { from { opacity: 0; transform: translateY(14px) scale(0.96); } }
+@keyframes sysToastOut { to   { opacity: 0; transform: translateY(8px) scale(0.98); } }
+
 .h-empty {
   position: relative;
   padding: 22px;

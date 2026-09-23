@@ -32,3 +32,6 @@ export type { SystemBotProps, BotFaceProps, BotMood } from './SystemBot';
 
 export { default as BottomNav } from './BottomNav';
 export type { BottomNavProps, BottomNavTab } from './BottomNav';
+
+export { default as SysToast, useSysToasts } from './SysToast';
+export type { SysToastItem, SysToastTone } from './SysToast';
