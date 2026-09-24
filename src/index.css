@@ -3780,6 +3780,18 @@ input, select, textarea {
 .g-recent-meta { font-size: 10.5px; letter-spacing: 0.08em; color: var(--t-3); font-family: var(--font-mono); }
 .g-recent-arrow { font-size: 18px; color: var(--t-mute, var(--t-3)); }
 
+/* Empty state (recent workouts, muscle XP) — replaces raw slate Tailwind. */
+.g-empty {
+  margin: 0;
+  padding: 18px 12px;
+  text-align: center;
+  border: 1px dashed var(--line-soft);
+  border-radius: 10px;
+  color: var(--t-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 /* ============================================================
    COLOR UTILITIES (ported from prototype tokens.css)
    ============================================================ */
@@ -3812,8 +3824,9 @@ input, select, textarea {
   font-size: 13px; font-weight: 600;
   cursor: pointer;
   border-radius: 8px;
-  transition: color 200ms ease;
+  transition: color 200ms ease, transform var(--dur-1) ease;
 }
+.g-tab:active { transform: scale(0.96); }
 .g-tab.is-on { color: var(--cyan); }
 .g-tab.is-on svg { filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.5)); }
 .g-tab-indicator {
@@ -3825,27 +3838,32 @@ input, select, textarea {
   border: 1px solid var(--line-cyan-soft);
   border-radius: 8px;
   box-shadow: inset 0 0 16px rgba(34, 211, 238, 0.06), 0 0 12px -4px rgba(34, 211, 238, 0.3);
-  transition: transform 320ms var(--ease-spring);
+  /* Soft spring — the full overshoot poked the pill out of the track. */
+  transition: transform var(--dur-4) var(--ease-spring-soft);
   z-index: 1;
 }
 .g-tabbody { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
-.g-tab-pane { animation: gym-pane-in 360ms var(--ease-out); }
-@keyframes gym-pane-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
+/* Tab content slides in from the side of the tab that was tapped
+   (data-dir), sharing wfIn with the workout-flow steps. */
+.g-tab-pane { animation: wfIn var(--dur-3) var(--ease-out-expo) backwards; }
 
 /* ============================================================
    WORKOUT FLOW — Step 1 (Select Muscles) + Step 2 (Choose Exercises)
    Ported from prototype workout.css; adapted to be in-page (not full-screen).
    ============================================================ */
+/* Each step enters from the direction of travel: forward steps slide in
+   from the right, back / close from the left (data-dir on the screen).
+   Backwards fill: no transform lingers after the entrance, so the screen
+   never becomes a containing block for fixed/sticky descendants. */
 .wf-screen {
   display: flex; flex-direction: column;
-  animation: wf-screen-in 320ms var(--ease-out);
+  animation: wfIn var(--dur-3) var(--ease-out-expo) backwards;
 }
-@keyframes wf-screen-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+.wf-screen[hidden] { display: none; }
+:is(.wf-screen, .g-tab-pane)[data-dir='fwd']  { --wf-x: 18px; }
+:is(.wf-screen, .g-tab-pane)[data-dir='back'] { --wf-x: -18px; }
+@keyframes wfIn {
+  from { opacity: 0; transform: translateX(var(--wf-x, 0)); }
 }
 .wf-sub {
   display: flex; align-items: center; gap: 10px;
@@ -4352,54 +4370,80 @@ input, select, textarea {
 .ae-step-unit { font-size: 11px; color: var(--t-3); margin-left: 4px; }
 .ae-step-row {
   display: grid;
-  grid-template-columns: 28px 1fr 28px;
+  grid-template-columns: 40px 1fr 40px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
+/* 40px: the most-used controls, operated with sweaty hands between sets.
+   Hold-to-repeat lives in StepperSlider. */
 .ae-step-btn {
-  width: 28px; height: 28px;
-  border-radius: 7px;
+  width: 40px; height: 40px;
+  border-radius: 10px;
   background: rgba(34, 211, 238, 0.06);
   border: 1px solid var(--line-cyan-soft);
   color: var(--cyan);
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
-  transition: transform 120ms var(--ease-spring), background 160ms ease;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+          user-select: none;
+  transition: transform var(--dur-1) ease, background var(--dur-2) ease, opacity var(--dur-2) ease;
 }
-.ae-step-btn:active { transform: scale(0.85); }
-.ae-step-btn:hover { background: rgba(34, 211, 238, 0.12); }
+.ae-step-btn:active:not(:disabled) { transform: scale(0.9); background: rgba(34, 211, 238, 0.16); }
+.ae-step-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+@media (hover: hover) {
+  .ae-step-btn:hover:not(:disabled) { background: rgba(34, 211, 238, 0.12); }
+}
 .ae-step-track {
   position: relative;
   height: 5px;
   background: rgba(34, 211, 238, 0.1);
   border-radius: 999px;
 }
+/* Fill + thumb are driven by one --p (0–1) through transforms with an
+   ease-out (no overshoot): the old spring on width/left trailed the finger
+   and overshot the track ends. While dragging (.is-drag) they follow 1:1. */
 .ae-step-fill {
-  position: absolute; inset: 0 auto 0 0;
+  position: absolute; inset: 0;
   background: linear-gradient(90deg, rgba(34, 211, 238, 0.6), var(--cyan));
   border-radius: 999px;
   box-shadow: 0 0 6px rgba(34, 211, 238, 0.5);
-  transition: width 220ms var(--ease-spring);
+  transform-origin: left;
+  transform: scaleX(var(--p, 0));
+  transition: transform var(--dur-2) var(--ease-out-expo);
 }
+.ae-step-rail {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  transform: translateX(calc(var(--p, 0) * 100%));
+  transition: transform var(--dur-2) var(--ease-out-expo);
+}
+.ae-step-track.is-drag .ae-step-fill,
+.ae-step-track.is-drag .ae-step-rail { transition: none; }
 .ae-step-thumb {
   position: absolute;
-  top: 50%;
-  width: 14px; height: 14px;
+  top: 50%; left: 0;
+  width: 16px; height: 16px;
   background: var(--cyan);
   border: 2px solid var(--bg-1, #04060D);
   border-radius: 50%;
   transform: translate(-50%, -50%);
   box-shadow: 0 0 10px rgba(34, 211, 238, 0.7);
-  pointer-events: none;
-  transition: left 220ms var(--ease-spring);
+  transition: box-shadow var(--dur-2) ease;
 }
 .ae-step-input {
-  position: absolute; inset: -8px 0;
-  width: 100%; height: 22px;
+  position: absolute; inset: -14px 0;
+  width: 100%;
   opacity: 0;
   cursor: pointer;
   margin: 0;
 }
+.ae-step-input:focus-visible + .ae-step-rail .ae-step-thumb {
+  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.3), 0 0 10px rgba(34, 211, 238, 0.7);
+}
+/* The value ticks up into place instead of hard-swapping digits. */
+.ae-step-num { display: inline-block; animation: aeValTick 160ms var(--ease-out-expo); }
+@keyframes aeValTick { from { opacity: 0.35; transform: translateY(40%); } }
 
 /* Completed sets */
 .ae-completed { display: flex; flex-direction: column; gap: 6px; }
@@ -4447,25 +4491,46 @@ input, select, textarea {
 .ae-notes::placeholder { color: var(--t-mute); }
 .ae-notes:focus { border-color: var(--cyan); }
 
-/* Rest Timer */
+/* Rest Timer (components/gym/RestTimerRing.tsx). The arc is painted from
+   a ref every frame (strokeDashoffset), so it must NOT carry a CSS
+   transition or filter — the glow is a static underlay circle. */
 .ae-timer {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(7, 12, 24, 0.5);
+  transition: border-color var(--dur-3) ease;
 }
+.ae-timer.is-running { border-color: var(--line-cyan-soft); }
+/* Time's up: the card flashes a ring twice and the label turns cyan —
+   paired with beep + vibration so a silent phone still notices. */
+.ae-timer.is-done {
+  border-color: var(--cyan);
+  animation: aeTimerDone 900ms var(--ease-out-expo) 2;
+}
+@keyframes aeTimerDone {
+  0%   { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.5); }
+  100% { box-shadow: 0 0 0 14px rgba(34, 211, 238, 0); }
+}
+.ae-timer.is-done .ae-timer-head .ae-step-label { color: var(--cyan); }
 .ae-timer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.ae-timer-head-ico { display: inline; margin-right: 4px; vertical-align: -1px; }
 .ae-timer-close {
-  width: 22px; height: 22px;
+  position: relative;
+  width: 28px; height: 28px;
   border-radius: 50%;
   background: transparent;
   border: 1px solid var(--line-soft);
   color: var(--t-3);
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
+  transition: transform var(--dur-1) ease, color var(--dur-2) ease;
 }
+.ae-timer-close::after { content: ''; position: absolute; inset: -8px; }
+.ae-timer-close:active { transform: scale(0.9) rotate(-40deg); color: var(--cyan); }
 .ae-timer-body { display: flex; gap: 14px; align-items: center; }
 .ae-timer-ring { position: relative; width: 110px; height: 110px; flex-shrink: 0; }
+.ae-timer-ring svg { display: block; }
 .ae-timer-center {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
@@ -4486,21 +4551,24 @@ input, select, textarea {
   animation: halo-pulse 1.4s ease-in-out infinite;
   pointer-events: none;
 }
+/* 2 columns: 30/60/90/120 fill two rows, +10s spans the third (a 3-col
+   grid left 120s alone on its own row). */
 .ae-timer-presets {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
 .ae-timer-preset {
-  padding: 7px 4px;
+  min-height: 36px;
+  padding: 6px 4px;
   font-size: 11px; letter-spacing: 0.12em;
   background: rgba(7, 12, 24, 0.6);
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--t-2);
   cursor: pointer;
-  transition: all 160ms ease;
+  transition: background var(--dur-2) ease, border-color var(--dur-2) ease, color var(--dur-2) ease, box-shadow var(--dur-2) ease, transform var(--dur-1) ease;
   font-family: var(--font-mono);
 }
 .ae-timer-preset.is-on {
@@ -4509,9 +4577,43 @@ input, select, textarea {
   color: var(--cyan);
   box-shadow: 0 0 10px rgba(34, 211, 238, 0.35);
 }
-.ae-timer-preset:hover { border-color: var(--line-cyan-soft); }
+@media (hover: hover) {
+  .ae-timer-preset:hover { border-color: var(--line-cyan-soft); }
+}
 .ae-timer-preset:active { transform: scale(0.95); }
 .ae-timer-add { grid-column: 1 / -1; color: var(--cyan); border-color: var(--line-cyan-soft); }
+
+/* Off-screen countdown pill — portaled to <body> by RestTimerRing while the
+   ring is scrolled out of view; tap scrolls back to the ring. Sits above
+   the sticky action row (.ae-sticky: bottom 96px + 44px). Centred with the
+   individual translate property so the keyframes can own transform. */
+.ae-rest-pill {
+  position: fixed;
+  left: 50%;
+  translate: -50% 0;
+  bottom: calc(152px + env(safe-area-inset-bottom, 0px));
+  z-index: 45;
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-cyan-soft);
+  background: rgba(7, 12, 24, 0.94);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 14px; font-weight: 700;
+  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.8), 0 0 16px -6px rgba(34, 211, 238, 0.5);
+  cursor: pointer;
+  transition: transform var(--dur-1) ease;
+}
+.ae-rest-pill:active { transform: scale(0.95); }
+.ae-rest-pill-lbl { font-size: 9.5px; letter-spacing: 0.2em; color: var(--t-3); font-weight: 600; }
+.ae-rest-pill.is-done { color: var(--green-bright); border-color: rgba(52, 211, 153, 0.55); }
+.ae-rest-pill.is-done .ae-rest-pill-lbl { color: var(--green-bright); }
+.ae-rest-pill[data-state='enter'] { animation: aePillIn var(--dur-3) var(--ease-out-expo) backwards; }
+.ae-rest-pill[data-state='exit']  { animation: aePillOut var(--dur-2) var(--ease-in) forwards; pointer-events: none; }
+@keyframes aePillIn  { from { opacity: 0; transform: translateY(10px) scale(0.94); } }
+@keyframes aePillOut { to   { opacity: 0; transform: translateY(10px) scale(0.94); } }
 
 .ae-cancel {
   background: transparent;
@@ -4594,6 +4696,96 @@ input, select, textarea {
 }
 
 /* ============================================================
+   WORKOUT SUMMARY — finish-workout reward sheet (.ws-*)
+   Lives inside the shared HudDialog (green tone). The level bar fill is
+   driven by transform:scaleX from WorkoutSummary.tsx (WAAPI), never width.
+   ============================================================ */
+.ws-xp {
+  display: flex; align-items: baseline; justify-content: center; gap: 4px;
+  margin: 4px 0 16px;
+  font-family: var(--font-mono);
+  color: var(--orange);
+  text-shadow: 0 0 18px rgba(251, 146, 60, 0.45);
+  animation: wsXpPop 520ms var(--ease-out-expo) 120ms backwards;
+}
+.ws-xp-plus { font-size: 26px; font-weight: 700; opacity: 0.8; }
+.ws-xp-num { font-size: 48px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ws-xp-unit { font-size: 13px; font-weight: 700; letter-spacing: 0.16em; opacity: 0.85; }
+@keyframes wsXpPop {
+  from { opacity: 0; transform: scale(0.8); }
+}
+
+.ws-level {
+  padding: 12px 14px;
+  border-radius: var(--r-3);
+  border: 1px solid var(--line);
+  background: rgba(4, 6, 13, 0.5);
+}
+.ws-level-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; min-height: 20px; }
+.ws-level-lv { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--t-hi); }
+.ws-level-val { display: inline-block; animation: wsTick 360ms var(--ease-out-expo) backwards; }
+@keyframes wsTick {
+  from { opacity: 0; transform: translateY(6px); }
+}
+.ws-lvup {
+  font-family: var(--font-mono);
+  font-size: 10.5px; font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--green-bright);
+  text-shadow: 0 0 12px rgba(52, 211, 153, 0.6);
+  animation: wsLvUp 620ms var(--ease-out-expo) backwards;
+}
+@keyframes wsLvUp {
+  0%   { opacity: 0; transform: scale(1.4); }
+  60%  { opacity: 1; transform: scale(0.96); }
+}
+.ws-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.ws-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), var(--green-bright));
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.45);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+.ws-level-meta {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--t-3);
+}
+
+.ws-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.ws-stat {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 10px 6px;
+  border-radius: var(--r-3);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  min-width: 0;
+}
+.ws-stat-ico { color: var(--t-3); }
+.ws-stat-val { font-family: var(--font-mono); font-size: 17px; font-weight: 800; color: var(--t-hi); font-variant-numeric: tabular-nums; }
+.ws-stat-lbl { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--t-3); white-space: nowrap; }
+
+.ws-streak {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-3);
+  border: 1px solid rgba(251, 146, 60, 0.3);
+  background: rgba(251, 146, 60, 0.06);
+}
+.ws-streak-txt { font-size: 13px; color: var(--t-2); }
+.ws-streak-num { font-family: var(--font-mono); font-weight: 800; color: var(--orange); }
+
+/* ============================================================
    ANALYTICS — prototype gym.css .an- / .hf- port
    Heart-Fire streak, ECG line, trend chart, muscle XP distribution.
    ============================================================ */
@@ -4611,6 +4803,12 @@ input, select, textarea {
     linear-gradient(180deg, var(--glass-1, rgba(20,28,48,0.55)), rgba(10, 14, 26, 0.75));
   border: 1px solid var(--line);
   border-radius: var(--r-3, 14px);
+  /* The gradient is near-opaque, so .card's backdrop blur was invisible —
+     but it re-blurred the page under ~25 running animations every frame.
+     Paint containment keeps the heart's invalidations inside the card. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  contain: layout paint;
 }
 .an-streak-label { color: var(--t-2); margin-bottom: 10px; letter-spacing: 0.22em; }
 .an-streak-top {
@@ -4627,6 +4825,7 @@ input, select, textarea {
   text-transform: uppercase;
   text-shadow: 0 0 6px currentColor;
   font-family: var(--font-mono);
+  transition: color var(--dur-3) ease, border-color var(--dur-3) ease;
 }
 .an-streak-tier-name { font-weight: 700; }
 
@@ -4638,7 +4837,11 @@ input, select, textarea {
   margin: 4px 0 6px;
 }
 
-/* ECG — behind heart-fire */
+/* ECG — behind heart-fire.
+   The <svg> ELEMENT scrolls (two identical periods, 400% wide, moved by
+   one period = -50%), so its drop-shadow is rasterised once and the
+   compositor just slides the layer. It used to animate a <g> inside the
+   SVG, which repainted the path + both shadows every frame. */
 .an-ecg {
   position: absolute;
   inset: 50% -20px auto -20px;
@@ -4649,6 +4852,7 @@ input, select, textarea {
   -webkit-mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
           mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
   opacity: 0.85;
+  transition: opacity var(--dur-4) ease;
 }
 .an-ecg-grid {
   position: absolute; inset: 0;
@@ -4661,14 +4865,12 @@ input, select, textarea {
 .an-ecg-svg {
   position: absolute;
   top: 0; left: 0;
-  width: 200%; height: 100%;
-  filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.5)) drop-shadow(0 0 8px rgba(34, 211, 238, 0.35));
+  width: 400%; height: 100%;
+  filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.5));
+  will-change: transform;
+  animation: ecgScroll var(--hf-beat, 1.4s) linear infinite;
 }
-.an-ecg-track { animation: ecg-scroll 1.4s linear infinite; }
-@keyframes ecg-scroll {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-280px); }
-}
+@keyframes ecgScroll { to { transform: translateX(-50%); } }
 .an-ecg-dot {
   position: absolute;
   top: 50%; right: 22%;
@@ -4677,29 +4879,58 @@ input, select, textarea {
   background: var(--cyan);
   box-shadow: 0 0 8px rgba(34, 211, 238, 0.9), 0 0 16px rgba(34, 211, 238, 0.5);
   transform: translateY(-2px);
-  animation: ecg-dot-blip 1.4s linear infinite;
+  animation: ecg-dot-blip var(--hf-beat, 1.4s) linear infinite;
 }
 @keyframes ecg-dot-blip {
   0%, 8%, 100% { opacity: 0.85; }
   10%, 14%     { opacity: 1; transform: translate(0, -2px) scale(1.8); }
   16%, 100%    { opacity: 0.85; transform: translate(0, -2px) scale(1); }
 }
+/* PADAM (no streak): the line runs slow and faint. */
+.an-streak-stage.is-padam .an-ecg { opacity: 0.3; }
 
-/* Heart-Fire wrapper */
+/* One-shot ring whenever the displayed tier changes (and on first view). */
+.an-hf-burst {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 150px; height: 150px;
+  margin: -75px 0 0 -75px;
+  border-radius: 50%;
+  border: 2px solid var(--burst, var(--orange));
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  animation: hfBurst 700ms var(--ease-out-expo) forwards;
+}
+@keyframes hfBurst {
+  from { opacity: 0.9; transform: scale(0.6); }
+  to   { opacity: 0;   transform: scale(1.5); }
+}
+
+/* ── Heart-Fire ──
+   Every moving part is its own element animating transform/opacity only
+   (see components/gym/HeartFire.tsx). Glows are radial gradients or a
+   static drop-shadow on a layer box — no blur filters on animated nodes.
+   Tier scale uses the individual `scale` property, which composes with the
+   running beat `transform` instead of being overridden by it. */
 .an-hf-wrap {
   position: relative; z-index: 2;
   display: inline-flex; align-items: center; justify-content: center;
 }
+.hf-tier-1 { --hf-scale: 1; }
+.hf-tier-2 { --hf-scale: 1.04; }
+.hf-tier-3 { --hf-scale: 1.08; }
+.hf-tier-4 { --hf-scale: 1.1; }
+.hf-tier-5 { --hf-scale: 1.1; }
 .an-hf-halo {
   position: absolute; inset: -10px;
   border-radius: 50%;
   background:
-    radial-gradient(closest-side, rgba(251, 146, 60, 0.45), transparent 65%),
-    radial-gradient(closest-side, rgba(239, 68, 68, 0.30) 30%, transparent 65%);
-  filter: blur(2px);
+    radial-gradient(closest-side, rgba(251, 146, 60, 0.45), transparent 70%),
+    radial-gradient(closest-side, rgba(239, 68, 68, 0.30) 30%, transparent 70%);
   z-index: 0;
   pointer-events: none;
-  animation: hf-halo-base 1.6s ease-in-out infinite;
+  animation: hf-halo-base var(--hf-beat, 1.4s) ease-in-out infinite;
 }
 @keyframes hf-halo-base {
   0%, 100% { opacity: 0.55; transform: scale(1); }
@@ -4708,12 +4939,11 @@ input, select, textarea {
 .an-hf-pulsehalo {
   position: absolute; inset: -16px;
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(239, 68, 68, 0.55), transparent 60%);
-  filter: blur(3px);
+  background: radial-gradient(closest-side, rgba(239, 68, 68, 0.55), transparent 65%);
   z-index: 0;
   pointer-events: none;
   opacity: 0.4;
-  animation: hf-pulse-flare 1.4s ease-in-out infinite;
+  animation: hf-pulse-flare var(--hf-beat, 1.4s) ease-in-out infinite;
 }
 @keyframes hf-pulse-flare {
   0%,  60%, 100% { opacity: 0.25; transform: scale(0.9); }
@@ -4722,13 +4952,19 @@ input, select, textarea {
   35%            { opacity: 0.85; transform: scale(1.1); }
   48%            { opacity: 0.4;  transform: scale(0.95); }
 }
-.an-hf-svg {
-  position: relative; z-index: 2;
-  filter:
-    drop-shadow(0 0 10px rgba(239, 68, 68, 0.65))
-    drop-shadow(0 0 24px rgba(251, 146, 60, 0.35));
+/* The beating core: exactly the heart's 140×160 viewBox box (the wrap is
+   size × 1.05·size, so height 100% → width 91.875%, centred), so the
+   flames, heart and HTML embers share one coordinate space. */
+.an-hf-core {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 4.0625%;
+  width: 91.875%;
+  z-index: 2;
   transform-origin: 50% 70%;
-  animation: hf-beat 1.4s ease-in-out infinite;
+  scale: var(--hf-scale, 1);
+  transition: scale 600ms var(--ease-spring-soft);
+  animation: hf-beat var(--hf-beat, 1.4s) ease-in-out infinite;
 }
 @keyframes hf-beat {
   0%, 60%, 100% { transform: scale(1); }
@@ -4737,9 +4973,32 @@ input, select, textarea {
   28%           { transform: scale(1.07); }
   38%           { transform: scale(1); }
 }
-.hf-flame-group {
-  transform-origin: 50% 100%;
-  animation: hf-flame-flicker 1.4s ease-in-out infinite;
+.an-hf-coreglow {
+  position: absolute;
+  left: 8.57%; top: 23.75%;
+  width: 82.86%; height: 77.5%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 247, 237, 0.8), rgba(251, 191, 36, 0.4) 55%, rgba(249, 115, 22, 0) 100%);
+  opacity: 0.6;
+  pointer-events: none;
+}
+.an-hf-svg,
+.an-hf-flames {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  overflow: visible;
+}
+.an-hf-svg {
+  filter:
+    drop-shadow(0 0 10px rgba(239, 68, 68, 0.65))
+    drop-shadow(0 0 22px rgba(251, 146, 60, 0.3));
+}
+/* Flames flicker from their base (y≈56 of 160 → 35%), not the heart's
+   bottom — they used to bob loose instead of licking upward. */
+.an-hf-flames {
+  transform-origin: 50% 35%;
+  filter: drop-shadow(0 0 5px rgba(251, 146, 60, 0.65));
+  animation: hf-flame-flicker var(--hf-beat, 1.4s) ease-in-out infinite;
 }
 @keyframes hf-flame-flicker {
   0%, 100% { transform: scaleY(1) scaleX(1); }
@@ -4747,28 +5006,36 @@ input, select, textarea {
   45%      { transform: scaleY(0.95) scaleX(1.03); }
   68%      { transform: scaleY(1.04) scaleX(0.98); }
 }
-.hf-ember { opacity: 0; animation: ember-rise 2.2s ease-out infinite; }
-.hf-ember-1 { animation-delay: 0.2s; }
-.hf-ember-2 { animation-delay: 0.9s; }
-.hf-ember-3 { animation-delay: 1.5s; }
-.hf-ember-4 { animation-delay: 0.5s; transform-origin: 40px 60px; }
-.hf-ember-5 { animation-delay: 1.1s; transform-origin: 100px 62px; }
-.hf-ember-6 { animation-delay: 0.7s; transform-origin: 35px 100px; }
-.hf-ember-7 { animation-delay: 1.3s; transform-origin: 105px 105px; }
+.hf-embers { position: absolute; inset: 0; pointer-events: none; }
+.hf-ember {
+  position: absolute;
+  border-radius: 50%;
+  box-shadow: 0 0 4px currentColor;
+  opacity: 0;
+  animation: ember-rise 2.2s ease-out infinite;
+}
 @keyframes ember-rise {
-  0%   { opacity: 0;   transform: translateY(0)    scale(0.6); }
-  20%  { opacity: 0.9; transform: translateY(-8px) scale(1); }
+  0%   { opacity: 0;   transform: translateY(0)     scale(0.6); }
+  20%  { opacity: 0.9; transform: translateY(-8px)  scale(1); }
   60%  { opacity: 0.7; transform: translateY(-24px) scale(0.9); }
   100% { opacity: 0;   transform: translateY(-44px) scale(0.4); }
 }
 
-/* Tier-conditional layers */
+/* Tier-conditional layers fade in instead of popping when a roadmap tier
+   is tapped; the layer's own opacity composes with the children's loops. */
+.an-hf-layer {
+  position: absolute; inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  animation: hfLayerIn 500ms var(--ease-out-expo) backwards;
+}
+@keyframes hfLayerIn { from { opacity: 0; } }
 .an-hf-haze {
   position: absolute; inset: -22% -22%;
-  background: radial-gradient(closest-side, rgba(251, 146, 60, 0.18), transparent 70%);
-  filter: blur(8px);
+  background: radial-gradient(closest-side, rgba(251, 146, 60, 0.18), transparent 72%);
   z-index: 0; pointer-events: none;
   opacity: 0;
+  transition: opacity var(--dur-5) ease;
   animation: hf-haze 3.6s ease-in-out infinite;
 }
 .hf-tier-1 .an-hf-haze { opacity: 0.25; }
@@ -4776,84 +5043,111 @@ input, select, textarea {
 .hf-tier-3 .an-hf-haze {
   opacity: 0.85; inset: -34% -34%;
   background:
-    radial-gradient(closest-side, rgba(239, 68, 68, 0.30), transparent 65%),
-    radial-gradient(closest-side at 50% 70%, rgba(251, 146, 60, 0.40), transparent 70%);
+    radial-gradient(closest-side, rgba(239, 68, 68, 0.30), transparent 68%),
+    radial-gradient(closest-side at 50% 70%, rgba(251, 146, 60, 0.40), transparent 72%);
 }
 .hf-tier-4 .an-hf-haze {
   opacity: 1; inset: -40% -40%;
   background:
-    radial-gradient(closest-side, rgba(168, 85, 247, 0.35), transparent 60%),
-    radial-gradient(closest-side, rgba(239, 68, 68, 0.32), transparent 70%);
+    radial-gradient(closest-side, rgba(168, 85, 247, 0.35), transparent 64%),
+    radial-gradient(closest-side, rgba(239, 68, 68, 0.32), transparent 72%);
 }
 .hf-tier-5 .an-hf-haze {
   opacity: 1; inset: -44% -44%;
   background:
-    radial-gradient(closest-side, rgba(245, 197, 24, 0.45), transparent 55%),
-    radial-gradient(closest-side, rgba(251, 146, 60, 0.35), transparent 75%);
+    radial-gradient(closest-side, rgba(245, 197, 24, 0.45), transparent 60%),
+    radial-gradient(closest-side, rgba(251, 146, 60, 0.35), transparent 76%);
 }
 @keyframes hf-haze { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
-.hf-tier-2 .an-hf-svg { transform: scale(1.04); }
-.hf-tier-3 .an-hf-svg { transform: scale(1.08); }
-.hf-tier-4 .an-hf-svg { transform: scale(1.10); }
-.hf-tier-5 .an-hf-svg { transform: scale(1.10); }
 .hf-tier-1 .an-hf-halo { opacity: 0.4; }
 .hf-tier-3 .an-hf-halo {
-  opacity: 0.85; inset: -16px;
-  background: radial-gradient(closest-side, rgba(239, 68, 68, 0.65), transparent 65%);
+  inset: -16px;
+  background: radial-gradient(closest-side, rgba(239, 68, 68, 0.65), transparent 68%);
 }
 .hf-tier-4 .an-hf-halo {
   background:
-    radial-gradient(closest-side, rgba(168, 85, 247, 0.5), transparent 65%),
-    radial-gradient(closest-side, rgba(239, 68, 68, 0.4), transparent 70%);
+    radial-gradient(closest-side, rgba(168, 85, 247, 0.5), transparent 68%),
+    radial-gradient(closest-side, rgba(239, 68, 68, 0.4), transparent 72%);
 }
 .hf-tier-5 .an-hf-halo {
   background:
-    radial-gradient(closest-side, rgba(245, 197, 24, 0.55), transparent 60%),
-    radial-gradient(closest-side, rgba(251, 146, 60, 0.45), transparent 75%);
+    radial-gradient(closest-side, rgba(245, 197, 24, 0.55), transparent 64%),
+    radial-gradient(closest-side, rgba(251, 146, 60, 0.45), transparent 76%);
 }
-.an-hf-flame-aura {
-  position: absolute; inset: -8%;
-  z-index: 1; pointer-events: none;
-  filter:
-    drop-shadow(0 0 4px rgba(239, 68, 68, 0.55))
-    drop-shadow(0 0 12px rgba(251, 146, 60, 0.4));
+
+/* Tier 0 — PADAM: no streak. Grey, still heart; the flame is out. */
+.hf-tier-0 .an-hf-core,
+.hf-tier-0 .an-hf-pulsehalo { animation: none; }
+.hf-tier-0 .an-hf-haze { display: none; }
+.hf-tier-0 .an-hf-svg { filter: saturate(0.15) brightness(0.55); }
+.hf-tier-0 .an-hf-halo {
+  background: radial-gradient(closest-side, rgba(100, 116, 139, 0.35), transparent 70%);
+  opacity: 0.25;
+  animation-duration: 3.2s;
 }
-.an-hf-flame-aura svg { width: 100%; height: 100%; }
-.hf-aura-tongue { transform-origin: center; animation: hf-aura-flicker 1.6s ease-in-out infinite; }
+.hf-tier-0 .an-hf-pulsehalo { opacity: 0; }
+
+/* Aura tongues (tier 3+). Outer span = static rotation about the tongue's
+   anchor; inner svg = the flicker from its own base. The glow sits on each
+   flickering svg (rasterised with it) instead of on a shared parent, which
+   had to be re-filtered every frame. */
+.an-hf-flame-aura { position: absolute; inset: -8%; }
+.an-hf-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.hf-aura-box {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 4.0625%;
+  width: 91.875%;
+}
+.hf-tongue {
+  position: absolute;
+  width: 8.57%;   /* 12 / 140 */
+  height: 8.75%;  /* 14 / 160 */
+  transform-origin: 50% 28.6%; /* the old rotate(rot, x, y) anchor */
+}
+.hf-tongue-flame {
+  display: block;
+  width: 100%; height: 100%;
+  overflow: visible;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 0 3px rgba(239, 68, 68, 0.6));
+  animation: hf-aura-flicker var(--hf-beat, 1.4s) ease-in-out infinite;
+}
 @keyframes hf-aura-flicker {
   0%, 100% { transform: scaleY(1) scaleX(1); opacity: 0.75; }
-  50%      { transform: scaleY(1.15) scaleX(0.92); opacity: 1; }
+  50%      { transform: scaleY(1.2) scaleX(0.9); opacity: 1; }
 }
-.hf-aura-tongue:nth-child(2) { animation-delay: 0.25s; }
-.hf-aura-tongue:nth-child(3) { animation-delay: 0.5s; }
-.hf-aura-tongue:nth-child(4) { animation-delay: 0.75s; }
-.hf-aura-tongue:nth-child(5) { animation-delay: 1s; }
-.hf-aura-tongue:nth-child(6) { animation-delay: 1.25s; }
+
+/* Orbits (tier 4+): tilt + squash live on a static wrapper; only the inner
+   ring spins, so the dashes and the dot travel around a ring tipped in
+   depth instead of a flat ellipse spinning like a propeller. */
 .an-hf-orbit {
   position: absolute; inset: -8%;
   z-index: 2; pointer-events: none;
+  transform: rotate(var(--hf-tilt, 0deg)) scaleY(0.42);
 }
-.an-hf-orbit svg { width: 100%; height: 100%; }
-.an-hf-orbit-1 { animation: orbit-spin 6s linear infinite; transform: rotate(-12deg); }
-.an-hf-orbit-2 { animation: orbit-spin-rev 8s linear infinite; transform: rotate(28deg); }
+.an-hf-orbit-spin { width: 100%; height: 100%; animation: orbit-spin 6s linear infinite; }
+.an-hf-orbit--rev .an-hf-orbit-spin { animation: orbit-spin-rev 8s linear infinite; }
+.an-hf-orbit svg { display: block; width: 100%; height: 100%; }
 @keyframes orbit-spin     { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 @keyframes orbit-spin-rev { from { transform: rotate(360deg); } to { transform: rotate(0); } }
 .an-hf-rays {
   position: absolute; inset: -16%;
   z-index: 1; pointer-events: none;
-  filter:
-    drop-shadow(0 0 6px rgba(245, 197, 24, 0.65))
-    drop-shadow(0 0 12px rgba(245, 197, 24, 0.4));
-  animation: rays-spin 16s linear infinite, rays-pulse 1.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px rgba(245, 197, 24, 0.6));
+  animation: rays-spin 16s linear infinite, rays-pulse var(--hf-beat, 1.4s) ease-in-out infinite;
   transform-origin: center;
 }
-.an-hf-rays svg { width: 100%; height: 100%; }
+.an-hf-rays svg { display: block; width: 100%; height: 100%; }
 @keyframes rays-spin  { to { transform: rotate(360deg); } }
 @keyframes rays-pulse {
   0%, 100% { opacity: 0.8; }
   10%      { opacity: 1; }
   30%      { opacity: 0.95; }
 }
+
+/* Off screen → every loop in the streak card holds still (useInViewPause). */
+.an-streak-card[data-paused] * { animation-play-state: paused; }
 
 .an-streak-day { display: inline-flex; align-items: baseline; gap: 8px; }
 .an-streak-num {
@@ -4969,6 +5263,7 @@ input, select, textarea {
   font-family: var(--font-mono);
 }
 .an-streak-preview-reset {
+  padding: 8px 4px;
   background: transparent; border: 0;
   color: var(--cyan);
   font-size: 9.5px; letter-spacing: 0.18em;
@@ -4999,9 +5294,13 @@ input, select, textarea {
   border: 0;
   border-radius: 999px;
   cursor: pointer;
-  transition: color 200ms ease;
+  transition: color 200ms ease, transform var(--dur-1) ease;
   min-width: 32px;
 }
+/* Invisible hit-area extension (pill is ~24px tall); the small horizontal
+   inset keeps neighbours from overlapping. */
+.an-range-opt::after { content: ''; position: absolute; inset: -8px -1px; }
+.an-range-opt:active { transform: scale(0.94); }
 .an-range-opt.is-on { color: var(--bg-1, #04060D); }
 .an-range-indicator {
   position: absolute;
@@ -5011,7 +5310,9 @@ input, select, textarea {
   background: var(--cyan);
   border-radius: 999px;
   box-shadow: 0 0 10px rgba(34, 211, 238, 0.6);
-  transition: transform 280ms var(--ease-spring);
+  /* Soft spring: the full --ease-spring overshoot pushed the pill past the
+     track edge at the far position. */
+  transition: transform var(--dur-3) var(--ease-spring-soft);
   z-index: 1;
 }
 
@@ -5102,13 +5403,21 @@ input, select, textarea {
   background: rgba(34, 211, 238, 0.08);
   overflow: hidden;
 }
+/* scaleX from --p (0–1) instead of width: grows in on open (staggered by
+   --reveal-i) and eases on change, all on the compositor. */
 .an-mx-bar-fill {
+  width: 100%;
   height: 100%;
   background: linear-gradient(90deg, #22D3EE, #3B82F6);
   border-radius: 999px;
   box-shadow: 0 0 6px rgba(34, 211, 238, 0.5);
-  transition: width 800ms var(--ease-out);
+  transform-origin: left;
+  transform: scaleX(var(--p, 0));
+  transition: transform 700ms var(--ease-out-expo);
+  animation: anBarGrow 700ms var(--ease-out-expo) backwards;
+  animation-delay: calc(min(var(--reveal-i, 0), 8) * 50ms + 120ms);
 }
+@keyframes anBarGrow { from { transform: scaleX(0); } }
 .an-mx-val {
   font-size: 12px; font-weight: 700;
   color: var(--t-hi);
