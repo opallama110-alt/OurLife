@@ -3,7 +3,7 @@ import { storageService } from '../services/storageService';
 import { WorkoutLog, Habit, MuscleGroup, GymSchedule, GymProfile, ExerciseDefinition, UserState } from '../types';
 import { Calendar, Edit3, Save, X, Plus, Play, Repeat, Activity, CheckCircle2, Sparkles, Pencil } from 'lucide-react';
 import { MUSCLE_GROUP_CONFIG } from '../config/constants';
-import { calculateStreak } from '../services/gamificationService';
+import { liveWorkoutStreak } from '../utils/liveStreak';
 import { computeFatigue } from '../services/fatigueService';
 import { StatusCard } from '../components/StatusCard';
 import { SystemNotification, BodyAnatomy, splitExhaustedByView, CornerBracket, BodyTurntable, BodyViewToggle, HudDialog, CountUp } from '../components/hud';
@@ -315,7 +315,8 @@ export const Dashboard: React.FC = () => {
   const habitCompletion = habits.filter(h => h.completedDates?.includes(today))?.length;
   const habitTotal = habits?.length;
   const habitPercentage = habitTotal > 0 ? Math.round((habitCompletion / habitTotal) * 100) : 0;
-  const workoutStreak = calculateStreak(workouts);
+  // Same live value StatusCard shows on this screen (freeze-token days count).
+  const workoutStreak = liveWorkoutStreak(workouts, profile);
 
   const weekStart = new Date(now);
   weekStart.setDate(now.getDate() - now.getDay());
@@ -458,7 +459,7 @@ export const Dashboard: React.FC = () => {
         <div className="d-last-foot">
           <span className="d-last-streak">
             <Sparkles size={11} />
-            {workoutsThisWeek} minggu ini · {workoutStreak} day streak
+            {workoutsThisWeek} minggu ini · streak {workoutStreak} hari
           </span>
           <span className="d-last-xp">+{(lastWorkout?.xpEarned ?? 0).toLocaleString()} XP</span>
         </div>
