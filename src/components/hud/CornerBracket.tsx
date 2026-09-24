@@ -15,19 +15,25 @@ const TONE_COLOR: Record<NonNullable<CornerBracketProps['tone']>, string> = {
   green: 'var(--green-bright)',
 };
 
+/** Glow colour for the bars' box-shadow (read by `.brk > .brk-c::before/::after`). */
 const TONE_GLOW: Record<NonNullable<CornerBracketProps['tone']>, string> = {
-  cyan: 'drop-shadow(0 0 4px rgba(34, 211, 238, 0.5))',
-  orange: 'drop-shadow(0 0 4px rgba(251, 146, 60, 0.5))',
-  red: 'drop-shadow(0 0 4px rgba(239, 68, 68, 0.5))',
-  green: 'drop-shadow(0 0 4px rgba(52, 211, 153, 0.5))',
+  cyan: 'rgba(34, 211, 238, 0.5)',
+  orange: 'rgba(251, 146, 60, 0.5)',
+  red: 'rgba(239, 68, 68, 0.5)',
+  green: 'rgba(52, 211, 153, 0.5)',
 };
+
+type CornerStyle = CSSProperties & { '--brk-glow'?: string };
 
 /**
  * Wraps children with 4 L-shaped HUD corner brackets.
  *
- * Per CLAUDE.md §6.8: do NOT apply to elements (or parents) with
- * `transform-style: preserve-3d`. The corner glyph's drop-shadow filter
- * flattens the 3D context — e.g. the Muscle Recovery body flip card.
+ * Each corner is drawn with two pseudo-element bars + box-shadow glow (see
+ * `.brk` in index.css) instead of a border + `filter: drop-shadow`: four
+ * filters per card meant four offscreen passes, and a filter on the ancestor
+ * chain of a `preserve-3d` element flattens it (§5.3). The corners are
+ * siblings of the children, never ancestors, and carry no filter, so the
+ * wrapper may frame the body turntable safely.
  */
 export default function CornerBracket({
   children,
@@ -36,9 +42,9 @@ export default function CornerBracket({
   size,
   inset,
 }: CornerBracketProps) {
-  const cornerStyle: CSSProperties = {
-    borderColor: TONE_COLOR[tone],
-    filter: TONE_GLOW[tone],
+  const cornerStyle: CornerStyle = {
+    color: TONE_COLOR[tone],
+    '--brk-glow': TONE_GLOW[tone],
     ...(size !== undefined ? { width: size, height: size } : null),
   };
 
