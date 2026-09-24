@@ -1639,18 +1639,21 @@ input, select, textarea {
   z-index: 200;
   pointer-events: none;
 }
+/* Constant blur, opacity-only fade: animating the blur radius re-blurred
+   the whole viewport every frame of the sheet slide. */
 .sc-backdrop {
   position: absolute; inset: 0;
-  background: rgba(4, 6, 13, 0);
-  backdrop-filter: blur(0px);
-  -webkit-backdrop-filter: blur(0px);
-  transition: background 240ms ease, backdrop-filter 240ms ease;
-  pointer-events: none;
-}
-.sc-root.is-open .sc-backdrop {
   background: rgba(4, 6, 13, 0.62);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity var(--dur-2) var(--ease-in);
+  pointer-events: none;
+  touch-action: none;
+}
+.sc-root.is-open .sc-backdrop {
+  opacity: 1;
+  transition: opacity var(--dur-3) var(--ease-out);
   pointer-events: auto;
 }
 
@@ -1673,13 +1676,20 @@ input, select, textarea {
     inset 0 1px 0 rgba(34, 211, 238, 0.18),
     0 -20px 60px -10px rgba(0, 0, 0, 0.85),
     0 0 50px -10px rgba(34, 211, 238, 0.35);
-  transition: transform 360ms var(--ease-spring);
+  /* Closing: short accelerate out. Opening (below): long decelerate in.
+     The old spring overshot ~10% of the sheet height, lifting it ~70px off
+     the bottom edge and showing the nav through the gap on every open. */
+  transition: transform 220ms var(--ease-in);
+  will-change: transform;
   display: flex;
   flex-direction: column;
   pointer-events: auto;
   overflow: hidden;
 }
-.sc-root.is-open .sc-panel { transform: translateX(-50%) translateY(0); }
+.sc-root.is-open .sc-panel {
+  transform: translateX(-50%) translateY(0);
+  transition: transform 420ms var(--ease-out-expo);
+}
 
 .sc-panel .brk-c {
   position: absolute;
@@ -1704,13 +1714,26 @@ input, select, textarea {
   opacity: 0.6;
 }
 
+/* Grabber + header = the drag-to-dismiss zone (SystemChat pointer handlers).
+   touch-action:none so the browser never claims the gesture for scrolling
+   or pull-to-refresh. */
+.sc-grab {
+  flex-shrink: 0;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sc-grab:active { cursor: grabbing; }
 .sc-handle {
   width: 40px; height: 4px;
   border-radius: 999px;
   background: rgba(34, 211, 238, 0.35);
   margin: 10px auto 0;
   box-shadow: 0 0 6px rgba(34, 211, 238, 0.4);
+  transition: background var(--dur-2) ease, width var(--dur-2) var(--ease-out);
 }
+.sc-grab:active .sc-handle { background: rgba(34, 211, 238, 0.7); width: 52px; }
 
 /* ─── Header ─── */
 .sc-head {
@@ -1762,7 +1785,8 @@ input, select, textarea {
 }
 .sc-close {
   margin-left: auto;
-  width: 30px; height: 30px;
+  flex-shrink: 0;
+  width: 40px; height: 40px;
   border-radius: 50%;
   border: 1px solid var(--line);
   background: rgba(255,255,255,0.04);
@@ -1771,14 +1795,19 @@ input, select, textarea {
   cursor: pointer;
   transition: background 140ms ease, color 140ms ease, transform 120ms ease;
 }
-.sc-close:hover { background: rgba(34, 211, 238, 0.1); color: var(--cyan); }
-.sc-close:active { transform: scale(0.92); }
+@media (hover: hover) {
+  .sc-close:hover { background: rgba(34, 211, 238, 0.1); color: var(--cyan); }
+}
+.sc-close:active { transform: scale(0.92); background: rgba(34, 211, 238, 0.1); color: var(--cyan); }
 
 /* ─── Message list ─── */
 .sc-list {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
+  /* Flinging past the end must not scroll the page under the sheet or
+     trigger Android pull-to-refresh. */
+  overscroll-behavior: contain;
   padding: 14px 14px 6px;
   scroll-behavior: smooth;
   scrollbar-width: none;
@@ -1799,18 +1828,32 @@ input, select, textarea {
   background: linear-gradient(90deg, transparent, var(--line), transparent);
 }
 
+/* Only NEW bubbles animate (.sc-msg-in / .sc-msg-swap from SystemChat);
+   the base rule used to animate every bubble, so each reopen replayed the
+   whole history at once. */
 .sc-msg {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
-  opacity: 0;
-  transform: translateY(8px);
-  animation: sc-msg-in 320ms var(--ease-out) both;
 }
-.sc-msg-in { animation: sc-msg-in 320ms var(--ease-out) both; }
+.sc-msg-in { animation: sc-msg-in var(--dur-3) var(--ease-out-expo) both; }
 @keyframes sc-msg-in {
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
 }
+.sc-msg-user.sc-msg-in { transform-origin: 100% 100%; }
+.sc-msg-sys.sc-msg-in,
+.sc-msg-swap { transform-origin: 0 100%; }
+/* A reply takes the typing row's place: start near-visible so the bubble
+   doesn't blink out and back in the same spot. */
+.sc-msg-swap { animation: scMsgSwap var(--dur-2) var(--ease-out) both; }
+@keyframes scMsgSwap {
+  from { opacity: 0.55; transform: scale(0.985); }
+}
+/* Avatar faces in the history stay still — dozens of perpetual SVG
+   blink/antenna loops (main-thread, uncomposited) added up fast. */
+.sc-msg .sc-msg-ava .bot-face .bot-eyes,
+.sc-msg .sc-msg-ava .bot-face .bot-antenna { animation: none; }
 
 .sc-msg-ava {
   flex-shrink: 0;
@@ -1895,8 +1938,10 @@ input, select, textarea {
 }
 
 .sc-error {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
   margin: 0 4px 12px;
-  padding: 8px 12px;
+  padding: 6px 6px 6px 12px;
   background: rgba(239, 68, 68, 0.10);
   border: 1px solid rgba(239, 68, 68, 0.4);
   border-radius: 8px;
@@ -1904,15 +1949,39 @@ input, select, textarea {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
+  animation: sc-msg-in var(--dur-3) var(--ease-out-expo) both;
 }
+.sc-error-retry {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.12);
+  color: #FECACA;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background var(--dur-1) ease, transform var(--dur-1) var(--ease-spring);
+}
+.sc-error-retry:active { transform: scale(0.95); background: rgba(239, 68, 68, 0.22); }
+.sc-error-retry:disabled { opacity: 0.5; }
 
-/* Quick replies */
+/* Quick replies — fade in with the sheet, fade/slide away after the first
+   message (usePresence data-state) instead of vanishing. */
 .sc-quick {
   display: flex; flex-wrap: wrap; gap: 6px;
   padding: 6px 14px 10px;
 }
+.sc-quick[data-state="enter"] { animation: scQuickIn var(--dur-4) var(--ease-out-expo) 120ms both; }
+.sc-quick[data-state="exit"]  { animation: scQuickOut var(--dur-2) var(--ease-in) both; pointer-events: none; }
+@keyframes scQuickIn  { from { opacity: 0; transform: translateY(6px); } }
+@keyframes scQuickOut { to   { opacity: 0; transform: translateY(6px); } }
 .sc-quick-btn {
-  padding: 6px 12px;
+  min-height: 36px;
+  padding: 8px 14px;
   font-family: var(--font-mono);
   font-size: 11.5px;
   background: rgba(34, 211, 238, 0.06);
@@ -1920,10 +1989,12 @@ input, select, textarea {
   border: 1px solid var(--line-cyan-soft);
   border-radius: 999px;
   cursor: pointer;
-  transition: background 140ms ease, transform 120ms ease, border-color 140ms ease;
+  transition: background 140ms ease, transform 120ms var(--ease-spring), border-color 140ms ease;
 }
-.sc-quick-btn:hover { background: rgba(34, 211, 238, 0.12); border-color: var(--cyan); }
-.sc-quick-btn:active { transform: scale(0.96); }
+@media (hover: hover) {
+  .sc-quick-btn:hover { background: rgba(34, 211, 238, 0.12); border-color: var(--cyan); }
+}
+.sc-quick-btn:active { transform: scale(0.96); background: rgba(34, 211, 238, 0.14); border-color: var(--cyan); }
 .sc-quick-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Input bar */
@@ -1951,10 +2022,13 @@ input, select, textarea {
 }
 .sc-input input::placeholder { color: var(--t-mute); }
 .sc-input input:disabled { opacity: 0.5; }
+/* While the System replies the input is readOnly (keeps focus + keyboard). */
+.sc-input input:read-only { opacity: 0.6; }
 
 /* Orange send button — per canonical reference (NOT cyan) */
 .sc-send {
-  width: 36px; height: 36px;
+  flex-shrink: 0;
+  width: 40px; height: 40px;
   border-radius: 50%;
   background: linear-gradient(135deg, #FB923C, #EF4444);
   border: 0;
@@ -3064,10 +3138,16 @@ input, select, textarea {
    §6.8: none of these elements use transform-style: preserve-3d,
    so the drop-shadow/blur filters here are safe.
    ============================================================ */
+/* Centering + bob ride on the independent `translate` property and the
+   press squish on `scale`, so they compose. (Everything used to share
+   `transform`, and since animations beat normal declarations the press
+   feedback never rendered while the bot was bobbing.) */
 .sys-bot {
   position: absolute;
   left: 50%;
   bottom: 50px;
+  /* Legacy engines without individual transform properties: centered,
+     static. Everything else gets the composed version below. */
   transform: translateX(-50%);
   width: 64px;
   height: 64px;
@@ -3079,19 +3159,41 @@ input, select, textarea {
   align-items: center;
   justify-content: center;
   z-index: 50;
-  animation: bot-bob 4s ease-in-out infinite;
-  transition: transform 200ms var(--ease-spring);
   pointer-events: auto;
 }
-.sys-bot:active,
-.sys-bot.is-press { transform: translateX(-50%) scale(0.94); }
+@supports (translate: 0) and (scale: 1) {
+  .sys-bot {
+    transform: none;
+    translate: -50% 0;
+    animation: bot-bob 4s ease-in-out infinite;
+    transition: scale 220ms var(--ease-spring);
+  }
+  .sys-bot:active,
+  .sys-bot.is-press { scale: 0.9; transition-duration: 90ms; }
+}
 
 @keyframes bot-bob {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50%      { transform: translateX(-50%) translateY(-2.5px); }
+  0%, 100% { translate: -50% 0; }
+  50%      { translate: -50% -2.5px; }
 }
-.sys-bot.is-active { animation: none; }
+/* Freeze the bob where it is instead of snapping to rest. */
+.sys-bot.is-active { animation-play-state: paused; }
 .sys-bot.is-active .sys-bot-disc { transform: translateY(-1px); }
+
+/* Launch ping — one ring expanding out of the bot when it opens the chat. */
+.sys-bot-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--cyan);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.55);
+  pointer-events: none;
+  animation: botPing 560ms var(--ease-out-expo) forwards;
+}
+@keyframes botPing {
+  from { opacity: 0.9; transform: scale(1); }
+  to   { opacity: 0;   transform: scale(1.9); }
+}
 
 .sys-bot-halo {
   position: absolute;
@@ -3129,7 +3231,8 @@ input, select, textarea {
     0 0 18px -2px rgba(34, 211, 238, 0.65);
   animation: ring-spin 8s linear infinite;
 }
-.sys-bot.is-active .sys-bot-ring { animation-duration: 3s; }
+/* Faster spin while the chat is open is applied from SystemBot.tsx via
+   Animation.updatePlaybackRate (a CSS duration change made it jump). */
 @keyframes ring-spin {
   to { transform: rotate(360deg); }
 }
@@ -3168,7 +3271,6 @@ input, select, textarea {
   pointer-events: none;
   animation: orbit-spin 6s linear infinite;
 }
-.sys-bot.is-active .sys-bot-orbit { animation-duration: 2s; }
 .sys-bot-orbit-dot {
   position: absolute;
   top: -2px; left: 50%;
@@ -3182,13 +3284,19 @@ input, select, textarea {
   to { transform: rotate(360deg); }
 }
 
-/* Bot face per-mood animations */
+/* Bot face per-mood animations. The eyes group is keyed on mood in
+   BotFace, so each mood swap remounts it and replays botMoodPop. */
 .bot-face .bot-eyes {
   transform-box: fill-box;
   transform-origin: center;
+  animation: botMoodPop 220ms var(--ease-spring) both;
 }
 .bot-face.mood-idle .bot-eyes {
-  animation: bot-blink 4.5s infinite;
+  animation: botMoodPop 220ms var(--ease-spring) both, bot-blink 4.5s 220ms infinite;
+}
+@keyframes botMoodPop {
+  from { transform: scaleY(0.35); }
+  to   { transform: scaleY(1); }
 }
 @keyframes bot-blink {
   0%, 92%, 100% { transform: scaleY(1); }

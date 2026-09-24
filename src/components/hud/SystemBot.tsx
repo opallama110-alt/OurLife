@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { prefersReducedMotion } from '../../hooks/usePresence';
 
 // ─────────────────────────────────────────────────────────────────────────
 // SystemBot — central nav button mascot.
@@ -60,28 +61,30 @@ export function BotFace({ mood = 'idle', size = 44 }: BotFaceProps) {
             <circle cx="8.5" cy="26" r="0.9" fill="#22D3EE" opacity="0.55" />
             <circle cx="39.5" cy="26" r="0.9" fill="#22D3EE" opacity="0.55" />
 
-            {/* eyes — per mood */}
+            {/* eyes — per mood. Keyed on mood so every swap remounts the
+                group and replays the small "pop" (CSS botMoodPop) instead of
+                the eyes changing shape in a single frame. */}
             {mood === 'happy' ? (
-                <g className="bot-eyes" filter="url(#bot-eye-glow)">
+                <g key="happy" className="bot-eyes" filter="url(#bot-eye-glow)">
                     <path d="M13 25 Q17 21 21 25" stroke="#67E8F9" strokeWidth="2" fill="none" strokeLinecap="round" />
                     <path d="M27 25 Q31 21 35 25" stroke="#67E8F9" strokeWidth="2" fill="none" strokeLinecap="round" />
                 </g>
             ) : mood === 'alert' ? (
-                <g className="bot-eyes wide" filter="url(#bot-eye-glow)">
+                <g key="alert" className="bot-eyes wide" filter="url(#bot-eye-glow)">
                     <circle cx="17" cy="24" r="3.6" fill="url(#bot-eye-grad)" />
                     <circle cx="31" cy="24" r="3.6" fill="url(#bot-eye-grad)" />
                     <circle cx="18" cy="22.6" r="1.2" fill="white" opacity="0.85" />
                     <circle cx="32" cy="22.6" r="1.2" fill="white" opacity="0.85" />
                 </g>
             ) : mood === 'thinking' ? (
-                <g className="bot-eyes" filter="url(#bot-eye-glow)">
+                <g key="thinking" className="bot-eyes" filter="url(#bot-eye-glow)">
                     <circle cx="17" cy="22.5" r="2.6" fill="url(#bot-eye-grad)" />
                     <circle cx="31" cy="22.5" r="2.6" fill="url(#bot-eye-grad)" />
                     <circle cx="17.6" cy="21.6" r="0.9" fill="white" opacity="0.7" />
                     <circle cx="31.6" cy="21.6" r="0.9" fill="white" opacity="0.7" />
                 </g>
             ) : (
-                <g className="bot-eyes" filter="url(#bot-eye-glow)">
+                <g key="idle" className="bot-eyes" filter="url(#bot-eye-glow)">
                     <circle cx="17" cy="24" r="2.8" fill="url(#bot-eye-grad)" />
                     <circle cx="31" cy="24" r="2.8" fill="url(#bot-eye-grad)" />
                     <circle cx="17.8" cy="22.8" r="1" fill="white" opacity="0.7" />
@@ -112,23 +115,53 @@ export interface SystemBotProps {
     onPress: () => void;
 }
 
+// Ring/orbit speed while the chat is open (ring 8s→3s, orbit 6s→2s).
+const RING_ACTIVE_RATE = 8 / 3;
+const ORBIT_ACTIVE_RATE = 3;
+
 export default function SystemBot({ active, onPress }: SystemBotProps) {
     const [press, setPress] = useState(false);
+    const [ping, setPing] = useState(0);
+    const btnRef = useRef<HTMLButtonElement>(null);
 
     const mood: BotMood = active ? 'happy' : press ? 'alert' : 'idle';
 
+    // Speed the ring + orbit up while the chat is open through the Web
+    // Animations API: changing `animation-duration` in CSS recomputes the
+    // progress (elapsed / duration), which made both jump to a new angle the
+    // instant the bot was tapped. A playback-rate change keeps the angle.
+    useEffect(() => {
+        const btn = btnRef.current;
+        if (!btn || typeof btn.getAnimations !== 'function') return;
+        for (const a of btn.getAnimations({ subtree: true })) {
+            const name = (a as CSSAnimation).animationName;
+            if (name === 'ring-spin') a.updatePlaybackRate(active ? RING_ACTIVE_RATE : 1);
+            else if (name === 'orbit-spin') a.updatePlaybackRate(active ? ORBIT_ACTIVE_RATE : 1);
+        }
+    }, [active]);
+
+    const handleClick = () => {
+        // Launch ping ties the tap to the sheet it opens (not on close).
+        if (!active && !prefersReducedMotion()) setPing(p => p + 1);
+        onPress();
+    };
+
     return (
         <button
+            ref={btnRef}
             type="button"
             className={`sys-bot ${active ? 'is-active' : ''} ${press ? 'is-press' : ''}`}
             onPointerDown={() => setPress(true)}
             onPointerUp={() => setPress(false)}
             onPointerLeave={() => setPress(false)}
-            onClick={onPress}
-            aria-label="Buka The System"
+            onPointerCancel={() => setPress(false)}
+            onClick={handleClick}
+            aria-label={active ? 'Tutup The System' : 'Buka The System'}
+            aria-expanded={active}
         >
             <span className="sys-bot-halo" aria-hidden="true" />
             <span className="sys-bot-ring" aria-hidden="true" />
+            {ping > 0 && <span key={ping} className="sys-bot-ping" aria-hidden="true" />}
             <span className="sys-bot-disc">
                 <span className="sys-bot-shine" aria-hidden="true" />
                 <BotFace mood={mood} size={42} />
