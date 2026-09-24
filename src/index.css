@@ -2894,26 +2894,37 @@ input, select, textarea {
    max-width 500px centered; content keeps existing max-w-5xl).
    ============================================================ */
 .ol-shell {
-  min-height: 100vh;
-  min-height: 100dvh;
+  /* Fixed-height column: the top bar stays put and .ol-main is the single
+     scroll container. (A min-height shell leaves it to the engine whether the
+     shell grows and the document scrolls instead.) dvh follows the mobile URL
+     bar and — with interactive-widget=resizes-content — the soft keyboard. */
+  height: 100vh;
+  height: 100dvh;
   background: var(--bg-1, #04060D);
   color: var(--t-1, #e2e8f0);
   display: flex;
   flex-direction: column;
 }
 
-/* ─── Top bar (Q2=A: minimal prototype port — logo + wordmark + logout) ─── */
+/* ─── Top bar (Q2=A: minimal prototype port — logo + wordmark + logout) ───
+   No backdrop-filter: .ol-main is a sibling below the bar, so page content
+   never scrolls underneath it — the blur only ever sampled the flat shell
+   fill (identical pixels) while costing a permanent backdrop layer.
+   Safe-area padding matters once viewport-fit=cover is on (index.html):
+   notch/status bar on top, rounded corners + notch sideways in landscape. */
 .ol-top {
   position: sticky;
   top: 0;
   z-index: 30;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
+  padding-top: max(14px, calc(env(safe-area-inset-top, 0px) + 8px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
   background: linear-gradient(180deg, rgba(10, 14, 26, 0.92), rgba(10, 14, 26, 0.55));
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line-soft);
 }
 .ol-top-brand { display: flex; align-items: center; gap: 10px; }
@@ -2923,7 +2934,13 @@ input, select, textarea {
   border-radius: 8px;
   flex-shrink: 0;
 }
-.ol-top-logo img { width: 100%; height: 100%; object-fit: contain; }
+.ol-top-logo img {
+  width: 100%; height: 100%; object-fit: contain;
+  /* Decorative mark: no drag ghost on desktop, no save-image sheet on iOS. */
+  -webkit-user-drag: none;
+  user-select: none;
+  pointer-events: none;
+}
 .ol-top-name {
   font-size: 15px;
   font-weight: 700;
@@ -2933,6 +2950,7 @@ input, select, textarea {
   font-family: var(--font-mono);
 }
 .ol-top-logout {
+  position: relative;
   width: 36px; height: 36px;
   border-radius: 8px;
   background: rgba(239, 68, 68, 0.06);
@@ -2940,19 +2958,62 @@ input, select, textarea {
   color: var(--red);
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
-  transition: transform 120ms ease, background 120ms ease;
+  /* Release springs back; the press itself is quicker (see :active). */
+  transition:
+    transform var(--dur-3) var(--ease-spring-soft),
+    background-color var(--dur-2) ease,
+    border-color var(--dur-2) ease;
 }
-.ol-top-logout:active { transform: scale(0.94); background: rgba(239, 68, 68, 0.15); }
-.ol-top-logout:hover { background: rgba(239, 68, 68, 0.12); }
+/* Invisible hit-area extension: 36px visual, 44px touch target. */
+.ol-top-logout::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+}
+.ol-top-logout:active {
+  transform: scale(0.92);
+  background-color: rgba(239, 68, 68, 0.18);
+  transition-duration: var(--dur-1);
+}
+.ol-top-logout:focus-visible { outline-color: rgba(239, 68, 68, 0.8); }
+/* Hover tint only where hover exists — on touch a tap would leave it stuck. */
+@media (hover: hover) and (pointer: fine) {
+  .ol-top-logout:hover {
+    background-color: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.55);
+  }
+}
 
 /* ─── Main content area ─── */
 .ol-main {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
+  /* No sideways wobble when a page is a hair too wide on a phone. Inner
+     horizontal scrollers (chip rows etc.) keep their own overflow. */
+  overflow-x: hidden;
+  /* Scroll ends stay inside the app: no scroll chaining to the document and
+     no accidental Chrome pull-to-refresh (which would drop a live workout). */
+  overscroll-behavior-y: contain;
+  /* Desktop: a short page (no scrollbar) and a long one (scrollbar) no longer
+     shift the whole layout sideways on every tab switch. Overlay scrollbars
+     on phones take no space either way. */
+  scrollbar-gutter: stable;
   padding: 16px;
-  /* Reserve space so content isn't hidden under the floating bottom nav. */
-  padding-bottom: 120px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  /* Reserve space so content isn't hidden under the floating bottom nav,
+     which rises with the home-indicator inset (see .bn). */
+  padding-bottom: calc(120px + max(0px, env(safe-area-inset-bottom, 0px) - 14px));
+  /* Focus / scrollIntoView keep targets clear of the floating nav. */
+  scroll-padding-bottom: calc(104px + max(0px, env(safe-area-inset-bottom, 0px) - 14px));
+}
+/* Q3 (hide the scrollbar on touch / narrow screens) was written against
+   <body>, but .ol-main is the element that actually scrolls — apply it here
+   too so phones don't show a desktop-style 6px track beside the content. */
+@media (pointer: coarse), (max-width: 768px) {
+  .ol-main { scrollbar-width: none; }
+  .ol-main::-webkit-scrollbar { width: 0; height: 0; display: none; }
 }
 .ol-main-inner {
   max-width: 64rem;        /* matches existing max-w-5xl behaviour */
@@ -2970,19 +3031,70 @@ input, select, textarea {
   from { opacity: 0; transform: translateY(6px); }
 }
 
-/* ─── Bottom nav (Q1=B: max-width 500px centered, all viewports) ─── */
+/* ─── Bottom nav (Q1=B: max-width 500px centered, all viewports) ───
+   With viewport-fit=cover the whole nav rises by however much the home
+   indicator inset exceeds the 14px design gap, so the bar never sits on the
+   iOS/Android gesture strip. The bot (.sys-bot, bottom: 50px) is positioned
+   inside .bn, so moving .bn itself keeps it seated in the notch. */
 .bn {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: max(0px, calc(env(safe-area-inset-bottom, 0px) - 14px));
   z-index: 40;
   height: 96px;
   padding: 0 14px 14px;
   max-width: 500px;
   margin: 0 auto;
   pointer-events: none;        /* allow taps to fall through the spacer area */
+  -webkit-user-select: none;
+  user-select: none;
+  /* Showing again (keyboard closed): glide back up, visible at once. */
+  transition:
+    transform var(--dur-3) var(--ease-out-expo),
+    opacity var(--dur-2) ease,
+    visibility 0s linear 0s;
 }
+/* While the soft keyboard is up (Layout → hidden prop) the nav slides away
+   instead of riding on top of the keyboard. visibility flips after the slide
+   so the items also leave the tab order / a11y tree. */
+.bn.is-hidden {
+  transform: translateY(calc(100% + 24px));
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    transform var(--dur-2) var(--ease-in),
+    opacity var(--dur-2) ease,
+    visibility 0s linear var(--dur-2);
+}
+
+/* Drop shadow + cyan halo for the bar. They can't live on .bn-bar: its notch
+   mask also clips anything painted outside its box, so the bar's own outer
+   box-shadow never rendered. A filter on a WRAPPER of an identically-masked
+   shape follows the notch; it's static (no animated content inside), so it
+   rasterizes once. Kept off .bn itself — the bot animates forever and would
+   re-run a parent filter every frame. */
+.bn-shadow {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  height: 68px;
+  pointer-events: none;
+  filter:
+    drop-shadow(0 12px 16px rgba(0, 0, 0, 0.55))
+    drop-shadow(0 0 12px rgba(34, 211, 238, 0.16));
+}
+.bn-shadow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  background: #070B16;
+  -webkit-mask-image: radial-gradient(circle 38px at 50% 0%, transparent 37px, black 38px);
+          mask-image: radial-gradient(circle 38px at 50% 0%, transparent 37px, black 38px);
+}
+
 .bn-bar {
   position: absolute;
   left: 14px;
@@ -2993,10 +3105,7 @@ input, select, textarea {
   border-radius: 22px;
   -webkit-mask-image: radial-gradient(circle 38px at 50% 0%, transparent 37px, black 38px);
           mask-image: radial-gradient(circle 38px at 50% 0%, transparent 37px, black 38px);
-  box-shadow:
-    0 18px 36px -10px rgba(0, 0, 0, 0.8),
-    0 0 30px -8px rgba(34, 211, 238, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   overflow: hidden;
   pointer-events: auto;
 }
@@ -3008,14 +3117,22 @@ input, select, textarea {
   opacity: 0.6;
 }
 
+/* Geometry is written by BottomNav straight to the element (translateX +
+   width from offsetLeft/offsetWidth). Only transform animates — width is
+   constant across tabs (equal 1fr columns), so it never needs to tween and
+   can't trigger per-frame layout. First placement skips the transition so
+   the stripe doesn't fly in from the left edge on app start. */
 .bn-indicator {
   position: absolute;
   top: 0;
+  left: 0;
+  width: 0;
   height: 2px;
+  opacity: 0;
   background: var(--cyan);
   border-radius: 999px;
   box-shadow: 0 0 10px rgba(34, 211, 238, 0.8);
-  transition: transform 340ms var(--ease-spring), width 320ms var(--ease-spring), opacity 200ms ease;
+  transition: transform var(--dur-4) var(--ease-spring), opacity var(--dur-2) ease;
   z-index: 1;
 }
 
@@ -3030,45 +3147,89 @@ input, select, textarea {
 }
 .bn-center-slot { width: 80px; height: 1px; }
 
+/* Each item fills its whole column (68px tall) so the tap target is the
+   column, not just the icon + label; content lands where it did before. */
 .bn-item {
+  align-self: stretch;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 3px;
   background: transparent;
   border: 0;
-  padding: 8px 4px 0;
+  padding: 8px 2px 0;
   color: var(--t-3);
   cursor: pointer;
-  transition: color 200ms ease, transform 160ms ease;
+  transition:
+    color var(--dur-2) ease,
+    transform var(--dur-3) var(--ease-spring-soft);
   font-family: inherit;
+}
+.bn-item:active {
+  transform: scale(0.92);
+  transition-duration: var(--dur-2), var(--dur-1);
+}
+.bn-item:focus-visible {
+  outline: 2px solid rgba(34, 211, 238, 0.75);
+  outline-offset: -6px;
+  border-radius: 16px;
 }
 .bn-item.is-active { color: var(--cyan); }
 .bn-item.is-active .bn-item-icon {
-  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.6));
   transform: translateY(-2px) scale(1.06);
+}
+/* Glow on the glyph only — on the wrapper it also haloed the red habits
+   badge in cyan. 22px element, so the filter is negligible. */
+.bn-item-icon > svg {
+  transition: filter var(--dur-2) ease;
+}
+.bn-item.is-active .bn-item-icon > svg {
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.6));
 }
 .bn-item-icon {
   position: relative;
   width: 24px; height: 24px;
   display: inline-flex; align-items: center; justify-content: center;
-  transition: transform 240ms var(--ease-spring), filter 200ms ease;
+  transition: transform var(--dur-4) var(--ease-spring);
 }
+/* Pending-habits dot: pops in, pulses, and shrinks away (usePresence) when
+   the last habit of the day is ticked. The dark ring cuts it out of the
+   icon stroke like a native badge. */
 .bn-badge {
   position: absolute;
-  top: -1px; right: -1px;
-  width: 6px; height: 6px;
+  top: -2px; right: -2px;
+  width: 7px; height: 7px;
   border-radius: 50%;
   background: var(--red);
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.7);
-  animation: dot-pulse 1.6s ease-in-out infinite;
+  box-shadow:
+    0 0 0 2px #0E1426,
+    0 0 6px rgba(239, 68, 68, 0.7);
+  animation:
+    bnBadgeIn var(--dur-4) var(--ease-spring) backwards,
+    dot-pulse 1.6s ease-in-out var(--dur-4) infinite;
+}
+.bn-badge[data-state="exit"] {
+  animation: bnBadgeOut var(--dur-2) var(--ease-in) forwards;
+}
+@keyframes bnBadgeIn {
+  from { opacity: 0; transform: scale(0); }
+}
+@keyframes bnBadgeOut {
+  to { opacity: 0; transform: scale(0); }
 }
 .bn-item-label {
+  max-width: 100%;
   font-size: 9.5px;
   letter-spacing: 0.06em;
   font-weight: 500;
+  white-space: nowrap;
 }
-.bn-item:active { transform: scale(0.94); }
+/* 320px phones: "Dashboard" must fit a ~51px column on one line. */
+@media (max-width: 350px) {
+  .bn-item-label { font-size: 9px; letter-spacing: 0.02em; }
+}
 
 /* Kebab-case alias of the existing `dotPulse` keyframe — the prototype
    .bn-badge references this name; declaring it separately avoids
