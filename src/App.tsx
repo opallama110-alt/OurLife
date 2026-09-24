@@ -150,6 +150,11 @@ const FirstDailyQuestGate: React.FC = () => {
       };
       storageService.saveHabits([...existing, habit]);
     } catch (e) { console.error('[FirstDailyQuest] save habit:', e); }
+    // Mark the offer as handled right away. The sheet now holds an
+    // "accepted" beat before calling onClose (dismiss); if the page reloads
+    // or logs out inside that window the flag must already be set, or the
+    // quest is offered again and accepting twice duplicates the habit.
+    try { localStorage.setItem(FIRST_QUEST_FLAG_KEY, '1'); } catch { /* storage blocked */ }
   };
   return <FirstDailyQuest open={open && ready} onClose={dismiss} onAccept={handleAccept} />;
 };

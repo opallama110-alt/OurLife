@@ -16,12 +16,17 @@ import { useEffect, useState } from 'react';
 //      shrink has been seen, the viewport is trusted: if it grows back while
 //      the field is still focused (Android back gesture / iOS "Done"), the
 //      keyboard is gone and the nav returns.
-// A hardware keyboard never shrinks the viewport, so there the nav simply
-// stays hidden while a field is focused — harmless.
+// If no shrink shows up within KEYBOARD_GRACE_MS of focus (hardware
+// keyboard, or a programmatic focus that iOS refuses to raise a keyboard
+// for), the nav comes back instead of staying hidden. Any tap also
+// re-checks: browsers fire no focusout when a focused field is unmounted
+// (e.g. its sheet closes), so a stale "focused" state can't strand the nav.
 // ─────────────────────────────────────────────────────────────────────────
 
 /** Minimum viewport shrink (CSS px) that counts as a keyboard rather than a URL bar. */
 const KEYBOARD_MIN_PX = 120;
+/** How long a focused field may wait for the keyboard before we assume none is coming. */
+const KEYBOARD_GRACE_MS = 700;
 
 /** Input types that open a picker (or nothing) instead of a text keyboard. */
 const NON_TEXT_INPUT_TYPES = new Set([
@@ -54,7 +59,14 @@ export function useSoftKeyboardOpen(): boolean {
         let baseline = screenHeight();
         let baselineWidth = window.innerWidth;
         let keyboardSeen = false;
+        let graceExpired = false;
+        let graceTimer = 0;
         let raf = 0;
+
+        const clearGrace = () => {
+            if (graceTimer) window.clearTimeout(graceTimer);
+            graceTimer = 0;
+        };
 
         const evaluate = () => {
             raf = 0;
@@ -70,13 +82,25 @@ export function useSoftKeyboardOpen(): boolean {
                 // keyboard animates down after blur.
                 baseline = Math.max(baseline, h);
                 keyboardSeen = false;
+                graceExpired = false;
+                clearGrace();
                 setOpen(false);
                 return;
             }
             const keyboardUp = baseline - h > KEYBOARD_MIN_PX;
-            if (keyboardUp) keyboardSeen = true;
-            // Before the keyboard has shown up, assume it's on its way.
-            setOpen(keyboardUp || !keyboardSeen);
+            if (keyboardUp) {
+                keyboardSeen = true;
+                clearGrace();
+            } else if (!keyboardSeen && !graceExpired && !graceTimer) {
+                graceTimer = window.setTimeout(() => {
+                    graceTimer = 0;
+                    graceExpired = true;
+                    schedule();
+                }, KEYBOARD_GRACE_MS);
+            }
+            // Before the keyboard has shown up, assume it's on its way —
+            // but only for the grace window.
+            setOpen(keyboardUp || (!keyboardSeen && !graceExpired));
         };
 
         // Deferred a frame: moving focus field → field fires focusout before
@@ -89,14 +113,17 @@ export function useSoftKeyboardOpen(): boolean {
 
         document.addEventListener('focusin', schedule);
         document.addEventListener('focusout', schedule);
+        document.addEventListener('pointerdown', schedule, true);
         const resizeTarget: EventTarget = vv ?? window;
         resizeTarget.addEventListener('resize', schedule);
         schedule();
 
         return () => {
             if (raf) window.cancelAnimationFrame(raf);
+            clearGrace();
             document.removeEventListener('focusin', schedule);
             document.removeEventListener('focusout', schedule);
+            document.removeEventListener('pointerdown', schedule, true);
             resizeTarget.removeEventListener('resize', schedule);
         };
     }, []);

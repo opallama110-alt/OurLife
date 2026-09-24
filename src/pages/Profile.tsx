@@ -106,12 +106,12 @@ export const Profile: React.FC<ProfileProps> = ({ achievementsDefaultExpanded = 
     // Live workout streak (freeze-token days count). `profile.currentStreak`
     // is only refreshed on workout save/sync, so after a lapse it keeps
     // burning an old number. Display-only selector.
+    const today = getTodayString();
     const liveStreak = useMemo(
         () => liveWorkoutStreak(workouts, gymProfile),
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- only the protected dates matter
-        [workouts, gymProfile.tokenProtectedDates],
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- only the protected dates (and the day) matter
+        [workouts, gymProfile.tokenProtectedDates, today],
     );
-    const today = getTodayString();
     const trainedToday = useMemo(() => workouts.some(w => w.date === today), [workouts, today]);
     // The stored best can lag the live streak until the next sync.
     const bestStreak = Math.max(gymProfile.longestStreak ?? 0, liveStreak);
@@ -163,7 +163,10 @@ export const Profile: React.FC<ProfileProps> = ({ achievementsDefaultExpanded = 
 
             {/* ═══════════════════ PHASE 6: COMPARE UI ═══════════════════ */}
             <div className="reveal" style={revealStyle(3)}>
-                <CompareSection gymProfile={gymProfile} displayName={user.name} myStreak={liveStreak} />
+                {/* Compare uses the STORED streak on both sides: the rival's value
+                    comes from their synced leaderboard doc, so mixing in our
+                    live value would call a tie (both lapsed) a deficit. */}
+                <CompareSection gymProfile={gymProfile} displayName={user.name} myStreak={gymProfile.currentStreak ?? 0} />
             </div>
 
             {/* Save Status Indicator */}

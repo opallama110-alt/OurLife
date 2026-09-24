@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Shield } from 'lucide-react';
 import { HudDialog } from './hud';
 import { StreakFlame } from './streak/StreakFlame';
@@ -40,8 +40,15 @@ export const TokenUsedModal: React.FC<TokenUsedModalProps> = ({
   tokensRemaining,
   streakSaved,
 }) => {
-  const dateLabel = formatProtectedDate(protectedDate);
-  const saved = typeof streakSaved === 'number' && streakSaved > 0 ? streakSaved : 0;
+  // App.tsx clears the result on close, but the dialog stays mounted for its
+  // exit animation — keep showing what was on screen while it fades out
+  // instead of repainting with empty props (fallback copy, 0 tokens).
+  const lastRef = useRef({ protectedDate, tokensRemaining, streakSaved });
+  if (open) lastRef.current = { protectedDate, tokensRemaining, streakSaved };
+  const shown = lastRef.current;
+
+  const dateLabel = formatProtectedDate(shown.protectedDate);
+  const saved = typeof shown.streakSaved === 'number' && shown.streakSaved > 0 ? shown.streakSaved : 0;
 
   return (
     <HudDialog
@@ -83,8 +90,8 @@ export const TokenUsedModal: React.FC<TokenUsedModalProps> = ({
       <div className="tok-remaining">
         <span className="hud-label-sm">Sisa token</span>
         <TokenDisplay
-          count={tokensRemaining}
-          animateFrom={tokensRemaining + 1}
+          count={shown.tokensRemaining}
+          animateFrom={shown.tokensRemaining + 1}
           fxDelay={SPEND_DELAY_MS}
           size="lg"
         />

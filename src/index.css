@@ -4577,10 +4577,12 @@ input, select, textarea {
           user-select: none;
   transition: transform var(--dur-1) ease, background var(--dur-2) ease, opacity var(--dur-2) ease;
 }
-.ae-step-btn:active:not(:disabled) { transform: scale(0.9); background: rgba(34, 211, 238, 0.16); }
-.ae-step-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.ae-step-btn:active:not([aria-disabled="true"]) { transform: scale(0.9); background: rgba(34, 211, 238, 0.16); }
+/* aria-disabled (not the native attribute) at the bounds: a native disabled
+   button drops keyboard focus to <body> the moment it hits min/max. */
+.ae-step-btn[aria-disabled="true"] { opacity: 0.35; cursor: not-allowed; }
 @media (hover: hover) {
-  .ae-step-btn:hover:not(:disabled) { background: rgba(34, 211, 238, 0.12); }
+  .ae-step-btn:hover:not([aria-disabled="true"]) { background: rgba(34, 211, 238, 0.12); }
 }
 .ae-step-track {
   position: relative;

@@ -265,6 +265,10 @@ export const HabitTracker: React.FC = () => {
   const [habits, setHabits] = useState<Habit[]>(() =>
     storageService.getHabits().map(h => ({ ...h, streak: calculateStreak(h.completedDates) })),
   );
+  // Latest committed list, for callbacks that fire after an animation (the
+  // delete runs once the card has collapsed) and must not act on a stale render.
+  const habitsRef = useRef(habits);
+  habitsRef.current = habits;
   const [showAddModal, setShowAddModal] = useState(false);
   const { current: toast, push: pushToast } = useSysToasts();
   const [pendingDelete, setPendingDelete] = useState<Habit | null>(null);
@@ -446,8 +450,11 @@ export const HabitTracker: React.FC = () => {
     setJustAddedId(newHabit.id);
   };
 
+  // Runs ~420ms after the confirm tap (after the card's collapse), so it must
+  // not use the `habits` captured by that render: a check-off made during the
+  // collapse would be overwritten. Build from the latest state instead.
   const deleteHabit = (id: string) => {
-    const updated = habits.filter(h => h.id !== id);
+    const updated = habitsRef.current.filter(h => h.id !== id);
     setHabits(updated);
     storageService.saveHabits(updated);
   };

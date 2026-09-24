@@ -7,6 +7,8 @@ import { Minus, Plus } from 'lucide-react';
 // Operated with sweaty hands between sets, so:
 //   • 40px ± buttons with hold-to-repeat (350ms delay, then accelerating
 //     from 120ms to 40ms per step) — 20→60 kg no longer takes 16 taps.
+//     A tap steps on release, never on touch-down, so a scroll that starts
+//     on a button can't silently change the value.
 //   • Fill + thumb move with transform (scaleX / translateX) driven by one
 //     `--p` custom property and an ease-out curve. The old spring on
 //     width/left overshot past the track ends and trailed the finger.
@@ -43,6 +45,10 @@ export const StepperSlider = memo(function StepperSlider({
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const holdTimer = useRef<number | null>(null);
+  // Direction of the press in progress, and whether its hold already started
+  // repeating (so the release doesn't add one more step).
+  const armed = useRef<1 | -1 | null>(null);
+  const repeated = useRef(false);
 
   const nudge = useCallback((dir: 1 | -1): boolean => {
     const next = Math.min(max, Math.max(min, parseFloat((valueRef.current + dir * step).toFixed(2))));
@@ -61,12 +67,19 @@ export const StepperSlider = memo(function StepperSlider({
   }, []);
   useEffect(() => stopHold, [stopHold]);
 
+  // pointerdown only ARMS the press: on touch it fires before the browser
+  // knows whether the finger is tapping or starting a scroll, and these
+  // buttons sit at the screen edges where thumbs begin scrolls. A tap steps
+  // once on release; a hold starts repeating after HOLD_DELAY_MS; a scroll
+  // (pointercancel) or sliding off the button (pointerleave) steps nothing.
   const startHold = (dir: 1 | -1) => (e: React.PointerEvent<HTMLButtonElement>) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     stopHold();
-    if (!nudge(dir)) return;
+    armed.current = dir;
+    repeated.current = false;
     let interval = REPEAT_START_MS;
     const repeat = () => {
+      repeated.current = true;
       if (!nudge(dir)) { stopHold(); return; }
       interval = Math.max(REPEAT_MIN_MS, interval * 0.85);
       holdTimer.current = window.setTimeout(repeat, interval);
@@ -74,8 +87,20 @@ export const StepperSlider = memo(function StepperSlider({
     holdTimer.current = window.setTimeout(repeat, HOLD_DELAY_MS);
   };
 
-  // Pointer presses are handled on pointerdown (for hold-to-repeat); a click
-  // with detail 0 comes from the keyboard (Enter / Space) and steps once.
+  const releaseHold = () => {
+    const dir = armed.current;
+    stopHold();
+    armed.current = null;
+    if (dir !== null && !repeated.current) nudge(dir);
+  };
+
+  const cancelHold = () => {
+    stopHold();
+    armed.current = null;
+  };
+
+  // Pointer presses are handled by the pointer handlers above; a click with
+  // detail 0 comes from the keyboard (Enter / Space) and steps once.
   const onKeyClick = (dir: 1 | -1) => (e: React.MouseEvent<HTMLButtonElement>) => {
     if (e.detail === 0) nudge(dir);
   };
@@ -95,9 +120,9 @@ export const StepperSlider = memo(function StepperSlider({
       </div>
       <div className="ae-step-row">
         <button className="ae-step-btn" type="button" aria-label={`Kurangi ${label}`}
-          disabled={value <= min}
-          onPointerDown={startHold(-1)} onPointerUp={stopHold}
-          onPointerLeave={stopHold} onPointerCancel={stopHold}
+          aria-disabled={value <= min}
+          onPointerDown={startHold(-1)} onPointerUp={releaseHold}
+          onPointerLeave={cancelHold} onPointerCancel={cancelHold}
           onClick={onKeyClick(-1)}
           onContextMenu={(e) => e.preventDefault()}>
           <Minus size={16} />
@@ -115,9 +140,9 @@ export const StepperSlider = memo(function StepperSlider({
           <div className="ae-step-rail" aria-hidden="true"><div className="ae-step-thumb" /></div>
         </div>
         <button className="ae-step-btn" type="button" aria-label={`Tambah ${label}`}
-          disabled={value >= max}
-          onPointerDown={startHold(1)} onPointerUp={stopHold}
-          onPointerLeave={stopHold} onPointerCancel={stopHold}
+          aria-disabled={value >= max}
+          onPointerDown={startHold(1)} onPointerUp={releaseHold}
+          onPointerLeave={cancelHold} onPointerCancel={cancelHold}
           onClick={onKeyClick(1)}
           onContextMenu={(e) => e.preventDefault()}>
           <Plus size={16} />

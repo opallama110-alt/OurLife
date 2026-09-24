@@ -74,7 +74,10 @@ export const FirstDailyQuest: React.FC<Props> = ({ open, onClose, onAccept }) =>
   const updateTarget = (id: string, raw: string) => {
     const n = Number(raw);
     if (Number.isNaN(n)) return;
-    setItems(prev => prev.map(it => it.id === id ? { ...it, target: Math.max(0, Math.round(n)) } : it));
+    // km keeps one decimal (a 2.5 km run is a valid target); rep counts are whole.
+    setItems(prev => prev.map(it => it.id === id
+      ? { ...it, target: Math.max(0, it.unit === 'km' ? Math.round(n * 10) / 10 : Math.round(n)) }
+      : it));
   };
 
   const stepTarget = (id: string, dir: 1 | -1) => {
@@ -145,8 +148,9 @@ export const FirstDailyQuest: React.FC<Props> = ({ open, onClose, onAccept }) =>
               </button>
               <input
                 type="number"
-                inputMode="numeric"
-                pattern="[0-9]*"
+                inputMode={it.unit === 'km' ? 'decimal' : 'numeric'}
+                pattern={it.unit === 'km' ? undefined : '[0-9]*'}
+                step={it.unit === 'km' ? 0.1 : 1}
                 className="fdq-target tnum"
                 min={0}
                 value={it.target}

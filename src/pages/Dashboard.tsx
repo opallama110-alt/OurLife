@@ -549,6 +549,7 @@ export const Dashboard: React.FC = () => {
             workouts={workouts}
             fatigue={fatigue}
             displayName={userState?.name || ''}
+            today={today}
           />
         </div>
       )}

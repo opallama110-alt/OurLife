@@ -229,19 +229,17 @@ export const SystemChat: React.FC<SystemChatProps> = ({ open, onClose }) => {
     list.scrollTop = list.scrollHeight;
   }, [messages.length, typing, error]);
 
-  const send = useCallback(async (text: string, opts: { retry?: boolean } = {}) => {
+  const send = useCallback(async (text: string) => {
     const t = (text || '').trim();
     if (!t || typing) return;
     lastUserText.current = t;
     setError(null);
-    if (!opts.retry) {
-      setDraft('');
-      setMessages(m => {
-        const next: ChatMsg[] = [...m, { from: 'user', text: t, time: formatTime() }];
-        setLastIdx(next.length - 1);
-        return next;
-      });
-    }
+    setDraft('');
+    setMessages(m => {
+      const next: ChatMsg[] = [...m, { from: 'user', text: t, time: formatTime() }];
+      setLastIdx(next.length - 1);
+      return next;
+    });
     setTyping(true);
 
     try {
@@ -399,13 +397,21 @@ export const SystemChat: React.FC<SystemChatProps> = ({ open, onClose }) => {
             <div className="sc-error" role="alert">
               <span>{error}</span>
               {lastUserText.current && (
+                // Puts the message back in the field instead of auto-resending:
+                // aiService may already have applied a tool call (penalty /
+                // quest complete) before the failure, and a blind one-tap
+                // resend could apply it twice. The user re-sends knowingly.
                 <button
                   type="button"
                   className="sc-error-retry"
-                  onClick={() => void send(lastUserText.current, { retry: true })}
+                  onClick={() => {
+                    setError(null);
+                    setDraft(lastUserText.current);
+                    inputRef.current?.focus({ preventScroll: true });
+                  }}
                   disabled={typing}
                 >
-                  Coba lagi
+                  Ulangi pesan
                 </button>
               )}
             </div>

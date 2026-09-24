@@ -42,6 +42,12 @@ interface Props {
     workouts: WorkoutLog[];
     fatigue: FatigueReport;
     displayName?: string;
+    /**
+     * Local 'YYYY-MM-DD' from the host's clock. The live streak and the
+     * at-risk flame depend on today's date, and the memo below would
+     * otherwise keep showing yesterday's values past midnight.
+     */
+    today?: string;
 }
 
 const fmtId = (v: number) => Math.round(v).toLocaleString('id-ID');
@@ -52,7 +58,7 @@ const topRecovering = (f: FatigueReport) =>
         .sort((a, b) => b.fatigue - a.fatigue)
         .slice(0, 3);
 
-const StatusCardImpl: React.FC<Props> = ({ gymProfile, workouts, fatigue }) => {
+const StatusCardImpl: React.FC<Props> = ({ gymProfile, workouts, fatigue, today: todayProp }) => {
     const [expanded, setExpanded] = useState(false);
     // Bumped on every open: lazily mounts the body the first time and keys
     // the radar so its grow animation replays once per open (not per tick).
@@ -95,10 +101,10 @@ const StatusCardImpl: React.FC<Props> = ({ gymProfile, workouts, fatigue }) => {
     // profile.currentStreak goes stale after a lapse. Display-only.
     const liveStreak = useMemo(
         () => liveWorkoutStreak(workouts, gymProfile),
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- only the protected dates matter
-        [workouts, gymProfile.tokenProtectedDates],
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- only the protected dates (and the day) matter
+        [workouts, gymProfile.tokenProtectedDates, todayProp],
     );
-    const today = getTodayString();
+    const today = todayProp ?? getTodayString();
     const trainedToday = useMemo(() => workouts.some(w => w.date === today), [workouts, today]);
     const bestStreak = Math.max(gymProfile.longestStreak ?? 0, liveStreak);
 
@@ -365,5 +371,6 @@ export const StatusCard = memo(
         prev.gymProfile === next.gymProfile &&
         prev.workouts === next.workouts &&
         prev.displayName === next.displayName &&
+        prev.today === next.today &&
         fatigueSignature(prev.fatigue) === fatigueSignature(next.fatigue),
 );
