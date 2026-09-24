@@ -28,6 +28,8 @@ import { RankBadge, rankFromTierName } from '../components/hud';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
 import { getLocalDateString } from '../utils/dateUtils';
 import { GymAnalytics } from '../components/gym/GymAnalytics';
+import { StepperSlider } from '../components/gym/StepperSlider';
+import { RestTimerRing } from '../components/gym/RestTimerRing';
 
 const createWorkoutId = (): string =>
   globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -46,157 +48,6 @@ const getWorkoutSaveError = (error: unknown): string => {
   }
   return 'Workout belum tersimpan ke cloud. Datamu masih ada di layar ini; silakan coba lagi.';
 };
-
-// ═══════════ STEPPER SLIDER (workout.css .ae-step port) ═══════════
-const StepperSlider: React.FC<{
-  label: string; value: number; onChange: (v: number) => void;
-  min?: number; max?: number; step?: number; unit?: string;
-}> = ({ label, value, onChange, min = 1, max = 30, step = 1, unit }) => {
-  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
-  const dec = useCallback(() => onChange(Math.max(min, parseFloat((value - step).toFixed(2)))), [onChange, value, min, step]);
-  const inc = useCallback(() => onChange(Math.min(max, parseFloat((value + step).toFixed(2)))), [onChange, value, max, step]);
-  return (
-    <div className="ae-step">
-      <div className="ae-step-top">
-        <span className="ae-step-label">{label}</span>
-        <span className="ae-step-val">
-          {value}
-          {unit && <span className="ae-step-unit">{unit}</span>}
-        </span>
-      </div>
-      <div className="ae-step-row">
-        <button className="ae-step-btn" onClick={dec} aria-label="Kurang" type="button">
-          <Minus size={14} />
-        </button>
-        <div className="ae-step-track">
-          <div className="ae-step-fill" style={{ width: `${pct}%` }} />
-          <input type="range" min={min} max={max} step={step} value={value}
-            onChange={(e) => onChange(parseFloat(e.target.value))}
-            className="ae-step-input" />
-          <div className="ae-step-thumb" style={{ left: `${pct}%` }} />
-        </div>
-        <button className="ae-step-btn" onClick={inc} aria-label="Tambah" type="button">
-          <Plus size={14} />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ═══════════ REST TIMER RING (workout.css .ae-timer port) ═══════════
-// Circular SVG countdown with preset chips. The `trigger` prop kicks off a
-// new countdown — used by the "Log & Next" handler to auto-start rest.
-const RestTimerRing: React.FC<{ trigger?: boolean; defaultTime?: number; onTimerEnd?: () => void }> = ({
-  trigger = false, defaultTime = 60, onTimerEnd,
-}) => {
-  const [target, setTarget] = useState(defaultTime);
-  const [remaining, setRemaining] = useState(defaultTime);
-  const [running, setRunning] = useState(false);
-  const audioCtx = useRef<AudioContext | null>(null);
-
-  const beep = useCallback(() => {
-    try {
-      if (!audioCtx.current) audioCtx.current = new AudioContext();
-      const osc = audioCtx.current.createOscillator();
-      const gain = audioCtx.current.createGain();
-      osc.connect(gain); gain.connect(audioCtx.current.destination);
-      osc.frequency.value = 880; gain.gain.value = 0.3;
-      osc.start(); osc.stop(audioCtx.current.currentTime + 0.2);
-    } catch { /* AudioContext may be blocked pre-interaction */ }
-  }, []);
-
-  // Auto-start when trigger flips true
-  useEffect(() => {
-    if (trigger) {
-      setTarget(defaultTime);
-      setRemaining(defaultTime);
-      setRunning(true);
-    }
-  }, [trigger, defaultTime]);
-
-  useEffect(() => {
-    if (!running) return;
-    let raf = 0;
-    let prev = performance.now();
-    const tick = (t: number) => {
-      const dt = (t - prev) / 1000;
-      prev = t;
-      setRemaining((r) => {
-        const next = r - dt;
-        if (next <= 0) {
-          setRunning(false);
-          beep();
-          onTimerEnd?.();
-          return 0;
-        }
-        return next;
-      });
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [running, beep, onTimerEnd]);
-
-  const setPreset = (sec: number) => { setTarget(sec); setRemaining(sec); setRunning(true); };
-  const addTen = () => { setTarget((t) => t + 10); setRemaining((r) => r + 10); setRunning(true); };
-  const reset = () => { setRemaining(target); setRunning(false); };
-
-  const SIZE = 110;
-  const R = 47;
-  const C = 2 * Math.PI * R;
-  const pct = target > 0 ? Math.max(0, Math.min(1, remaining / target)) : 0;
-  const dash = C * pct;
-  const displaySec = Math.ceil(remaining);
-
-  return (
-    <section className="ae-timer">
-      <div className="ae-timer-head">
-        <span className="ae-step-label"><Timer size={11} style={{ display: 'inline', marginRight: 4 }} />REST TIMER</span>
-        <button className="ae-timer-close" onClick={reset} aria-label="Reset" type="button">
-          <X size={12} />
-        </button>
-      </div>
-      <div className="ae-timer-body">
-        <div className="ae-timer-ring">
-          <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
-            <defs>
-              <linearGradient id="rt-grad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#67E8F9" />
-                <stop offset="100%" stopColor="#3B82F6" />
-              </linearGradient>
-            </defs>
-            <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="rgba(34, 211, 238, 0.1)" strokeWidth="6" />
-            <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="url(#rt-grad)" strokeWidth="6"
-              strokeLinecap="round"
-              strokeDasharray={`${dash} ${C}`}
-              transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-              style={{ filter: 'drop-shadow(0 0 6px rgba(34, 211, 238, 0.55))', transition: 'stroke-dasharray 200ms linear' }} />
-          </svg>
-          <div className="ae-timer-center">
-            <div className="ae-timer-sec">{displaySec}</div>
-            <div className="ae-timer-unit">SEC</div>
-          </div>
-          {running && <div className="ae-timer-pulse" />}
-        </div>
-        <div className="ae-timer-presets">
-          {[30, 60, 90, 120].map((s) => (
-            <button key={s} type="button"
-              className={`ae-timer-preset ${target === s ? 'is-on' : ''}`}
-              onClick={() => setPreset(s)}>{s}s</button>
-          ))}
-          <button type="button" className="ae-timer-preset ae-timer-add" onClick={addTen}>+10s</button>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ═══════════ DIFFICULTY STARS ═══════════
-const DifficultyStars: React.FC<{ d: number }> = ({ d }) => (
-  <div className="flex space-x-0.5">{Array.from({ length: 5 }, (_, i) => (
-    <Star key={i} size={10} className={i < d ? 'text-amber-400 fill-amber-400' : 'text-slate-700'} />
-  ))}</div>
-);
 
 // ═══════════ WORKOUT.CSS STARS (wf-stars — gold, 1-5) ═══════════
 const WfStars: React.FC<{ value: number }> = ({ value }) => (
@@ -1198,7 +1049,8 @@ export const GymTracker: React.FC = () => {
               placeholder="Catatan sesi (opsional)…" />
 
             {/* Rest Timer (auto-starts via trigger from logExercise) */}
-            <RestTimerRing trigger={triggerTimer} defaultTime={60} />
+            <RestTimerRing trigger={triggerTimer} defaultTime={60}
+              suppressPill={viewMode !== 'workout'} />
 
             {/* Cancel link */}
             <button type="button" className="ae-cancel"

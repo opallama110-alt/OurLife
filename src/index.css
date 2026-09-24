@@ -3936,54 +3936,80 @@ input, select, textarea {
 .ae-step-unit { font-size: 11px; color: var(--t-3); margin-left: 4px; }
 .ae-step-row {
   display: grid;
-  grid-template-columns: 28px 1fr 28px;
+  grid-template-columns: 40px 1fr 40px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
+/* 40px: the most-used controls, operated with sweaty hands between sets.
+   Hold-to-repeat lives in StepperSlider. */
 .ae-step-btn {
-  width: 28px; height: 28px;
-  border-radius: 7px;
+  width: 40px; height: 40px;
+  border-radius: 10px;
   background: rgba(34, 211, 238, 0.06);
   border: 1px solid var(--line-cyan-soft);
   color: var(--cyan);
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
-  transition: transform 120ms var(--ease-spring), background 160ms ease;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+          user-select: none;
+  transition: transform var(--dur-1) ease, background var(--dur-2) ease, opacity var(--dur-2) ease;
 }
-.ae-step-btn:active { transform: scale(0.85); }
-.ae-step-btn:hover { background: rgba(34, 211, 238, 0.12); }
+.ae-step-btn:active:not(:disabled) { transform: scale(0.9); background: rgba(34, 211, 238, 0.16); }
+.ae-step-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+@media (hover: hover) {
+  .ae-step-btn:hover:not(:disabled) { background: rgba(34, 211, 238, 0.12); }
+}
 .ae-step-track {
   position: relative;
   height: 5px;
   background: rgba(34, 211, 238, 0.1);
   border-radius: 999px;
 }
+/* Fill + thumb are driven by one --p (0–1) through transforms with an
+   ease-out (no overshoot): the old spring on width/left trailed the finger
+   and overshot the track ends. While dragging (.is-drag) they follow 1:1. */
 .ae-step-fill {
-  position: absolute; inset: 0 auto 0 0;
+  position: absolute; inset: 0;
   background: linear-gradient(90deg, rgba(34, 211, 238, 0.6), var(--cyan));
   border-radius: 999px;
   box-shadow: 0 0 6px rgba(34, 211, 238, 0.5);
-  transition: width 220ms var(--ease-spring);
+  transform-origin: left;
+  transform: scaleX(var(--p, 0));
+  transition: transform var(--dur-2) var(--ease-out-expo);
 }
+.ae-step-rail {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  transform: translateX(calc(var(--p, 0) * 100%));
+  transition: transform var(--dur-2) var(--ease-out-expo);
+}
+.ae-step-track.is-drag .ae-step-fill,
+.ae-step-track.is-drag .ae-step-rail { transition: none; }
 .ae-step-thumb {
   position: absolute;
-  top: 50%;
-  width: 14px; height: 14px;
+  top: 50%; left: 0;
+  width: 16px; height: 16px;
   background: var(--cyan);
   border: 2px solid var(--bg-1, #04060D);
   border-radius: 50%;
   transform: translate(-50%, -50%);
   box-shadow: 0 0 10px rgba(34, 211, 238, 0.7);
-  pointer-events: none;
-  transition: left 220ms var(--ease-spring);
+  transition: box-shadow var(--dur-2) ease;
 }
 .ae-step-input {
-  position: absolute; inset: -8px 0;
-  width: 100%; height: 22px;
+  position: absolute; inset: -14px 0;
+  width: 100%;
   opacity: 0;
   cursor: pointer;
   margin: 0;
 }
+.ae-step-input:focus-visible + .ae-step-rail .ae-step-thumb {
+  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.3), 0 0 10px rgba(34, 211, 238, 0.7);
+}
+/* The value ticks up into place instead of hard-swapping digits. */
+.ae-step-num { display: inline-block; animation: aeValTick 160ms var(--ease-out-expo); }
+@keyframes aeValTick { from { opacity: 0.35; transform: translateY(40%); } }
 
 /* Completed sets */
 .ae-completed { display: flex; flex-direction: column; gap: 6px; }
@@ -4031,25 +4057,46 @@ input, select, textarea {
 .ae-notes::placeholder { color: var(--t-mute); }
 .ae-notes:focus { border-color: var(--cyan); }
 
-/* Rest Timer */
+/* Rest Timer (components/gym/RestTimerRing.tsx). The arc is painted from
+   a ref every frame (strokeDashoffset), so it must NOT carry a CSS
+   transition or filter — the glow is a static underlay circle. */
 .ae-timer {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(7, 12, 24, 0.5);
+  transition: border-color var(--dur-3) ease;
 }
+.ae-timer.is-running { border-color: var(--line-cyan-soft); }
+/* Time's up: the card flashes a ring twice and the label turns cyan —
+   paired with beep + vibration so a silent phone still notices. */
+.ae-timer.is-done {
+  border-color: var(--cyan);
+  animation: aeTimerDone 900ms var(--ease-out-expo) 2;
+}
+@keyframes aeTimerDone {
+  0%   { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.5); }
+  100% { box-shadow: 0 0 0 14px rgba(34, 211, 238, 0); }
+}
+.ae-timer.is-done .ae-timer-head .ae-step-label { color: var(--cyan); }
 .ae-timer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.ae-timer-head-ico { display: inline; margin-right: 4px; vertical-align: -1px; }
 .ae-timer-close {
-  width: 22px; height: 22px;
+  position: relative;
+  width: 28px; height: 28px;
   border-radius: 50%;
   background: transparent;
   border: 1px solid var(--line-soft);
   color: var(--t-3);
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
+  transition: transform var(--dur-1) ease, color var(--dur-2) ease;
 }
+.ae-timer-close::after { content: ''; position: absolute; inset: -8px; }
+.ae-timer-close:active { transform: scale(0.9) rotate(-40deg); color: var(--cyan); }
 .ae-timer-body { display: flex; gap: 14px; align-items: center; }
 .ae-timer-ring { position: relative; width: 110px; height: 110px; flex-shrink: 0; }
+.ae-timer-ring svg { display: block; }
 .ae-timer-center {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
@@ -4070,21 +4117,24 @@ input, select, textarea {
   animation: halo-pulse 1.4s ease-in-out infinite;
   pointer-events: none;
 }
+/* 2 columns: 30/60/90/120 fill two rows, +10s spans the third (a 3-col
+   grid left 120s alone on its own row). */
 .ae-timer-presets {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
 .ae-timer-preset {
-  padding: 7px 4px;
+  min-height: 36px;
+  padding: 6px 4px;
   font-size: 11px; letter-spacing: 0.12em;
   background: rgba(7, 12, 24, 0.6);
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--t-2);
   cursor: pointer;
-  transition: all 160ms ease;
+  transition: background var(--dur-2) ease, border-color var(--dur-2) ease, color var(--dur-2) ease, box-shadow var(--dur-2) ease, transform var(--dur-1) ease;
   font-family: var(--font-mono);
 }
 .ae-timer-preset.is-on {
@@ -4093,9 +4143,43 @@ input, select, textarea {
   color: var(--cyan);
   box-shadow: 0 0 10px rgba(34, 211, 238, 0.35);
 }
-.ae-timer-preset:hover { border-color: var(--line-cyan-soft); }
+@media (hover: hover) {
+  .ae-timer-preset:hover { border-color: var(--line-cyan-soft); }
+}
 .ae-timer-preset:active { transform: scale(0.95); }
 .ae-timer-add { grid-column: 1 / -1; color: var(--cyan); border-color: var(--line-cyan-soft); }
+
+/* Off-screen countdown pill — portaled to <body> by RestTimerRing while the
+   ring is scrolled out of view; tap scrolls back to the ring. Sits above
+   the sticky action row (.ae-sticky: bottom 96px + 44px). Centred with the
+   individual translate property so the keyframes can own transform. */
+.ae-rest-pill {
+  position: fixed;
+  left: 50%;
+  translate: -50% 0;
+  bottom: calc(152px + env(safe-area-inset-bottom, 0px));
+  z-index: 45;
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-cyan-soft);
+  background: rgba(7, 12, 24, 0.94);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 14px; font-weight: 700;
+  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.8), 0 0 16px -6px rgba(34, 211, 238, 0.5);
+  cursor: pointer;
+  transition: transform var(--dur-1) ease;
+}
+.ae-rest-pill:active { transform: scale(0.95); }
+.ae-rest-pill-lbl { font-size: 9.5px; letter-spacing: 0.2em; color: var(--t-3); font-weight: 600; }
+.ae-rest-pill.is-done { color: var(--green-bright); border-color: rgba(52, 211, 153, 0.55); }
+.ae-rest-pill.is-done .ae-rest-pill-lbl { color: var(--green-bright); }
+.ae-rest-pill[data-state='enter'] { animation: aePillIn var(--dur-3) var(--ease-out-expo) backwards; }
+.ae-rest-pill[data-state='exit']  { animation: aePillOut var(--dur-2) var(--ease-in) forwards; pointer-events: none; }
+@keyframes aePillIn  { from { opacity: 0; transform: translateY(10px) scale(0.94); } }
+@keyframes aePillOut { to   { opacity: 0; transform: translateY(10px) scale(0.94); } }
 
 .ae-cancel {
   background: transparent;
