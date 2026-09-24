@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { storageService } from '../services/storageService';
-import { WorkoutLog, Habit, MuscleGroup, GymSchedule, getRecoveryHours, GymProfile, ExerciseDefinition, UserState } from '../types';
+import { WorkoutLog, Habit, MuscleGroup, GymSchedule, GymProfile, ExerciseDefinition, UserState } from '../types';
 import { Calendar, Edit3, Save, X, Plus, Play, Repeat, Activity, CheckCircle2, Sparkles, Pencil } from 'lucide-react';
 import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 import { calculateStreak } from '../services/gamificationService';
 import { computeFatigue } from '../services/fatigueService';
 import { StatusCard } from '../components/StatusCard';
 import { SystemNotification, BodyAnatomy, splitExhaustedByView, CornerBracket, BodyTurntable, BodyViewToggle } from '../components/hud';
+import { RecoveryCountdown, getRecoveringMuscles } from '../components/dashboard/RecoveryCountdown';
 import { useNavigate } from 'react-router-dom';
 
 // Maps free-form schedule strings ("Push — Chest, Shoulders, Triceps") to MuscleGroup keys.
@@ -72,50 +73,49 @@ const formatRelativeID = (input: number | string | undefined): string => {
   return new Date(ts).toLocaleDateString('en-CA');
 };
 
-// Get muscles currently recovering based on workout history.
-// Phase 9: gender modifier — Female users recover ~18% faster.
-function getRecoveringMuscles(
-  workouts: WorkoutLog[],
-  nowMs: number,
-  gender?: 'Male' | 'Female',
-): { muscle: MuscleGroup; hoursLeft: number; minutesLeft: number; secondsLeft: number }[] {
-  const recovering: { muscle: MuscleGroup; hoursLeft: number; minutesLeft: number; secondsLeft: number }[] = [];
-  const seen = new Set<MuscleGroup>();
+// getRecoveringMuscles lives in dashboard/RecoveryCountdown.tsx (moved
+// verbatim) so the per-second countdown and this page share one definition.
 
-  for (const w of workouts) {
-    const workoutTime = w.timestamp
-      ? new Date(w.timestamp).getTime()
-      : new Date(w.date + 'T12:00:00').getTime();
+/**
+ * Minute-resolution wall clock for everything on the page that doesn't need
+ * seconds (greeting, date, today's key, body map, fatigue). Aligned to the
+ * minute boundary and re-synced when the tab becomes visible again. Only the
+ * recovery countdown ticks per second, inside its own leaf component, so the
+ * page (StatusCard, both body faces) no longer re-renders every second —
+ * that per-second reconciliation used to drop frames mid body-turn.
+ */
+function useMinuteClock(): [number, () => void] {
+  const [now, setNow] = useState(() => Date.now());
+  const resync = useCallback(() => setNow(Date.now()), []);
+  useEffect(() => {
+    let t = 0;
+    const schedule = () => {
+      t = window.setTimeout(() => { setNow(Date.now()); schedule(); }, 60_000 - (Date.now() % 60_000) + 50);
+    };
+    const onVisibility = () => {
+      window.clearTimeout(t);
+      if (document.hidden) return;
+      setNow(Date.now());
+      schedule();
+    };
+    schedule();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+  return [now, resync];
+}
 
-    if (isNaN(workoutTime)) continue;
-
-    const msSince = nowMs - workoutTime;
-    if (msSince < 0) continue;
-
-    const muscles: MuscleGroup[] = w.muscleGroups && w.muscleGroups?.length > 0
-      ? w.muscleGroups
-      : [];
-
-    for (const m of muscles) {
-      if (seen.has(m)) continue;
-      const recoveryH = getRecoveryHours(m, gender);
-      const recoveryMs = recoveryH * 60 * 60 * 1000;
-
-      if (msSince < recoveryMs) {
-        const msLeft = recoveryMs - msSince;
-        const totalSecondsLeft = Math.floor(msLeft / 1000);
-        const hoursLeft = Math.floor(totalSecondsLeft / 3600);
-        const minutesLeft = Math.floor((totalSecondsLeft % 3600) / 60);
-        const secondsLeft = totalSecondsLeft % 60;
-
-        if (totalSecondsLeft > 0) {
-          recovering.push({ muscle: m, hoursLeft, minutesLeft, secondsLeft });
-          seen.add(m);
-        }
-      }
-    }
+/** First-render read from the storageService cache (it is synchronous). */
+function readOr<T>(read: () => T, fallback: T): T {
+  try {
+    return read();
+  } catch (err) {
+    console.error('[Dashboard] Failed to load data from storage:', err);
+    return fallback;
   }
-  return recovering;
 }
 
 function getReadyMuscles(
@@ -146,17 +146,19 @@ const DAY_LABELS: Record<string, string> = {
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [workouts, setWorkouts] = useState<WorkoutLog[]>([]);
-  const [habits, setHabits] = useState<Habit[]>([]);
-  const [profile, setProfile] = useState<GymProfile | null>(null);
-  const [schedule, setSchedule] = useState<GymSchedule>({});
+  // Read synchronously from the storageService cache on first render (the
+  // same data the old mount effect loaded), so there's no one-render
+  // "Initializing" flash before the reveal stagger starts.
+  const [workouts, setWorkouts] = useState<WorkoutLog[]>(() => readOr(() => storageService.getWorkouts(), []));
+  const [habits, setHabits] = useState<Habit[]>(() => readOr(() => storageService.getHabits(), []));
+  const [profile, setProfile] = useState<GymProfile | null>(() => readOr<GymProfile | null>(() => storageService.getGymProfile(), null));
+  const [schedule, setSchedule] = useState<GymSchedule>(() => readOr(() => storageService.getGymSchedule(), {}));
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [editSchedule, setEditSchedule] = useState<GymSchedule>({});
-  const [userState, setUserState] = useState<UserState | null>(null);
+  const [userState, setUserState] = useState<UserState | null>(() => readOr<UserState | null>(() => storageService.getUserState(), null));
   const [editingWeight, setEditingWeight] = useState(false);
   const [newWeight, setNewWeight] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [currentTime, setCurrentTime] = useState(Date.now());
+  const [currentTime, resyncClock] = useMinuteClock();
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState('');
   const [newHabitName, setNewHabitName] = useState('');
@@ -169,25 +171,6 @@ export const Dashboard: React.FC = () => {
   // Muscle Recovery body view. The turn itself is animated inside
   // BodyTurntable (DOM-driven spring), so this page never re-renders per frame.
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    try {
-      setWorkouts(storageService.getWorkouts());
-      setHabits(storageService.getHabits());
-      setProfile(storageService.getGymProfile());
-      setSchedule(storageService.getGymSchedule());
-      setUserState(storageService.getUserState());
-    } catch (err) {
-      console.error('[Dashboard] Failed to load data from storage:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     const unsubscribe = storageService.subscribe(() => {
@@ -287,15 +270,6 @@ export const Dashboard: React.FC = () => {
     setEditingSchedule(false);
   };
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="text-center">
-        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 animate-breathe" />
-        <p className="text-slate-500 font-mono text-sm">Initializing Systems...</p>
-      </div>
-    </div>
-  );
-
   const today = new Date(currentTime).toLocaleDateString('en-CA');
   const now = new Date(currentTime);
   const currentDayKey = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1];
@@ -323,14 +297,33 @@ export const Dashboard: React.FC = () => {
   const weekStartStr = weekStart.toLocaleDateString('en-CA');
   const workoutsThisWeek = workouts.filter(w => w.date >= weekStartStr)?.length;
 
-  const recoveringData = getRecoveringMuscles(workouts, currentTime, userState?.gender);
-  const recoveringMuscles = recoveringData.map(r => r.muscle);
-  const readyMuscles = getReadyMuscles(workouts, currentTime, new Set(recoveringMuscles));
+  // Minute-resolution recovery state. The countdown leaf below calls
+  // `resyncClock` the moment a muscle finishes, so the body map and the
+  // ready chips flip in sync with the timer hitting zero.
+  const userGender = userState?.gender;
+  const recoveringKey = useMemo(
+    () => getRecoveringMuscles(workouts, currentTime, userGender).map(r => r.muscle).join('|'),
+    [workouts, currentTime, userGender],
+  );
+  // Keyed on the muscle list (not the clock) so both BodyAnatomy faces get
+  // the same array instances — and skip rebuilding their tint CSS — until
+  // the set of exhausted muscles actually changes.
+  const recoveringMuscles = useMemo(
+    () => (recoveringKey ? (recoveringKey.split('|') as MuscleGroup[]) : []),
+    [recoveringKey],
+  );
+  const readyMuscles = useMemo(
+    () => getReadyMuscles(workouts, currentTime, new Set(recoveringMuscles)),
+    [workouts, currentTime, recoveringMuscles],
+  );
 
-  const fatigue = computeFatigue(workouts, currentTime, userState?.gender);
+  const fatigue = useMemo(
+    () => computeFatigue(workouts, currentTime, userGender),
+    [workouts, currentTime, userGender],
+  );
 
   // Split exhausted muscles by view (front/back) — feeds BodyAnatomy
-  const exhaustedSplit = splitExhaustedByView(recoveringMuscles);
+  const exhaustedSplit = useMemo(() => splitExhaustedByView(recoveringMuscles), [recoveringMuscles]);
 
   const visibleExhausted = bodyView === 'front' ? exhaustedSplit.front : exhaustedSplit.back;
   const exhaustedCount = visibleExhausted.length;
@@ -575,32 +568,9 @@ export const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {recoveringData.length > 0 && (
-          <div className="mt-3 space-y-2">
-            {recoveringData.map((data) => {
-              const maxH = getRecoveryHours(data.muscle, userState?.gender);
-              const totalSecsLeft = (data.hoursLeft * 3600) + (data.minutesLeft * 60) + (data.secondsLeft || 0);
-              const pct = Math.max(0, Math.min(100, 100 - (totalSecsLeft / (maxH * 3600)) * 100));
-              const nearlyDone = pct > 80;
-              return (
-                <div key={data.muscle} className="p-2.5 bg-slate-950/60 border border-slate-800 rounded-lg relative overflow-hidden">
-                  <div className={`absolute top-0 left-0 w-1 h-full ${nearlyDone ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ boxShadow: nearlyDone ? undefined : '0 0 8px rgba(239,68,68,0.7)' }} />
-                  <div className="flex items-center justify-between pl-2 mb-1.5">
-                    <span className="text-xs font-bold text-slate-200 capitalize">
-                      {MUSCLE_GROUP_CONFIG[data.muscle]?.label || data.muscle}
-                    </span>
-                    <span className={`text-[10px] font-mono font-bold tracking-wider ${nearlyDone ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {data.hoursLeft}h {data.minutesLeft}m {data.secondsLeft}s
-                    </span>
-                  </div>
-                  <div className="w-full ml-2 h-1 bg-slate-900 rounded-full overflow-hidden">
-                    <div className={`h-full ${nearlyDone ? 'bg-emerald-700/70' : 'bg-gradient-to-r from-red-600 to-red-400'}`} style={{ width: `${pct}%`, transition: 'width 1s linear' }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {/* Per-muscle countdown — owns the only 1s tick on this page. */}
+        <RecoveryCountdown workouts={workouts} gender={userGender} onSetChange={resyncClock} />
+
       </article>
 
       {/* ── 7. WEEKLY SCHEDULE ── */}

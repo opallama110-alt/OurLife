@@ -2664,6 +2664,146 @@ input, select, textarea {
   box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
 }
 
+/* ─── Recovery countdown (dashboard/RecoveryCountdown.tsx) ───
+   The only per-second UI on the page. Bars move with a 1s linear
+   `transform` (compositor) — never `width` — and the time is zero-padded
+   HH:MM:SS in tabular digits so the right edge never jitters. Red → green
+   at 80% crossfades (a gradient can't transition, so the green fill is an
+   overlay whose opacity fades). A finished muscle holds a green
+   "PULIH ✓" beat, then collapses so the rows below glide up. */
+.d-rec {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.d-rec-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 2px 2px;
+}
+.d-rec-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: #F87171;
+}
+.d-rec-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--t-3);
+  text-transform: uppercase;
+}
+.d-rec-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 7px;
+  padding: 10px 12px 10px 15px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(7, 12, 24, 0.5);
+  overflow: hidden;
+  animation: dRecIn var(--dur-4) var(--ease-out-expo) backwards;
+  /* Lands just after the Muscle Recovery card's own reveal. */
+  animation-delay: calc(min(var(--i, 0), 6) * 40ms + 380ms);
+}
+.d-rec-row::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--red);
+  box-shadow: var(--glow-red);
+  transition: background-color var(--dur-5) ease, box-shadow var(--dur-5) ease;
+}
+.d-rec-row.is-near::before { background: var(--green-bright); box-shadow: var(--glow-green); }
+.d-rec-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--t-1);
+  text-transform: capitalize;
+}
+.d-rec-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #F87171;
+  transition: color var(--dur-5) ease;
+}
+.d-rec-row.is-near .d-rec-time { color: var(--green-bright); }
+.d-rec-track {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.08);
+  overflow: hidden;
+}
+.d-rec-fill {
+  position: relative;
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transform-origin: 0 50%;
+  transform: scaleX(var(--p, 0));
+  background: linear-gradient(90deg, #DC2626, #F87171);
+  transition: transform 1s linear;
+  /* Fills in from empty with the card instead of appearing at its value. */
+  animation: dRecFillIn 900ms var(--ease-out-expo) backwards;
+  animation-delay: calc(min(var(--i, 0), 6) * 40ms + 460ms);
+}
+.d-rec-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--green), var(--green-bright));
+  opacity: 0;
+  transition: opacity var(--dur-5) ease;
+}
+.d-rec-row.is-near .d-rec-fill::after { opacity: 1; }
+.d-rec-row.is-done {
+  pointer-events: none;
+  /* Shorter than RecoveryCountdown's DONE_HOLD_MS (1600ms) so the row is
+     fully collapsed before it unmounts — no final snap. */
+  animation: dRecDone 1500ms var(--ease-in-out) forwards;
+}
+@keyframes dRecIn {
+  from { opacity: 0; transform: translateY(6px); }
+}
+@keyframes dRecFillIn {
+  from { transform: scaleX(0); }
+}
+@keyframes dRecDone {
+  0% {
+    max-height: 64px; opacity: 1;
+    padding-top: 10px; padding-bottom: 10px; margin-top: 0;
+    border-color: rgba(52, 211, 153, 0.6);
+    background-color: rgba(52, 211, 153, 0.1);
+  }
+  62% {
+    max-height: 64px; opacity: 1;
+    padding-top: 10px; padding-bottom: 10px; margin-top: 0;
+    border-color: rgba(52, 211, 153, 0.35);
+    background-color: rgba(52, 211, 153, 0.06);
+  }
+  100% {
+    /* -6px swallows the .d-rec flex gap so nothing jumps on unmount. */
+    max-height: 0; opacity: 0;
+    padding-top: 0; padding-bottom: 0; margin-top: -6px;
+    border-color: transparent;
+    background-color: transparent;
+  }
+}
+
 /* ─── Weekly Schedule ─── */
 .d-sched-edit {
   margin-left: auto;
