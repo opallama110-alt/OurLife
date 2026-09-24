@@ -28,6 +28,8 @@ import { RankBadge, rankFromTierName } from '../components/hud';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
 import { getLocalDateString } from '../utils/dateUtils';
 import { GymAnalytics } from '../components/gym/GymAnalytics';
+import { WorkoutSummary, WorkoutSummaryData } from '../components/gym/WorkoutSummary';
+import { liveWorkoutStreak } from '../utils/liveStreak';
 import { StepperSlider } from '../components/gym/StepperSlider';
 import { RestTimerRing } from '../components/gym/RestTimerRing';
 
@@ -500,6 +502,10 @@ export const GymTracker: React.FC = () => {
   const [triggerTimer, setTriggerTimer] = useState(false);
   const [isSavingWorkout, setIsSavingWorkout] = useState(false);
   const [workoutSaveError, setWorkoutSaveError] = useState<string | null>(null);
+  // Finish-workout reward sheet. `summary` outlives `summaryOpen` so the sheet
+  // keeps its content during the exit animation.
+  const [summary, setSummary] = useState<WorkoutSummaryData | null>(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const workoutIdRef = useRef<string>('');
   const [userEquipment, setUserEquipment] = useState<string[]>([]);
   const [userEnvironment, setUserEnvironment] = useState<'Home' | 'Gym' | null>(null);
@@ -753,6 +759,32 @@ export const GymTracker: React.FC = () => {
       // achievement can never get ahead of the workout history it depends on.
       const unlocks = achievementService.checkAndGrant();
       if (unlocks.length > 0) addUnlocks(unlocks);
+
+      // Reward sheet — display-only snapshot of before/after values the save
+      // flow already produced; no XP or streak math happens here.
+      const fromXP = profile.totalXP || 0;
+      const toXP = newProfile.totalXP || 0;
+      const fromLevel = getLevelFromXP(fromXP);
+      const toLevel = getLevelFromXP(toXP);
+      const fromProg = getXPProgress(fromXP);
+      const toProg = getXPProgress(toXP);
+      setSummary({
+        xp: totalXP,
+        exercises: enrichedData.length,
+        sets: totalSets,
+        volume: enrichedData.reduce((v, e) => v + e.sets * e.reps * e.weight, 0),
+        fromLevel,
+        toLevel,
+        fromPct: fromProg.percent / 100,
+        toPct: toProg.percent / 100,
+        toCurrent: toProg.current,
+        toNeeded: toProg.needed,
+        fromRank: getRankForLevel(fromLevel).name,
+        toRank: getRankForLevel(toLevel).name,
+        fromStreak: liveWorkoutStreak(logs, profile),
+        toStreak: liveWorkoutStreak(newLogs, newProfile),
+      });
+      setSummaryOpen(true);
 
       workoutIdRef.current = '';
       setFlowStep('idle');
@@ -1115,6 +1147,8 @@ export const GymTracker: React.FC = () => {
 
       {/* ═══ ANALYTICS VIEW — Heart-Fire streak, trend, muscle XP (components/gym/GymAnalytics) ═══ */}
       {viewMode === 'analytics' && <GymAnalytics logs={logs} profile={profile} dir="fwd" />}
+
+      <WorkoutSummary open={summaryOpen} data={summary} onClose={() => setSummaryOpen(false)} />
     </div>
   );
 };

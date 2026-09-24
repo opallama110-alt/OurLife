@@ -4262,6 +4262,96 @@ input, select, textarea {
 }
 
 /* ============================================================
+   WORKOUT SUMMARY — finish-workout reward sheet (.ws-*)
+   Lives inside the shared HudDialog (green tone). The level bar fill is
+   driven by transform:scaleX from WorkoutSummary.tsx (WAAPI), never width.
+   ============================================================ */
+.ws-xp {
+  display: flex; align-items: baseline; justify-content: center; gap: 4px;
+  margin: 4px 0 16px;
+  font-family: var(--font-mono);
+  color: var(--orange);
+  text-shadow: 0 0 18px rgba(251, 146, 60, 0.45);
+  animation: wsXpPop 520ms var(--ease-out-expo) 120ms backwards;
+}
+.ws-xp-plus { font-size: 26px; font-weight: 700; opacity: 0.8; }
+.ws-xp-num { font-size: 48px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.ws-xp-unit { font-size: 13px; font-weight: 700; letter-spacing: 0.16em; opacity: 0.85; }
+@keyframes wsXpPop {
+  from { opacity: 0; transform: scale(0.8); }
+}
+
+.ws-level {
+  padding: 12px 14px;
+  border-radius: var(--r-3);
+  border: 1px solid var(--line);
+  background: rgba(4, 6, 13, 0.5);
+}
+.ws-level-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; min-height: 20px; }
+.ws-level-lv { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--t-hi); }
+.ws-level-val { display: inline-block; animation: wsTick 360ms var(--ease-out-expo) backwards; }
+@keyframes wsTick {
+  from { opacity: 0; transform: translateY(6px); }
+}
+.ws-lvup {
+  font-family: var(--font-mono);
+  font-size: 10.5px; font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--green-bright);
+  text-shadow: 0 0 12px rgba(52, 211, 153, 0.6);
+  animation: wsLvUp 620ms var(--ease-out-expo) backwards;
+}
+@keyframes wsLvUp {
+  0%   { opacity: 0; transform: scale(1.4); }
+  60%  { opacity: 1; transform: scale(0.96); }
+}
+.ws-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.ws-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), var(--green-bright));
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.45);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+.ws-level-meta {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--t-3);
+}
+
+.ws-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.ws-stat {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 10px 6px;
+  border-radius: var(--r-3);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  min-width: 0;
+}
+.ws-stat-ico { color: var(--t-3); }
+.ws-stat-val { font-family: var(--font-mono); font-size: 17px; font-weight: 800; color: var(--t-hi); font-variant-numeric: tabular-nums; }
+.ws-stat-lbl { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--t-3); white-space: nowrap; }
+
+.ws-streak {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-3);
+  border: 1px solid rgba(251, 146, 60, 0.3);
+  background: rgba(251, 146, 60, 0.06);
+}
+.ws-streak-txt { font-size: 13px; color: var(--t-2); }
+.ws-streak-num { font-family: var(--font-mono); font-weight: 800; color: var(--orange); }
+
+/* ============================================================
    ANALYTICS — prototype gym.css .an- / .hf- port
    Heart-Fire streak, ECG line, trend chart, muscle XP distribution.
    ============================================================ */
