@@ -1962,17 +1962,52 @@ input, select, textarea {
   color: var(--t-hi);
 }
 .d-greet-hello .fz-cyan { text-shadow: 0 0 14px rgba(34, 211, 238, 0.5); cursor: pointer; }
+/* The name is an edit trigger: a real <button> reset to inline text, with a
+   dotted underline as the only affordance (a text-shadow alone read as
+   decoration, not as tappable). */
+.d-greet-name {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  text-decoration: underline dotted rgba(34, 211, 238, 0.4);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+  border-radius: 6px;
+  -webkit-tap-highlight-color: transparent;
+  transition: text-decoration-color var(--dur-2) ease, opacity var(--dur-1) ease;
+}
+.d-greet-name:hover { text-decoration-color: var(--cyan); }
+.d-greet-name:active { opacity: 0.7; }
+.d-greet-name:focus-visible { outline: 2px solid var(--line-cyan); outline-offset: 3px; }
 .d-greet-weight {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-top: 8px;
-  padding: 4px 10px 4px 12px;
+  padding: 4px 6px 4px 12px;
   background: rgba(7, 12, 24, 0.6);
   border: 1px solid var(--line-soft);
   border-radius: 999px;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    border-color var(--dur-2) ease,
+    background-color var(--dur-2) ease,
+    transform var(--dur-1) var(--ease-out);
 }
+/* Invisible hit-area extension → ~44px tall touch target. */
+.d-greet-weight::after { content: ""; position: absolute; inset: -7px -4px; }
+.d-greet-weight:hover { border-color: var(--line-cyan-soft); }
+.d-greet-weight:active { transform: scale(0.97); background-color: rgba(34, 211, 238, 0.06); }
+.d-greet-weight:focus-visible { outline: 2px solid var(--line-cyan); outline-offset: 2px; }
 .d-greet-weight .hud-label-sm { color: var(--t-3); letter-spacing: 0.16em; }
 .d-greet-weight-val { font-weight: 700; color: var(--t-hi); font-size: 13px; font-family: var(--font-mono); }
 .d-greet-unit { color: var(--t-3); font-weight: 500; font-size: 11px; }
@@ -1983,9 +2018,10 @@ input, select, textarea {
   border: 1px solid var(--line-cyan-soft);
   color: var(--cyan);
   display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer;
   margin-left: 2px;
+  transition: background-color var(--dur-2) ease, border-color var(--dur-2) ease;
 }
+.d-greet-weight:hover .d-greet-edit { background-color: rgba(34, 211, 238, 0.12); border-color: var(--line-cyan); }
 
 /* ─── Generic card ─── */
 .card {

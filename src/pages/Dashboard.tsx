@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { storageService } from '../services/storageService';
 import { WorkoutLog, Habit, MuscleGroup, GymSchedule, GymProfile, ExerciseDefinition, UserState } from '../types';
 import { Calendar, Edit3, Save, X, Plus, Play, Repeat, Activity, CheckCircle2, Sparkles, Pencil } from 'lucide-react';
@@ -6,7 +6,7 @@ import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 import { calculateStreak } from '../services/gamificationService';
 import { computeFatigue } from '../services/fatigueService';
 import { StatusCard } from '../components/StatusCard';
-import { SystemNotification, BodyAnatomy, splitExhaustedByView, CornerBracket, BodyTurntable, BodyViewToggle } from '../components/hud';
+import { SystemNotification, BodyAnatomy, splitExhaustedByView, CornerBracket, BodyTurntable, BodyViewToggle, HudDialog, CountUp } from '../components/hud';
 import { RecoveryCountdown, getRecoveringMuscles } from '../components/dashboard/RecoveryCountdown';
 import { useNavigate } from 'react-router-dom';
 
@@ -108,6 +108,21 @@ function useMinuteClock(): [number, () => void] {
   return [now, resync];
 }
 
+/**
+ * Weight field sanitiser: many Android keyboards type "65,5", which a
+ * type=number input silently turns into an empty value (Save disabled for no
+ * visible reason). Accept the comma as a decimal point, drop anything that
+ * isn't a digit and keep a single dot. handleWeightUpdate still parses it.
+ */
+const normalizeWeightInput = (raw: string): string => {
+  const s = raw.replace(/,/g, '.').replace(/[^0-9.]/g, '');
+  const dot = s.indexOf('.');
+  return dot === -1 ? s : s.slice(0, dot + 1) + s.slice(dot + 1).replace(/\./g, '');
+};
+
+/** "65" / "65.5" / "65.25" — no trailing zeros, like the stored value. */
+const formatWeight = (v: number): string => String(Math.round(v * 100) / 100);
+
 /** First-render read from the storageService cache (it is synchronous). */
 function readOr<T>(read: () => T, fallback: T): T {
   try {
@@ -171,6 +186,16 @@ export const Dashboard: React.FC = () => {
   // Muscle Recovery body view. The turn itself is animated inside
   // BodyTurntable (DOM-driven spring), so this page never re-renders per frame.
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
+
+  // The edit sheets keep showing the last typed value while they slide away
+  // (the save handlers clear the field in the same tick they close).
+  const lastWeightRef = useRef(newWeight);
+  if (editingWeight) lastWeightRef.current = newWeight;
+  const weightShown = editingWeight ? newWeight : lastWeightRef.current;
+  const weightValid = newWeight !== '' && Number.isFinite(parseFloat(newWeight));
+  const lastNameRef = useRef(newName);
+  if (editingName) lastNameRef.current = newName;
+  const nameShown = editingName ? newName : lastNameRef.current;
 
   useEffect(() => {
     const unsubscribe = storageService.subscribe(() => {
@@ -347,19 +372,29 @@ export const Dashboard: React.FC = () => {
       <section className="d-greet reveal" style={{ '--reveal-i': 0 } as React.CSSProperties}>
         <div className="d-greet-date">{formattedDate}</div>
         <h1 className="d-greet-hello">
-          {getGreeting()}, <span
-            className="fz-cyan"
+          {getGreeting()},{' '}
+          <button
+            type="button"
+            className="fz-cyan d-greet-name"
             onClick={() => { setNewName(userState?.name || ''); setEditingName(true); }}
-          >{userState?.name || 'Hunter'}</span>
+            aria-label={`Ubah nama, saat ini ${userState?.name || 'Hunter'}`}
+          >{userState?.name || 'Hunter'}</button>
         </h1>
-        <div
+        <button
+          type="button"
           className="d-greet-weight"
           onClick={() => { setNewWeight(userState?.weight?.toString() || ''); setEditingWeight(true); }}
+          aria-label={`Ubah berat badan${typeof userState?.weight === 'number' ? `, saat ini ${userState.weight} kg` : ''}`}
         >
           <span className="hud-label-sm">CURRENT WEIGHT:</span>
-          <span className="d-greet-weight-val">{userState?.weight ?? '--'} <span className="d-greet-unit">kg</span></span>
-          <button className="d-greet-edit" aria-label="Edit berat"><Pencil size={11} /></button>
-        </div>
+          <span className="d-greet-weight-val tnum">
+            {typeof userState?.weight === 'number'
+              ? <CountUp value={userState.weight} fromZero={false} decimals={1} format={formatWeight} />
+              : '--'}
+            {' '}<span className="d-greet-unit">kg</span>
+          </span>
+          <span className="d-greet-edit" aria-hidden="true"><Pencil size={11} /></span>
+        </button>
       </section>
 
       {/* ── 2. SYSTEM VERDICT (inline .sys-frame) ──
@@ -632,74 +667,79 @@ export const Dashboard: React.FC = () => {
         </ul>
       </article>
 
-      {/* ── Weight Update Modal ── */}
-      {editingWeight && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
-            <h3 className="text-xl font-bold text-white mb-4">Update Weight</h3>
-            <div className="relative mb-6">
-              <input
-                type="number"
-                value={newWeight}
-                onChange={(e) => setNewWeight(e.target.value)}
-                autoFocus
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-white text-lg focus:outline-none focus:border-cyan-500 transition-colors"
-                placeholder="Ex: 65.5"
-              />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">kg</span>
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setEditingWeight(false)}
-                className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-400 font-bold hover:bg-slate-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleWeightUpdate}
-                disabled={!newWeight}
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold hover:shadow-lg hover:shadow-cyan-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Update
-              </button>
-            </div>
+      {/* ── Weight / Name edit sheets ──
+          Shared HudDialog: portaled (a fixed overlay inside the transformed
+          route wrapper would anchor to it), real enter + exit, Esc/backdrop
+          dismiss, focus in and back. Bottom-anchored so the mobile keyboard
+          pushes the sheet up instead of jumping a centred box. A <form> per
+          sheet makes Enter / the keyboard's "done" key submit. */}
+      <HudDialog
+        open={editingWeight}
+        onClose={() => setEditingWeight(false)}
+        variant="sheet"
+        title="Perbarui Berat Badan"
+        subtitle="Status fisik"
+        footer={
+          <>
+            <button type="button" className="hd-btn hd-btn--ghost" onClick={() => setEditingWeight(false)}>Batal</button>
+            <button type="submit" form="d-weight-form" className="hd-btn hd-btn--primary" disabled={!weightValid}>Simpan</button>
+          </>
+        }
+      >
+        <form
+          id="d-weight-form"
+          onSubmit={(e) => { e.preventDefault(); if (weightValid) handleWeightUpdate(); }}
+        >
+          <div className="hd-field">
+            <input
+              className="hd-input tnum"
+              type="text"
+              inputMode="decimal"
+              enterKeyHint="done"
+              autoComplete="off"
+              maxLength={6}
+              value={weightShown}
+              onChange={(e) => setNewWeight(normalizeWeightInput(e.target.value))}
+              placeholder="cth: 65.5"
+              aria-label="Berat badan (kg)"
+            />
+            <span className="hd-input-suffix">kg</span>
           </div>
-        </div>
-      )}
+        </form>
+      </HudDialog>
 
-      {/* ── Name Update Modal ── */}
-      {editingName && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
-            <h3 className="text-xl font-bold text-white mb-4">Update Name</h3>
-            <div className="relative mb-6">
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                autoFocus
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-white text-lg focus:outline-none focus:border-cyan-500 transition-colors"
-                placeholder="Enter your name"
-              />
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setEditingName(false)}
-                className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-400 font-bold hover:bg-slate-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleNameUpdate}
-                disabled={!newName}
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold hover:shadow-lg hover:shadow-cyan-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Save
-              </button>
-            </div>
+      <HudDialog
+        open={editingName}
+        onClose={() => setEditingName(false)}
+        variant="sheet"
+        title="Ubah Nama Hunter"
+        subtitle="Identitas"
+        footer={
+          <>
+            <button type="button" className="hd-btn hd-btn--ghost" onClick={() => setEditingName(false)}>Batal</button>
+            <button type="submit" form="d-name-form" className="hd-btn hd-btn--primary" disabled={!newName.trim()}>Simpan</button>
+          </>
+        }
+      >
+        <form
+          id="d-name-form"
+          onSubmit={(e) => { e.preventDefault(); if (newName.trim()) handleNameUpdate(); }}
+        >
+          <div className="hd-field">
+            <input
+              className="hd-input"
+              type="text"
+              enterKeyHint="done"
+              autoComplete="nickname"
+              maxLength={24}
+              value={nameShown}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Nama Hunter-mu"
+              aria-label="Nama"
+            />
           </div>
-        </div>
-      )}
+        </form>
+      </HudDialog>
     </div>
   );
 };
