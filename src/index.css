@@ -403,13 +403,20 @@ button, [role="button"] {
   background: #1e293b;
   border-radius: 1rem;
   border: 1px solid #334155;
-  transition: all 0.3s ease;
+  /* Only the hover properties tween — `transition: all` made every incidental
+     class swap (borders, backgrounds) lag for 300ms. */
+  transition: border-color var(--dur-2) ease, box-shadow var(--dur-3) ease;
 }
 
-.jarvis-card:hover {
-  border-color: #475569;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  transform: translateY(-1px);
+/* Hover lift only on real hover devices. On touch, :hover sticks after a tap,
+   and the old translateY(-1px) left a transform on the card — turning it into
+   the containing block for any position:fixed child (the achievement sheet
+   anchored to the card instead of the viewport). No transform at all now. */
+@media (hover: hover) and (pointer: fine) {
+  .jarvis-card:hover {
+    border-color: #475569;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
 }
 
 /* Hover-capable pointers only — on touch a tap leaves :hover stuck on. */
@@ -648,11 +655,6 @@ button, [role="button"] {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: #ef4444;
-}
-
-/* --- Streak Fire Effect --- */
-.streak-fire {
-  text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
 }
 
 /* --- Responsive Helpers --- */
@@ -7248,7 +7250,10 @@ input, select, textarea {
   cursor: pointer;
   text-align: left;
   color: inherit;
+  /* Tap feedback before the sheet rises — without it the row feels dead. */
+  transition: transform var(--dur-1) var(--ease-out), border-color var(--dur-2) ease, background-color var(--dur-2) ease;
 }
+.s-ach:active { transform: scale(0.985); border-color: var(--line-cyan-soft); background-color: rgba(34, 211, 238, 0.04); }
 .s-ach.is-featured { border-color: rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.04); }
 .s-ach.is-locked { opacity: 0.65; }
 .s-ach.is-done { background: linear-gradient(90deg, rgba(251, 191, 36, 0.04), transparent 80%), rgba(7, 12, 24, 0.5); }
@@ -7256,7 +7261,15 @@ input, select, textarea {
 .s-ach-name { font-size: 13px; font-weight: 700; color: var(--t-hi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .s-ach-desc { font-size: 11px; color: var(--t-3); margin-top: 1px; line-height: 1.35; }
 .s-ach-bar { margin-top: 6px; height: 3px; border-radius: 999px; background: rgba(251, 191, 36, 0.08); overflow: hidden; }
-.s-ach-bar-fill { height: 100%; background: linear-gradient(90deg, #FBBF24, #FB923C); }
+.s-ach-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #FBBF24, #FB923C);
+  transform-origin: 0 50%;
+  /* Charges from empty when the row mounts; later progress tweens width. */
+  animation: sAchFill 700ms var(--ease-out-expo) 200ms backwards;
+  transition: width 600ms var(--ease-out-expo);
+}
+@keyframes sAchFill { from { transform: scaleX(0); } }
 .s-ach-right { text-align: right; display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
 .s-ach-xp {
   font-size: 11px; font-weight: 700;
@@ -7287,28 +7300,33 @@ input, select, textarea {
 .s-ach-viewall:hover { background: rgba(34, 211, 238, 0.1); }
 .s-ach-viewall-arr { font-size: 16px; }
 
-/* Achievement modal */
+/* Achievement modal — portaled to <body> (AchievementModal.tsx) with a
+   usePresence enter/exit. The sheet arrives on --ease-out-expo (no overshoot,
+   so it never lifts off the bottom edge and shows a strip of backdrop) and
+   leaves ~30% faster on --ease-in. The backdrop blur stays constant; only
+   its opacity animates, because re-blurring the whole screen every frame is
+   the most expensive thing you can animate on a mid-range Android phone. */
 .am-root {
   position: fixed; inset: 0; z-index: 300;
-  pointer-events: none;
 }
+.am-root[data-state="exit"] { pointer-events: none; }
 .am-backdrop {
   position: absolute; inset: 0;
-  background: rgba(4, 6, 13, 0);
-  backdrop-filter: blur(0px);
-  transition: background 240ms ease, backdrop-filter 240ms ease;
-  pointer-events: none;
-}
-.am-root.is-open .am-backdrop {
   background: rgba(4, 6, 13, 0.7);
   backdrop-filter: blur(8px);
-  pointer-events: auto;
+  -webkit-backdrop-filter: blur(8px);
 }
+.am-root[data-state="enter"] .am-backdrop { animation: amFadeIn var(--dur-3) ease-out backwards; }
+.am-root[data-state="exit"]  .am-backdrop { animation: amFadeOut var(--dur-2) var(--ease-in) forwards; }
 .am-panel {
   position: absolute;
   left: 0; right: 0; bottom: 0;
+  margin: 0 auto;
+  max-width: 560px;
   max-height: 86vh;
+  max-height: 86dvh;
   overflow-y: auto;
+  overscroll-behavior: contain;       /* a fling inside the sheet never scrolls the page behind */
   scrollbar-width: none;
   border-top-left-radius: 22px;
   border-top-right-radius: 22px;
@@ -7317,28 +7335,52 @@ input, select, textarea {
     linear-gradient(180deg, rgba(15, 21, 37, 0.96), rgba(7, 11, 22, 0.99));
   border: 1px solid var(--line-cyan-soft);
   border-bottom: 0;
-  padding: 22px 18px 24px;
-  transform: translateY(100%);
-  transition: transform 360ms var(--ease-spring);
-  pointer-events: auto;
+  padding: 26px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+  outline: none;
   box-shadow:
     inset 0 1px 0 rgba(34, 211, 238, 0.18),
     0 -20px 60px -10px rgba(0, 0, 0, 0.85),
     0 0 50px -10px rgba(34, 211, 238, 0.35);
 }
 .am-panel::-webkit-scrollbar { display: none; }
-.am-root.is-open .am-panel { transform: translateY(0); }
+.am-root[data-state="enter"] .am-panel { animation: amSheetIn var(--dur-4) var(--ease-out-expo) backwards; }
+.am-root[data-state="exit"]  .am-panel { animation: amSheetOut var(--dur-2) var(--ease-in) forwards; }
+@keyframes amFadeIn   { from { opacity: 0; } }
+@keyframes amFadeOut  { to   { opacity: 0; } }
+@keyframes amSheetIn  { from { transform: translateY(100%); } }
+@keyframes amSheetOut { to   { transform: translateY(100%); } }
+.am-grabber {
+  position: absolute;
+  top: 8px; left: 50%;
+  width: 36px; height: 4px;
+  margin-left: -18px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
 .am-close {
   position: absolute;
-  top: 14px; right: 14px;
-  width: 30px; height: 30px;
+  top: 12px; right: 12px;
+  width: 36px; height: 36px;
   border-radius: 50%;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.04);
   color: var(--t-2);
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-out), color var(--dur-2) ease, border-color var(--dur-2) ease;
 }
+.am-close::after { content: ''; position: absolute; inset: -4px; }   /* 44px hit area */
+.am-close:active { transform: scale(0.92); color: var(--t-hi); border-color: var(--line-strong); }
+/* Contents land after the sheet: emblem pops, tier cells cascade, the
+   progress bar charges from empty. All `backwards` fill, so nothing keeps a
+   transform once settled. */
+.am-root[data-state="enter"] .am-emblem-wrap { animation: amEmblemPop var(--dur-5) var(--ease-spring) 120ms backwards; }
+.am-root[data-state="enter"] .am-tier {
+  animation: amTierIn 420ms var(--ease-out-expo) backwards;
+  animation-delay: calc(220ms + var(--i, 0) * 45ms);
+}
+@keyframes amEmblemPop { from { opacity: 0; transform: scale(0.6) rotate(-10deg); } }
+@keyframes amTierIn    { from { opacity: 0; transform: translateY(8px) scale(0.96); } }
 .am-header { text-align: center; }
 .am-emblem-wrap {
   display: inline-flex;
@@ -7382,8 +7424,11 @@ input, select, textarea {
   height: 100%;
   background: linear-gradient(90deg, #67E8F9, #22D3EE 60%, #3B82F6);
   box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
-  transition: width 600ms var(--ease-spring);
+  transform-origin: 0 50%;
+  transition: width 600ms var(--ease-out-expo);
 }
+.am-root[data-state="enter"] .am-next-progress-fill { animation: amFill 800ms var(--ease-out-expo) 280ms backwards; }
+@keyframes amFill { from { transform: scaleX(0); } }
 .am-next-meta {
   margin-top: 6px;
   font-size: 10.5px; letter-spacing: 0.1em;
@@ -7407,6 +7452,588 @@ input, select, textarea {
 .am-tier.is-reached { border-color: rgba(34, 211, 238, 0.3); background: rgba(34, 211, 238, 0.03); }
 .am-tier-name { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; font-family: var(--font-mono); }
 .am-tier-req { font-size: 10px; color: var(--t-mute); letter-spacing: 0.04em; font-family: var(--font-mono); }
+
+/* ============================================================
+   PROFILE & STATUS — Profile page (HunterCard / Penghargaan /
+   Compare / forms), StatusCard, AchievementGallery, Leaderboard,
+   achievement unlock toast, streak-freeze tokens.
+   Prefixes: .pf-* Profile · .stc-* StatusCard · .agl-* gallery ·
+   .lbr-* leaderboard · .ach-* unlock toast · .tok-* tokens.
+   Motion is transform/opacity with `backwards` fill (nothing keeps a
+   transform once settled) unless noted.
+   ============================================================ */
+
+/* ─── Achievement unlock toast (AchievementNotification.tsx) ─── */
+.ach-stack {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 0; right: 0;
+  z-index: 85;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+.ach-toast {
+  --ach-c: #94A3B8;
+  --ach-line: rgba(148, 163, 184, 0.35);
+  --ach-tint: rgba(148, 163, 184, 0.14);
+  --ach-glow: rgba(148, 163, 184, 0.35);
+  width: min(24rem, calc(100% - 2rem));
+  display: grid;
+  grid-template-rows: 1fr;
+  pointer-events: auto;
+  animation: achToastIn var(--dur-4) var(--ease-spring-soft) backwards;
+  transition:
+    grid-template-rows var(--dur-3) var(--ease-out-expo),
+    opacity var(--dur-2) var(--ease-in),
+    transform var(--dur-2) var(--ease-in);
+}
+.ach-toast[data-rarity="bronze"]    { --ach-c: #F0A77B; --ach-line: rgba(205, 127, 50, 0.5);  --ach-tint: rgba(205, 127, 50, 0.2);  --ach-glow: rgba(205, 127, 50, 0.45); }
+.ach-toast[data-rarity="silver"]    { --ach-c: #E2E8F0; --ach-line: rgba(203, 213, 225, 0.5); --ach-tint: rgba(203, 213, 225, 0.14); --ach-glow: rgba(226, 232, 240, 0.4); }
+.ach-toast[data-rarity="purple"]    { --ach-c: #C4B5FD; --ach-line: rgba(167, 139, 250, 0.55); --ach-tint: rgba(167, 139, 250, 0.2); --ach-glow: rgba(167, 139, 250, 0.5); }
+.ach-toast[data-rarity="gold"]      { --ach-c: #FBBF24; --ach-line: rgba(245, 197, 24, 0.55); --ach-tint: rgba(245, 197, 24, 0.18); --ach-glow: rgba(245, 197, 24, 0.5); }
+.ach-toast[data-rarity="legendary"] { --ach-c: #FDBA74; --ach-line: rgba(251, 146, 60, 0.65); --ach-tint: rgba(249, 115, 22, 0.24); --ach-glow: rgba(249, 115, 22, 0.6); }
+.ach-toast[data-rarity="mythic"]    { --ach-c: #F0ABFC; --ach-line: rgba(168, 85, 247, 0.7);  --ach-tint: rgba(168, 85, 247, 0.26); --ach-glow: rgba(168, 85, 247, 0.65); }
+/* Leaving: the slot collapses (toasts below glide up) while the card lifts
+   away. Clipping only while leaving so the rarity glow isn't cut off. */
+.ach-toast[data-state="exit"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-10px) scale(0.97);
+  pointer-events: none;
+}
+.ach-toast-clip { min-height: 0; }
+.ach-toast[data-state="exit"] .ach-toast-clip { overflow: hidden; }
+.ach-toast-card {
+  position: relative;
+  margin-bottom: 8px;           /* the gap lives inside the clip, so it collapses too */
+  border-radius: 16px;
+  border: 1px solid var(--ach-line);
+  background:
+    radial-gradient(120% 100% at 0% 0%, var(--ach-tint), transparent 62%),
+    linear-gradient(180deg, rgba(20, 28, 48, 0.97), rgba(7, 11, 22, 0.98));
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.9), 0 0 28px -10px var(--ach-glow);
+  overflow: hidden;             /* sheen + countdown clip to the rounded card */
+}
+.ach-toast-body { display: flex; align-items: flex-start; gap: 12px; padding: 14px 44px 16px 14px; }
+.ach-toast-emblem {
+  display: inline-flex;
+  flex-shrink: 0;
+  animation: achEmblemPop var(--dur-5) var(--ease-spring) 140ms backwards;
+}
+.ach-toast-info { min-width: 0; flex: 1; }
+.ach-toast-kicker {
+  display: flex; align-items: center; gap: 5px;
+  margin-bottom: 2px;
+  font-family: var(--font-mono);
+  font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ach-c);
+}
+.ach-toast-rarity { color: var(--t-3); }
+.ach-toast-title { margin: 0; font-size: 14px; font-weight: 800; line-height: 1.25; color: var(--t-hi); }
+.ach-toast-desc { margin: 2px 0 0; font-size: 11.5px; line-height: 1.4; color: var(--t-2); }
+.ach-toast-rewards { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 7px; }
+.ach-toast-reward {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700;
+  color: var(--cyan-bright);
+}
+.ach-toast-close {
+  position: absolute; top: 6px; right: 6px; z-index: 2;
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 10px;
+  background: transparent;
+  color: var(--t-3);
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-out), color var(--dur-2) ease, background-color var(--dur-2) ease;
+}
+.ach-toast-close::after { content: ''; position: absolute; inset: -6px; }   /* 44px hit area */
+.ach-toast-close:active { transform: scale(0.9); color: var(--t-hi); background: rgba(255, 255, 255, 0.06); }
+/* Visual countdown; pauses with the JS timer while pressed/hovered. */
+.ach-toast-timer {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: var(--ach-c);
+  opacity: 0.55;
+  transform-origin: 0 50%;
+  animation: achTimer 5s linear forwards;
+}
+.ach-toast[data-paused] .ach-toast-timer { animation-play-state: paused; }
+/* Legendary / mythic get a one-shot sheen across the card. */
+.ach-toast[data-rarity="legendary"] .ach-toast-card::after,
+.ach-toast[data-rarity="mythic"] .ach-toast-card::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.2) 50%, transparent 65%);
+  transform: translateX(-100%);
+  animation: achSheen 900ms var(--ease-out) 350ms forwards;
+}
+@keyframes achToastIn   { from { opacity: 0; transform: translateY(-28px) scale(0.94); } }
+@keyframes achEmblemPop { 0% { opacity: 0; transform: scale(0.3) rotate(-20deg); } 70% { transform: scale(1.1); } }
+@keyframes achTimer     { to { transform: scaleX(0); } }
+@keyframes achSheen     { to { transform: translateX(100%); } }
+
+/* ─── Shared utilities (profile area) ─── */
+.pf-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+/* Progress fill that charges from empty on mount. The inline `width` stays
+   the source of truth (later value changes tween it); the mount animation is
+   a composited scaleX, staggered with --bar-delay. */
+.pf-grow {
+  transform-origin: 0 50%;
+  animation: pfBarGrow 900ms var(--ease-out-expo) backwards;
+  animation-delay: var(--bar-delay, 180ms);
+  transition: width 700ms var(--ease-out-expo);
+}
+@keyframes pfBarGrow { from { transform: scaleX(0); } }
+/* Sheen sweeping across an (absolutely positioned) fill — a transform on a
+   pseudo-element, unlike the old `.shimmer` background-position loop that
+   repainted every frame while being nearly invisible on a bright fill. */
+.pf-sheen { overflow: hidden; }
+.pf-sheen::after {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.28) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: pfBarSheen 3.2s var(--ease-in-out) 1.6s infinite;
+}
+@keyframes pfBarSheen { 0% { transform: translateX(-100%); } 55%, 100% { transform: translateX(100%); } }
+[data-paused] .pf-sheen::after { animation-play-state: paused; }
+
+/* Height collapse via grid rows (0fr ↔ 1fr) — animates to the content's real
+   height without measuring. No vertical padding on the inner box (it would
+   leave a sliver when closed); the small horizontal bleed keeps focus rings
+   at the edges from being clipped. Loops inside pause while closed. */
+.pf-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-3) var(--ease-in-out);
+}
+.pf-collapse[data-open="true"] {
+  grid-template-rows: 1fr;
+  transition-duration: var(--dur-4);
+  transition-timing-function: var(--ease-out-expo);
+}
+.pf-collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+  margin: 0 -4px;
+  padding: 0 4px;
+  opacity: 0;
+  transition: opacity var(--dur-2) ease;
+}
+.pf-collapse[data-open="true"] > .pf-collapse-inner { opacity: 1; transition-delay: 40ms; }
+.pf-collapse:not([data-open="true"]) .pf-collapse-inner * { animation-play-state: paused; }
+@keyframes pfSubIn { from { opacity: 0; transform: translateY(8px); } }
+
+/* ─── Profile page (Profile.tsx — rendered inside Settings → My Profile) ───
+   Glows are painted radial gradients: the old blur-3xl blobs (64px filter on
+   288px boxes) were re-rasterized every time the bar sheens repainted. */
+.pf-hero {
+  position: relative;
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 18px 16px 16px;
+  border-radius: var(--r-4);
+  border: 1px solid var(--line-cyan-soft);
+  background:
+    radial-gradient(90% 70% at 100% 0%, rgba(34, 211, 238, 0.16), transparent 60%),
+    radial-gradient(80% 70% at 0% 100%, rgba(59, 130, 246, 0.10), transparent 60%),
+    linear-gradient(180deg, rgba(15, 21, 37, 0.92), rgba(7, 11, 22, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(34, 211, 238, 0.14),
+    0 18px 40px -26px rgba(0, 0, 0, 0.9),
+    0 0 32px -18px rgba(34, 211, 238, 0.45);
+}
+@media (min-width: 420px) { .pf-hero { padding: 22px 20px 20px; } }
+.pf-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: 0.25em; text-transform: uppercase;
+  color: rgba(34, 211, 238, 0.8);
+}
+.pf-hero-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pf-hero-name { margin: 4px 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; color: var(--t-hi); overflow-wrap: anywhere; }
+.pf-hero-title { margin: 3px 0 0; font-family: var(--font-mono); font-size: 13px; }
+.pf-hero-rank { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+.pf-hero-rank-name { font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
+/* XP gets the widest tile: "123.456" must fit at 320px. */
+.pf-stats { display: grid; grid-template-columns: 1fr 1.45fr 1fr; gap: 8px; }
+.pf-stat {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background: rgba(7, 12, 24, 0.55);
+}
+.pf-stat-label {
+  font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--t-3);
+  white-space: nowrap;
+}
+.pf-stat-val {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: clamp(17px, 5.2vw, 22px); font-weight: 800; line-height: 1.2;
+  color: var(--t-hi);
+  white-space: nowrap;
+}
+.pf-stat-val.is-cyan { color: var(--cyan-bright); }
+
+/* Progress tracks (fills use the shared .pf-grow / .pf-sheen above). */
+.pf-bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.pf-bar-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--t-2); white-space: nowrap; }
+.pf-bar-meta { font-family: var(--font-mono); font-size: 11px; color: var(--cyan-bright); white-space: nowrap; }
+.pf-track {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: rgba(4, 6, 13, 0.8);
+  overflow: hidden;
+}
+.pf-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: inherit; }
+.pf-fill-xp     { background: linear-gradient(90deg, var(--cyan), var(--blue) 55%, #8B5CF6); box-shadow: 0 0 12px rgba(34, 211, 238, 0.5); }
+.pf-fill-streak { background: linear-gradient(90deg, var(--xp-1), var(--xp-3) 55%, var(--red)); box-shadow: 0 0 12px rgba(249, 115, 22, 0.5); }
+.pf-fill-you    { background: linear-gradient(90deg, var(--cyan), var(--blue)); box-shadow: 0 0 10px rgba(34, 211, 238, 0.45); }
+.pf-fill-rival  { background: linear-gradient(90deg, #A855F7, #D946EF); box-shadow: 0 0 10px rgba(168, 85, 247, 0.45); }
+.pf-bar-foot {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  margin-top: 5px;
+  font-family: var(--font-mono); font-size: 9.5px;
+  color: var(--t-3);
+}
+.pf-bar-pct { font-size: 10.5px; font-weight: 700; color: var(--cyan-bright); }
+
+/* Streak row — the Profile's streak moment. */
+.pf-streak {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px 10px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(251, 146, 60, 0.3);
+  background:
+    linear-gradient(90deg, rgba(251, 146, 60, 0.12), rgba(251, 191, 36, 0.04) 45%, transparent 85%),
+    rgba(7, 12, 24, 0.4);
+}
+.pf-streak.is-cold { border-color: var(--line); background: rgba(7, 12, 24, 0.5); }
+.pf-streak-flame { display: grid; place-items: center; width: 48px; height: 48px; flex-shrink: 0; }
+.pf-streak-main { min-width: 0; flex: 1; }
+.pf-streak-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--xp-1);
+}
+.pf-streak.is-cold .pf-streak-label { color: var(--t-3); }
+.pf-streak-val {
+  display: flex; align-items: baseline; gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 24px; font-weight: 800; line-height: 1.15;
+  color: var(--t-hi);
+}
+.pf-streak-unit { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: var(--t-2); }
+.pf-streak-hint { margin: 2px 0 0; font-size: 11px; color: var(--t-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-streak-best { flex-shrink: 0; text-align: right; }
+.pf-streak-best-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--t-3); }
+.pf-streak-best-val {
+  display: flex; align-items: baseline; justify-content: flex-end; gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 18px; font-weight: 700;
+  color: var(--t-1);
+}
+
+/* Section shell pieces (sections reuse Settings' .s-section). */
+.pf-stack { display: flex; flex-direction: column; gap: 14px; }
+.pf-stack > .s-section-head { margin-bottom: 0; }
+.pf-sec-sub { margin: 1px 0 0; font-family: var(--font-mono); font-size: 10.5px; color: var(--t-3); }
+.pf-panel {
+  position: relative;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background: rgba(7, 12, 24, 0.5);
+}
+.pf-panel-rank   { background: radial-gradient(70% 90% at 100% 0%, rgba(34, 211, 238, 0.09), transparent 60%), rgba(7, 12, 24, 0.5); }
+.pf-panel-streak { background: radial-gradient(70% 90% at 0% 0%, rgba(251, 146, 60, 0.09), transparent 60%), rgba(7, 12, 24, 0.5); }
+.pf-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.pf-panel-kicker {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+  white-space: nowrap;
+}
+.pf-panel-meta { font-family: var(--font-mono); font-size: 10px; color: var(--t-3); white-space: nowrap; }
+.pf-milestones { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.pf-milestone-sub { font-family: var(--font-mono); font-size: 9px; color: var(--t-3); }
+.pf-milestone-emoji { font-size: 22px; line-height: 1; }
+.pf-milestone-emoji.is-next { opacity: 0.5; filter: grayscale(0.4); }
+
+/* Compare card. */
+.pf-mini-btn {
+  position: relative;
+  flex-shrink: 0;
+  min-height: 36px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  background: rgba(168, 85, 247, 0.08);
+  color: #D8B4FE;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-out), background-color var(--dur-2) ease, opacity var(--dur-2) ease;
+}
+.pf-mini-btn::after { content: ''; position: absolute; inset: -4px; }   /* 44px hit area */
+.pf-mini-btn:active { transform: scale(0.96); background-color: rgba(168, 85, 247, 0.16); }
+.pf-mini-btn:disabled { opacity: 0.6; cursor: wait; }
+.pf-cmp-skel { display: flex; flex-direction: column; gap: 12px; }
+.pf-skel {
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background: rgba(7, 12, 24, 0.5);
+  animation: wf-skeleton-pulse 1.4s ease-in-out infinite;
+}
+/* Opponent switch: the keyed VS block cross-fades in (backwards fill). */
+.pf-swap { animation: pfSwapIn var(--dur-4) var(--ease-out-expo) backwards; }
+@keyframes pfSwapIn { from { opacity: 0; transform: translateY(6px); } }
+.pf-cmp-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) 64px; align-items: center; gap: 8px; }
+.pf-cmp-who { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; }
+.pf-cmp-track {
+  position: relative;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid var(--line-soft);
+  background: rgba(4, 6, 13, 0.8);
+  overflow: hidden;
+}
+.pf-cmp-val { text-align: right; font-family: var(--font-mono); font-size: 12px; font-weight: 700; white-space: nowrap; }
+
+/* ─── StatusCard (Dashboard) ─── */
+.stc {
+  padding: 0;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(34, 211, 238, 0.12), transparent 45%),
+    radial-gradient(circle at 0% 100%, rgba(59, 130, 246, 0.08), transparent 50%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0) 30%),
+    linear-gradient(180deg, var(--glass-1), rgba(10, 14, 26, 0.75));
+}
+.stc-toggle {
+  width: 100%;
+  min-height: 46px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: var(--r-3) var(--r-3) 0 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-2) ease;
+}
+.stc-toggle:active { background-color: rgba(34, 211, 238, 0.05); }
+.stc-toggle-hint {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--t-3);
+}
+.stc-chev { flex-shrink: 0; color: var(--t-2); transition: transform var(--dur-3) var(--ease-out-expo); }
+.stc-chev.is-open { transform: rotate(180deg); }
+.stc-main { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px 14px; }
+.stc-identity { display: flex; align-items: center; gap: 12px; }
+.stc-level { font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--t-hi); }
+.stc-job {
+  margin: 1px 0 0;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--cyan-bright);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.stc-streak {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px 5px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 146, 60, 0.35);
+  background: rgba(251, 146, 60, 0.07);
+}
+.stc-streak.is-cold { border-color: var(--line); background: rgba(7, 12, 24, 0.5); }
+.stc-streak-num {
+  display: inline-flex; align-items: baseline; gap: 3px;
+  font-family: var(--font-mono); font-size: 14px; font-weight: 800;
+  color: var(--t-hi);
+}
+.stc-streak-unit { font-size: 9.5px; font-weight: 500; letter-spacing: 0.08em; color: var(--t-3); }
+.stc-attrs { display: flex; flex-direction: column; gap: 6px; }
+.stc-attr { display: flex; align-items: center; gap: 8px; }
+.stc-attr-key { width: 28px; font-family: var(--font-mono); font-size: 10px; color: rgba(34, 211, 238, 0.8); }
+.stc-attr-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: rgba(7, 12, 24, 0.7);
+  overflow: hidden;
+}
+.stc-attr-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--cyan), var(--blue)); }
+.stc-attr-val { width: 28px; text-align: right; font-family: var(--font-mono); font-size: 12px; color: var(--t-hi); }
+.stc-fatigue { padding-top: 10px; border-top: 1px solid var(--line-soft); }
+.stc-fatigue-note { margin: 4px 0 0; font-family: var(--font-mono); font-size: 10px; color: var(--t-3); }
+.stc-body { display: flex; flex-direction: column; gap: 10px; padding: 0 14px 14px; }
+.stc-sub {
+  padding: 12px;
+  border-radius: var(--r-2);
+  border: 1px solid var(--line-soft);
+  background: rgba(7, 12, 24, 0.5);
+}
+.stc-sub-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.stc-cell { padding-top: 8px; padding-bottom: 8px; border-radius: 8px; border: 1px solid var(--line-soft); background: rgba(15, 21, 37, 0.6); }
+.stc-cell-key { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(34, 211, 238, 0.8); }
+.stc-cell-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--t-3); }
+.stc-cell-val { display: block; margin-top: 2px; font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: var(--t-hi); }
+.stc-rank-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: rgba(7, 12, 24, 0.8);
+  overflow: hidden;
+}
+.stc-rank-fill {
+  position: absolute; top: 0; bottom: 0; left: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--blue), #8B5CF6);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+}
+.stc-sub-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 2px 4px 0;
+  font-family: var(--font-mono); font-size: 9px;
+  color: var(--t-3);
+}
+/* Sub-panels cascade in every time the body opens. */
+.pf-collapse[data-open="true"] :is(.stc-sub, .stc-sub-foot) {
+  animation: pfSubIn 420ms var(--ease-out-expo) backwards;
+  animation-delay: calc(var(--i, 0) * 50ms + 80ms);
+}
+
+/* ─── Streak Freeze tokens (TokenDisplay.tsx) ─── */
+.tok { display: flex; align-items: center; gap: 6px; }
+.tok--sm { gap: 4px; }
+.tok--lg { gap: 8px; }
+.tok-slot {
+  position: relative;
+  display: inline-grid; place-items: center;
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  border: 1px dashed var(--line-strong);
+  background: rgba(7, 12, 24, 0.5);
+  color: var(--t-mute);
+  transition: color var(--dur-2) ease, border-color var(--dur-2) ease, background-color var(--dur-2) ease, box-shadow var(--dur-3) ease;
+}
+.tok--sm .tok-slot { width: 20px; height: 20px; border-radius: 5px; }
+.tok--lg .tok-slot { width: 40px; height: 40px; border-radius: 10px; }
+.tok-slot.is-filled {
+  border: 1px solid rgba(103, 232, 249, 0.55);
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+  color: #fff;
+  box-shadow: 0 0 12px -2px rgba(34, 211, 238, 0.55);
+}
+/* Earned: the new shield pops into its slot. */
+.tok-slot.is-gain { animation: tokGain var(--dur-5) var(--ease-spring) var(--tok-fx-delay, 0ms) backwards; }
+/* Spent: a filled ghost shield sits over the vacated slot and shatters away
+   (`both` fill so it shows filled during the delay and stays gone after). */
+.tok-ghost {
+  position: absolute; inset: -1px;
+  display: grid; place-items: center;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+  color: #fff;
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.6);
+  pointer-events: none;
+  animation: tokSpend 650ms var(--ease-in) var(--tok-fx-delay, 0ms) both;
+}
+@keyframes tokGain  { 0% { opacity: 0; transform: scale(0.4) rotate(-20deg); } 60% { opacity: 1; transform: scale(1.15); } }
+@keyframes tokSpend {
+  0%   { opacity: 1; transform: none; }
+  30%  { opacity: 1; transform: scale(1.15) rotate(-6deg); }
+  100% { opacity: 0; transform: scale(0.3) rotate(20deg); }
+}
+
+/* ─── Streak-save moment (TokenUsedModal.tsx, inside HudDialog) ─── */
+.tok-dialog .hd-head { text-align: center; }
+.tok-hero {
+  position: relative;
+  width: 88px; height: 88px;
+  margin: 2px auto 14px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(103, 232, 249, 0.16), transparent 72%);
+}
+.tok-ice {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(103, 232, 249, 0.5);
+  animation: tokIce 9s linear infinite;
+}
+.tok-stamp {
+  position: absolute; right: 4px; bottom: 4px;
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+  box-shadow: 0 0 0 3px rgba(7, 11, 22, 0.95), 0 0 16px rgba(34, 211, 238, 0.6);
+  animation: tokStamp 560ms var(--ease-spring) 220ms backwards;
+}
+.tok-stamp-ring {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--cyan);
+  opacity: 0;
+  animation: tokRing 700ms var(--ease-out) 540ms;
+}
+.tok-copy { margin: 0 0 12px; text-align: center; }
+.tok-copy b { color: var(--t-hi); font-weight: 700; }
+.tok-saved {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: fit-content;
+  margin: 0 auto 14px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 146, 60, 0.35);
+  background: rgba(251, 146, 60, 0.07);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--t-1);
+}
+.tok-saved-num {
+  display: inline-block;
+  font-weight: 800;
+  color: var(--orange);
+  animation: tokNumPop 460ms var(--ease-spring) 760ms backwards;
+}
+.tok-remaining {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background: rgba(7, 12, 24, 0.55);
+}
+@keyframes tokIce    { to { transform: rotate(360deg); } }
+@keyframes tokStamp  { 0% { opacity: 0; transform: scale(1.9) rotate(-14deg); } 60% { opacity: 1; transform: scale(0.9) rotate(3deg); } }
+@keyframes tokRing   { from { opacity: 0.9; transform: scale(0.7); } to { opacity: 0; transform: scale(2.2); } }
+@keyframes tokNumPop { 0% { opacity: 0; transform: scale(0.6); } 60% { opacity: 1; transform: scale(1.25); } }
 
 /* ============================================================
    SYSTEM NOTIFICATION extras (sn-btn / sn-timer / sn-target / sn-warn)

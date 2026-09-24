@@ -1,116 +1,143 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles, X, Zap, Shield } from 'lucide-react';
 import type { AchievementUnlock } from '../services/achievementService';
-import type { AchievementRarity } from '../services/gamificationService';
+import { AchievementEmblem, tierFromRarity, EmblemCategory } from './AchievementEmblem';
+import { prefersReducedMotion } from '../hooks/usePresence';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ACHIEVEMENT NOTIFICATION — single auto-dismissing toast for one unlock.
-// Multiple unlocks render as a stack (parent maps the queue, each toast
-// owns its own 5s timer + dismiss handler).
+//
+// The stack is ONE fixed flow container (not N fixed toasts at top+i*110px),
+// so toasts keep their natural height and a leaving toast collapses its own
+// slot (grid-template-rows 1fr → 0fr) while the ones below glide up instead
+// of teleporting. Each toast drops in from the top edge it's pinned to, shows
+// the same crafted emblem the gallery uses, and plays a short exit before the
+// queue drops it. Pressing / hovering pauses the 5s countdown.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const RARITY_GRADIENT: Record<AchievementRarity, string> = {
-  iron:      'from-slate-700 via-slate-800 to-slate-950',
-  bronze:    'from-amber-800 via-slate-900 to-slate-950',
-  silver:    'from-slate-500 via-slate-800 to-slate-950',
-  purple:    'from-purple-700 via-slate-900 to-slate-950',
-  gold:      'from-yellow-600 via-slate-900 to-slate-950',
-  legendary: 'from-orange-600 via-red-900 to-slate-950',
-  mythic:    'from-cyan-600 via-blue-900 to-slate-950',
-};
+const VISIBLE_MS = 5000;
+/** Matches the `.ach-toast[data-state="exit"]` collapse (--dur-3 ≈ 260ms). */
+const EXIT_MS = 240;
+/** More unlocks wait in the queue and slide in as earlier ones leave. */
+const MAX_VISIBLE = 3;
 
-const RARITY_RING: Record<AchievementRarity, string> = {
-  iron:      'border-slate-500/40 shadow-slate-500/40',
-  bronze:    'border-amber-700/50 shadow-amber-700/40',
-  silver:    'border-slate-300/50 shadow-slate-300/40',
-  purple:    'border-purple-500/60 shadow-purple-500/50',
-  gold:      'border-yellow-400/60 shadow-yellow-400/50',
-  legendary: 'border-orange-500/70 shadow-orange-500/60',
-  mythic:    'border-cyan-400/70 shadow-cyan-400/60',
-};
+const TIER_INDEX = ['bronze', 'silver', 'gold', 'platinum', 'mythic'];
 
 interface Props {
   unlock: AchievementUnlock;
   onDismiss: () => void;
-  /** Display offset for stacked toasts (px). Parent computes this. */
-  offsetY?: number;
 }
 
-export const AchievementNotification: React.FC<Props> = ({ unlock, onDismiss, offsetY = 0 }) => {
+export const AchievementNotification: React.FC<Props> = ({ unlock, onDismiss }) => {
   const a = unlock.achievement;
-  const gradient = RARITY_GRADIENT[a.rarity];
-  const ring = RARITY_RING[a.rarity];
+  const tier = tierFromRarity(a.rarity);
+  const category = (a.category || 'workout') as EmblemCategory;
 
+  const [leaving, setLeaving] = useState(false);
+  const [paused, setPaused] = useState(false);
+
+  // The parent passes a fresh `() => onDismiss(id)` every render; reading it
+  // through a ref keeps the countdown from restarting on every queue change.
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
+  const remainingRef = useRef(VISIBLE_MS);
+
+  // Countdown that survives re-renders and can be paused (press/hover).
   useEffect(() => {
-    const t = window.setTimeout(onDismiss, 5000);
+    if (leaving || paused) return;
+    const started = performance.now();
+    const t = window.setTimeout(() => setLeaving(true), remainingRef.current);
+    return () => {
+      window.clearTimeout(t);
+      remainingRef.current = Math.max(0, remainingRef.current - (performance.now() - started));
+    };
+  }, [leaving, paused]);
+
+  // Play the exit, then let the queue drop it. Not driven by animationend:
+  // under reduced motion keyframes run for 1ms and could fire it instantly
+  // (fine) — but a backgrounded tab may never fire it at all.
+  useEffect(() => {
+    if (!leaving) return;
+    const t = window.setTimeout(() => dismissRef.current(), prefersReducedMotion() ? 0 : EXIT_MS);
     return () => window.clearTimeout(t);
-  }, [onDismiss]);
+  }, [leaving]);
 
   return (
     <div
-      className="fixed left-1/2 -translate-x-1/2 z-[85] w-[calc(100%-2rem)] max-w-sm"
-      style={{ top: `${16 + offsetY}px` }}
-      role="status"
-      aria-live="polite"
+      className="ach-toast"
+      data-state={leaving ? 'exit' : 'enter'}
+      data-rarity={a.rarity}
+      data-paused={paused ? '' : undefined}
+      onPointerEnter={() => setPaused(true)}
+      onPointerLeave={() => setPaused(false)}
+      onPointerCancel={() => setPaused(false)}
     >
-      <div className={`relative rounded-2xl border bg-gradient-to-br ${gradient} ${ring} shadow-[0_0_40px_var(--tw-shadow-color)] overflow-hidden animate-slide-up`}>
-        {/* Ambient sparkle */}
-        <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="ach-toast-clip">
+        <div className="ach-toast-card">
+          <button
+            type="button"
+            onClick={() => setLeaving(true)}
+            className="ach-toast-close"
+            aria-label="Tutup notifikasi achievement"
+          >
+            <X size={14} />
+          </button>
 
-        <button
-          onClick={onDismiss}
-          className="absolute top-2 right-2 z-10 p-1 rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-          aria-label="Dismiss"
-        >
-          <X size={14} />
-        </button>
+          <div className="ach-toast-body">
+            <span className="ach-toast-emblem">
+              <AchievementEmblem
+                category={category}
+                tier={tier}
+                size={46}
+                currentTier={TIER_INDEX.indexOf(tier)}
+              />
+            </span>
 
-        <div className="relative z-[1] p-4 flex items-start gap-3">
-          <div className={`shrink-0 w-12 h-12 rounded-xl flex items-center justify-center text-2xl bg-slate-950/60 border ${ring} shadow-lg`}>
-            {a.emoji}
+            <div className="ach-toast-info">
+              <div className="ach-toast-kicker">
+                <Sparkles size={10} aria-hidden="true" />
+                <span>Achievement Terbuka</span>
+                <span className="ach-toast-rarity">· {a.rarity}</span>
+              </div>
+              <h3 className="ach-toast-title">{a.label}</h3>
+              <p className="ach-toast-desc">{a.description}</p>
+
+              {(unlock.xpAwarded > 0 || unlock.tokensAwarded > 0) && (
+                <div className="ach-toast-rewards">
+                  {unlock.xpAwarded > 0 && (
+                    <span className="ach-toast-reward">
+                      <Zap size={10} aria-hidden="true" />+{unlock.xpAwarded.toLocaleString('id-ID')} XP
+                    </span>
+                  )}
+                  {unlock.tokensAwarded > 0 && (
+                    <span className="ach-toast-reward">
+                      <Shield size={10} aria-hidden="true" />+{unlock.tokensAwarded} Token
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-widest text-white/80 mb-0.5">
-              <Sparkles size={10} />
-              <span>Achievement Unlocked</span>
-              <span className="text-white/50">· {a.rarity}</span>
-            </div>
-            <h3 className="text-sm font-bold text-white leading-tight">{a.label}</h3>
-            <p className="text-[11px] text-white/70 leading-snug mt-0.5">{a.description}</p>
-
-            <div className="flex items-center gap-3 mt-2 text-[10px] font-mono">
-              {unlock.xpAwarded > 0 && (
-                <span className="flex items-center gap-1 text-cyan-300">
-                  <Zap size={10} />+{unlock.xpAwarded.toLocaleString()} XP
-                </span>
-              )}
-              {unlock.tokensAwarded > 0 && (
-                <span className="flex items-center gap-1 text-cyan-300">
-                  <Shield size={10} />+{unlock.tokensAwarded} Token{unlock.tokensAwarded > 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
-          </div>
+          <span className="ach-toast-timer" aria-hidden="true" />
         </div>
       </div>
     </div>
   );
 };
 
-// Stack renderer — parent passes the queue; this lays them out top-down.
+// Stack renderer — one fixed flow container; the parent owns the queue.
 export const AchievementNotificationStack: React.FC<{
   queue: AchievementUnlock[];
   onDismiss: (id: string) => void;
 }> = ({ queue, onDismiss }) => (
-  <>
-    {queue.map((u, i) => (
+  <div className="ach-stack" aria-live="polite" aria-relevant="additions">
+    {queue.slice(0, MAX_VISIBLE).map(u => (
       <AchievementNotification
         key={u.achievement.id}
         unlock={u}
-        offsetY={i * 110}
         onDismiss={() => onDismiss(u.achievement.id)}
       />
     ))}
-  </>
+  </div>
 );
