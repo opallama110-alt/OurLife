@@ -1257,7 +1257,12 @@ input, select, textarea {
   --sys-ink-dim: rgba(232, 244, 251, 0.65);
 }
 
-/* ─── Modal wrapper (backdrop + centering) ─── */
+/* ─── Modal wrapper (backdrop + centering) ───
+   SystemNotification portals this to <body> and drives it with
+   usePresence: data-state="enter" on mount, "exit" for the ~200ms before
+   unmount. The backdrop keeps a CONSTANT blur and only fades its opacity —
+   animating the blur radius re-blurs the whole viewport every frame, which
+   is where mid-range Android used to drop frames. */
 .sys-modal-root {
   position: fixed; inset: 0;
   z-index: 350;
@@ -1267,19 +1272,28 @@ input, select, textarea {
 }
 .sys-modal-backdrop {
   position: absolute; inset: 0;
-  background: rgba(2, 4, 9, 0);
-  backdrop-filter: blur(0px);
-  transition: background 320ms ease, backdrop-filter 320ms ease;
-  pointer-events: none;
-}
-.sys-modal-root.is-open .sys-modal-backdrop {
   background:
     radial-gradient(closest-side, rgba(125, 217, 245, 0.06), transparent 60%),
     rgba(2, 4, 9, 0.82);
-  backdrop-filter: blur(10px);
-  pointer-events: auto;
+  -webkit-backdrop-filter: blur(10px);
+          backdrop-filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
 }
+.sys-modal-root[data-state="enter"] .sys-modal-backdrop {
+  pointer-events: auto;
+  animation: sysBackdropIn var(--dur-4) var(--ease-out) forwards;
+}
+.sys-modal-root[data-state="exit"] .sys-modal-backdrop {
+  animation: sysBackdropOut var(--dur-2) var(--ease-in) forwards;
+}
+@keyframes sysBackdropIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sysBackdropOut { from { opacity: 1; } to { opacity: 0; } }
 .sys-modal-root .sys-frame { pointer-events: auto; }
+/* While leaving, taps fall through to nothing (no double-submit on YA/LANJUT). */
+.sys-modal-root[data-state="exit"] .sys-frame { pointer-events: none; }
+/* The frame takes programmatic focus for screen readers / Esc; no ring. */
+.sys-frame-modal:focus { outline: none; }
 
 /* ─── The frame itself ─── */
 .sys-frame {
@@ -1291,19 +1305,41 @@ input, select, textarea {
     linear-gradient(180deg, #0A1428 0%, #060B1A 45%, #03060F 100%);
   /* Double-border via 1px outer + inset gap + inset thicker inner line */
   border: 1px solid rgba(125, 217, 245, 0.85);
+  /* Static shadow stack (the resting state of the old sysFramePulse). The
+     "breathing" now lives on ::before as an opacity-only loop: animating six
+     stacked box-shadows repainted the whole frame every frame for as long
+     as it was on screen (permanently for the Dashboard verdict). */
   box-shadow:
     /* outer halo */
-    0 0 32px rgba(125, 217, 245, 0.30),
-    0 0 70px rgba(80, 180, 230, 0.18),
+    0 0 26px rgba(125, 217, 245, 0.26),
+    0 0 60px rgba(80, 180, 230, 0.14),
     /* gap (creates the inset-from-the-outer-line look) */
     inset 0 0 0 4px rgba(2, 6, 14, 0.95),
     /* inner thicker line */
-    inset 0 0 0 6px rgba(125, 217, 245, 0.55),
+    inset 0 0 0 6px rgba(125, 217, 245, 0.52),
     /* inner soft glow */
     inset 0 0 30px rgba(125, 217, 245, 0.10),
     /* deep inner vignette */
     inset 0 0 80px rgba(0, 0, 0, 0.55);
-  animation: sysFramePulse 4s ease-in-out infinite;
+}
+/* Breathing outer glow — rasterized once, then only its opacity animates
+   (compositor-only). Outer box-shadows never paint inside the border box,
+   so this layer can't wash over the content. */
+.sys-frame::before {
+  content: "";
+  position: absolute; inset: -1px;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    0 0 36px rgba(125, 217, 245, 0.30),
+    0 0 80px rgba(80, 180, 230, 0.20);
+  opacity: 0;
+  animation: sysGlowBreath 4s ease-in-out infinite;
+}
+.sys-frame[data-paused]::before { animation-play-state: paused; }
+@keyframes sysGlowBreath {
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 1; }
 }
 /* Modal-mode entrance — hidden until .sys-modal-root is open. */
 .sys-frame-modal {
@@ -1313,12 +1349,12 @@ input, select, textarea {
   transform: translateY(6px) scale(0.96);
   filter: blur(2px);
 }
-.sys-modal-root.is-open .sys-frame-modal {
-  animation: sysFramePulse 4s ease-in-out infinite, sysFrameMaterialize 540ms var(--ease-out) forwards;
+.sys-modal-root[data-state="enter"] .sys-frame-modal {
+  animation: sysFrameMaterialize 540ms var(--ease-out) forwards;
 }
 /* Inline frames animate-in once on mount. */
 .sys-frame:not(.sys-frame-modal) {
-  animation: sysFramePulse 4s ease-in-out infinite, sysFrameMaterialize 540ms var(--ease-out) both;
+  animation: sysFrameMaterialize 540ms var(--ease-out) both;
 }
 @keyframes sysFrameMaterialize {
   0%   { opacity: 0;   transform: translateY(6px) scale(0.96); filter: blur(2px); }
@@ -1328,25 +1364,37 @@ input, select, textarea {
   60%  { opacity: 1;   transform: translate(0, 0); filter: none; }
   100% { opacity: 1;   transform: translate(0, 0); filter: none; }
 }
-@keyframes sysFramePulse {
-  0%, 100% {
-    box-shadow:
-      0 0 26px rgba(125, 217, 245, 0.26),
-      0 0 60px rgba(80, 180, 230, 0.14),
-      inset 0 0 0 4px rgba(2, 6, 14, 0.95),
-      inset 0 0 0 6px rgba(125, 217, 245, 0.48),
-      inset 0 0 30px rgba(125, 217, 245, 0.08),
-      inset 0 0 80px rgba(0, 0, 0, 0.55);
-  }
-  50% {
-    box-shadow:
-      0 0 36px rgba(125, 217, 245, 0.36),
-      0 0 80px rgba(80, 180, 230, 0.22),
-      inset 0 0 0 4px rgba(2, 6, 14, 0.95),
-      inset 0 0 0 6px rgba(125, 217, 245, 0.62),
-      inset 0 0 36px rgba(125, 217, 245, 0.14),
-      inset 0 0 80px rgba(0, 0, 0, 0.55);
-  }
+/* "TIDAK" in the intro invitation: the System refuses the refusal. Two
+   identical keyframes so alternating the class restarts the shake on
+   every tap (an animation-name change always restarts). */
+.sys-modal-root.is-deny-a[data-state="enter"] .sys-frame-modal {
+  animation: sysFrameDenyA 380ms var(--ease-out) both;
+}
+.sys-modal-root.is-deny-b[data-state="enter"] .sys-frame-modal {
+  animation: sysFrameDenyB 380ms var(--ease-out) both;
+}
+@keyframes sysFrameDenyA {
+  0%, 100% { opacity: 1; transform: none; filter: none; }
+  18%      { transform: translateX(-7px); }
+  36%      { transform: translateX(6px); }
+  54%      { transform: translateX(-4px); }
+  72%      { transform: translateX(2px); }
+}
+@keyframes sysFrameDenyB {
+  0%, 100% { opacity: 1; transform: none; filter: none; }
+  18%      { transform: translateX(-7px); }
+  36%      { transform: translateX(6px); }
+  54%      { transform: translateX(-4px); }
+  72%      { transform: translateX(2px); }
+}
+/* Modal exit — shorter than the entrance and accelerating, so dismissing
+   feels snappy. Declared after the deny rules so it always wins. */
+.sys-modal-root[data-state="exit"] .sys-frame-modal {
+  animation: sysFrameDematerialize var(--dur-2) var(--ease-in) forwards;
+}
+@keyframes sysFrameDematerialize {
+  from { opacity: 1; transform: none; filter: none; }
+  to   { opacity: 0; transform: translateY(6px) scale(0.97); filter: none; }
 }
 
 /* Subtle scanline overlay.
@@ -1399,8 +1447,18 @@ input, select, textarea {
   z-index: 4;
   transition: background 160ms ease, color 160ms ease, transform 140ms ease;
 }
-.sys-close:hover  { background: rgba(125, 217, 245, 0.18); color: #FFFFFF; }
-.sys-close:active { transform: scale(0.92); }
+/* Keep the ornament-sized 26px disc but give thumbs a 44px target. */
+.sys-close::before {
+  content: "";
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 44px; height: 44px;
+  transform: translate(-50%, -50%);
+}
+@media (hover: hover) {
+  .sys-close:hover { background: rgba(125, 217, 245, 0.18); color: #FFFFFF; }
+}
+.sys-close:active { transform: scale(0.92); background: rgba(125, 217, 245, 0.18); }
 
 /* ─── Header (title-wrap + optional cta) ─── */
 .sys-head {
@@ -1545,6 +1603,16 @@ input, select, textarea {
     radial-gradient(140% 100% at 50% 110%, rgba(120, 80, 20, 0.45) 0%, transparent 60%),
     linear-gradient(180deg, #2A1F0A 0%, #1A1308 45%, #0A0703 100%);
   border-color: rgba(251, 191, 36, 0.85);
+  box-shadow:
+    0 0 26px rgba(251, 191, 36, 0.24),
+    0 0 60px rgba(180, 120, 30, 0.14),
+    inset 0 0 0 4px rgba(14, 9, 2, 0.95),
+    inset 0 0 0 6px rgba(251, 191, 36, 0.50),
+    inset 0 0 30px rgba(251, 191, 36, 0.10),
+    inset 0 0 80px rgba(0, 0, 0, 0.55);
+}
+.sys-frame.tone-gold::before {
+  box-shadow: 0 0 36px rgba(251, 191, 36, 0.30), 0 0 80px rgba(180, 120, 30, 0.20);
 }
 .sys-frame.tone-gold .sys-corner { filter:
   drop-shadow(0 0 4px rgba(251, 191, 36, 0.75))
@@ -1576,6 +1644,16 @@ input, select, textarea {
     radial-gradient(140% 100% at 50% 110%, rgba(130, 30, 30, 0.45) 0%, transparent 60%),
     linear-gradient(180deg, #2A0E14 0%, #1F0810 45%, #0A0408 100%);
   border-color: rgba(239, 68, 68, 0.85);
+  box-shadow:
+    0 0 26px rgba(239, 68, 68, 0.24),
+    0 0 60px rgba(160, 40, 40, 0.14),
+    inset 0 0 0 4px rgba(14, 3, 5, 0.95),
+    inset 0 0 0 6px rgba(239, 68, 68, 0.50),
+    inset 0 0 30px rgba(239, 68, 68, 0.10),
+    inset 0 0 80px rgba(0, 0, 0, 0.55);
+}
+.sys-frame.tone-red::before {
+  box-shadow: 0 0 36px rgba(239, 68, 68, 0.30), 0 0 80px rgba(160, 40, 40, 0.20);
 }
 .sys-frame.tone-red .sys-corner { filter:
   drop-shadow(0 0 4px rgba(239, 68, 68, 0.75))
@@ -1657,18 +1735,21 @@ input, select, textarea {
   z-index: 200;
   pointer-events: none;
 }
+/* Constant blur, opacity-only fade: animating the blur radius re-blurred
+   the whole viewport every frame of the sheet slide. */
 .sc-backdrop {
   position: absolute; inset: 0;
-  background: rgba(4, 6, 13, 0);
-  backdrop-filter: blur(0px);
-  -webkit-backdrop-filter: blur(0px);
-  transition: background 240ms ease, backdrop-filter 240ms ease;
-  pointer-events: none;
-}
-.sc-root.is-open .sc-backdrop {
   background: rgba(4, 6, 13, 0.62);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity var(--dur-2) var(--ease-in);
+  pointer-events: none;
+  touch-action: none;
+}
+.sc-root.is-open .sc-backdrop {
+  opacity: 1;
+  transition: opacity var(--dur-3) var(--ease-out);
   pointer-events: auto;
 }
 
@@ -1691,13 +1772,20 @@ input, select, textarea {
     inset 0 1px 0 rgba(34, 211, 238, 0.18),
     0 -20px 60px -10px rgba(0, 0, 0, 0.85),
     0 0 50px -10px rgba(34, 211, 238, 0.35);
-  transition: transform 360ms var(--ease-spring);
+  /* Closing: short accelerate out. Opening (below): long decelerate in.
+     The old spring overshot ~10% of the sheet height, lifting it ~70px off
+     the bottom edge and showing the nav through the gap on every open. */
+  transition: transform 220ms var(--ease-in);
+  will-change: transform;
   display: flex;
   flex-direction: column;
   pointer-events: auto;
   overflow: hidden;
 }
-.sc-root.is-open .sc-panel { transform: translateX(-50%) translateY(0); }
+.sc-root.is-open .sc-panel {
+  transform: translateX(-50%) translateY(0);
+  transition: transform 420ms var(--ease-out-expo);
+}
 
 .sc-panel .brk-c {
   position: absolute;
@@ -1722,13 +1810,26 @@ input, select, textarea {
   opacity: 0.6;
 }
 
+/* Grabber + header = the drag-to-dismiss zone (SystemChat pointer handlers).
+   touch-action:none so the browser never claims the gesture for scrolling
+   or pull-to-refresh. */
+.sc-grab {
+  flex-shrink: 0;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sc-grab:active { cursor: grabbing; }
 .sc-handle {
   width: 40px; height: 4px;
   border-radius: 999px;
   background: rgba(34, 211, 238, 0.35);
   margin: 10px auto 0;
   box-shadow: 0 0 6px rgba(34, 211, 238, 0.4);
+  transition: background var(--dur-2) ease, width var(--dur-2) var(--ease-out);
 }
+.sc-grab:active .sc-handle { background: rgba(34, 211, 238, 0.7); width: 52px; }
 
 /* ─── Header ─── */
 .sc-head {
@@ -1780,7 +1881,8 @@ input, select, textarea {
 }
 .sc-close {
   margin-left: auto;
-  width: 30px; height: 30px;
+  flex-shrink: 0;
+  width: 40px; height: 40px;
   border-radius: 50%;
   border: 1px solid var(--line);
   background: rgba(255,255,255,0.04);
@@ -1789,14 +1891,19 @@ input, select, textarea {
   cursor: pointer;
   transition: background 140ms ease, color 140ms ease, transform 120ms ease;
 }
-.sc-close:hover { background: rgba(34, 211, 238, 0.1); color: var(--cyan); }
-.sc-close:active { transform: scale(0.92); }
+@media (hover: hover) {
+  .sc-close:hover { background: rgba(34, 211, 238, 0.1); color: var(--cyan); }
+}
+.sc-close:active { transform: scale(0.92); background: rgba(34, 211, 238, 0.1); color: var(--cyan); }
 
 /* ─── Message list ─── */
 .sc-list {
   flex: 1 1 0;
   min-height: 0;
   overflow-y: auto;
+  /* Flinging past the end must not scroll the page under the sheet or
+     trigger Android pull-to-refresh. */
+  overscroll-behavior: contain;
   padding: 14px 14px 6px;
   scroll-behavior: smooth;
   scrollbar-width: none;
@@ -1817,18 +1924,32 @@ input, select, textarea {
   background: linear-gradient(90deg, transparent, var(--line), transparent);
 }
 
+/* Only NEW bubbles animate (.sc-msg-in / .sc-msg-swap from SystemChat);
+   the base rule used to animate every bubble, so each reopen replayed the
+   whole history at once. */
 .sc-msg {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
-  opacity: 0;
-  transform: translateY(8px);
-  animation: sc-msg-in 320ms var(--ease-out) both;
 }
-.sc-msg-in { animation: sc-msg-in 320ms var(--ease-out) both; }
+.sc-msg-in { animation: sc-msg-in var(--dur-3) var(--ease-out-expo) both; }
 @keyframes sc-msg-in {
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
 }
+.sc-msg-user.sc-msg-in { transform-origin: 100% 100%; }
+.sc-msg-sys.sc-msg-in,
+.sc-msg-swap { transform-origin: 0 100%; }
+/* A reply takes the typing row's place: start near-visible so the bubble
+   doesn't blink out and back in the same spot. */
+.sc-msg-swap { animation: scMsgSwap var(--dur-2) var(--ease-out) both; }
+@keyframes scMsgSwap {
+  from { opacity: 0.55; transform: scale(0.985); }
+}
+/* Avatar faces in the history stay still — dozens of perpetual SVG
+   blink/antenna loops (main-thread, uncomposited) added up fast. */
+.sc-msg .sc-msg-ava .bot-face .bot-eyes,
+.sc-msg .sc-msg-ava .bot-face .bot-antenna { animation: none; }
 
 .sc-msg-ava {
   flex-shrink: 0;
@@ -1913,8 +2034,10 @@ input, select, textarea {
 }
 
 .sc-error {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px;
   margin: 0 4px 12px;
-  padding: 8px 12px;
+  padding: 6px 6px 6px 12px;
   background: rgba(239, 68, 68, 0.10);
   border: 1px solid rgba(239, 68, 68, 0.4);
   border-radius: 8px;
@@ -1922,15 +2045,39 @@ input, select, textarea {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
+  animation: sc-msg-in var(--dur-3) var(--ease-out-expo) both;
 }
+.sc-error-retry {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.12);
+  color: #FECACA;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background var(--dur-1) ease, transform var(--dur-1) var(--ease-spring);
+}
+.sc-error-retry:active { transform: scale(0.95); background: rgba(239, 68, 68, 0.22); }
+.sc-error-retry:disabled { opacity: 0.5; }
 
-/* Quick replies */
+/* Quick replies — fade in with the sheet, fade/slide away after the first
+   message (usePresence data-state) instead of vanishing. */
 .sc-quick {
   display: flex; flex-wrap: wrap; gap: 6px;
   padding: 6px 14px 10px;
 }
+.sc-quick[data-state="enter"] { animation: scQuickIn var(--dur-4) var(--ease-out-expo) 120ms both; }
+.sc-quick[data-state="exit"]  { animation: scQuickOut var(--dur-2) var(--ease-in) both; pointer-events: none; }
+@keyframes scQuickIn  { from { opacity: 0; transform: translateY(6px); } }
+@keyframes scQuickOut { to   { opacity: 0; transform: translateY(6px); } }
 .sc-quick-btn {
-  padding: 6px 12px;
+  min-height: 36px;
+  padding: 8px 14px;
   font-family: var(--font-mono);
   font-size: 11.5px;
   background: rgba(34, 211, 238, 0.06);
@@ -1938,10 +2085,12 @@ input, select, textarea {
   border: 1px solid var(--line-cyan-soft);
   border-radius: 999px;
   cursor: pointer;
-  transition: background 140ms ease, transform 120ms ease, border-color 140ms ease;
+  transition: background 140ms ease, transform 120ms var(--ease-spring), border-color 140ms ease;
 }
-.sc-quick-btn:hover { background: rgba(34, 211, 238, 0.12); border-color: var(--cyan); }
-.sc-quick-btn:active { transform: scale(0.96); }
+@media (hover: hover) {
+  .sc-quick-btn:hover { background: rgba(34, 211, 238, 0.12); border-color: var(--cyan); }
+}
+.sc-quick-btn:active { transform: scale(0.96); background: rgba(34, 211, 238, 0.14); border-color: var(--cyan); }
 .sc-quick-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Input bar */
@@ -1969,10 +2118,13 @@ input, select, textarea {
 }
 .sc-input input::placeholder { color: var(--t-mute); }
 .sc-input input:disabled { opacity: 0.5; }
+/* While the System replies the input is readOnly (keeps focus + keyboard). */
+.sc-input input:read-only { opacity: 0.6; }
 
 /* Orange send button — per canonical reference (NOT cyan) */
 .sc-send {
-  width: 36px; height: 36px;
+  flex-shrink: 0;
+  width: 40px; height: 40px;
   border-radius: 50%;
   background: linear-gradient(135deg, #FB923C, #EF4444);
   border: 0;
@@ -3422,10 +3574,16 @@ input, select, textarea {
    §6.8: none of these elements use transform-style: preserve-3d,
    so the drop-shadow/blur filters here are safe.
    ============================================================ */
+/* Centering + bob ride on the independent `translate` property and the
+   press squish on `scale`, so they compose. (Everything used to share
+   `transform`, and since animations beat normal declarations the press
+   feedback never rendered while the bot was bobbing.) */
 .sys-bot {
   position: absolute;
   left: 50%;
   bottom: 50px;
+  /* Legacy engines without individual transform properties: centered,
+     static. Everything else gets the composed version below. */
   transform: translateX(-50%);
   width: 64px;
   height: 64px;
@@ -3437,19 +3595,41 @@ input, select, textarea {
   align-items: center;
   justify-content: center;
   z-index: 50;
-  animation: bot-bob 4s ease-in-out infinite;
-  transition: transform 200ms var(--ease-spring);
   pointer-events: auto;
 }
-.sys-bot:active,
-.sys-bot.is-press { transform: translateX(-50%) scale(0.94); }
+@supports (translate: 0) and (scale: 1) {
+  .sys-bot {
+    transform: none;
+    translate: -50% 0;
+    animation: bot-bob 4s ease-in-out infinite;
+    transition: scale 220ms var(--ease-spring);
+  }
+  .sys-bot:active,
+  .sys-bot.is-press { scale: 0.9; transition-duration: 90ms; }
+}
 
 @keyframes bot-bob {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50%      { transform: translateX(-50%) translateY(-2.5px); }
+  0%, 100% { translate: -50% 0; }
+  50%      { translate: -50% -2.5px; }
 }
-.sys-bot.is-active { animation: none; }
+/* Freeze the bob where it is instead of snapping to rest. */
+.sys-bot.is-active { animation-play-state: paused; }
 .sys-bot.is-active .sys-bot-disc { transform: translateY(-1px); }
+
+/* Launch ping — one ring expanding out of the bot when it opens the chat. */
+.sys-bot-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--cyan);
+  box-shadow: 0 0 14px rgba(34, 211, 238, 0.55);
+  pointer-events: none;
+  animation: botPing 560ms var(--ease-out-expo) forwards;
+}
+@keyframes botPing {
+  from { opacity: 0.9; transform: scale(1); }
+  to   { opacity: 0;   transform: scale(1.9); }
+}
 
 .sys-bot-halo {
   position: absolute;
@@ -3487,7 +3667,8 @@ input, select, textarea {
     0 0 18px -2px rgba(34, 211, 238, 0.65);
   animation: ring-spin 8s linear infinite;
 }
-.sys-bot.is-active .sys-bot-ring { animation-duration: 3s; }
+/* Faster spin while the chat is open is applied from SystemBot.tsx via
+   Animation.updatePlaybackRate (a CSS duration change made it jump). */
 @keyframes ring-spin {
   to { transform: rotate(360deg); }
 }
@@ -3526,7 +3707,6 @@ input, select, textarea {
   pointer-events: none;
   animation: orbit-spin 6s linear infinite;
 }
-.sys-bot.is-active .sys-bot-orbit { animation-duration: 2s; }
 .sys-bot-orbit-dot {
   position: absolute;
   top: -2px; left: 50%;
@@ -3540,13 +3720,19 @@ input, select, textarea {
   to { transform: rotate(360deg); }
 }
 
-/* Bot face per-mood animations */
+/* Bot face per-mood animations. The eyes group is keyed on mood in
+   BotFace, so each mood swap remounts it and replays botMoodPop. */
 .bot-face .bot-eyes {
   transform-box: fill-box;
   transform-origin: center;
+  animation: botMoodPop 220ms var(--ease-spring) both;
 }
 .bot-face.mood-idle .bot-eyes {
-  animation: bot-blink 4.5s infinite;
+  animation: botMoodPop 220ms var(--ease-spring) both, bot-blink 4.5s 220ms infinite;
+}
+@keyframes botMoodPop {
+  from { transform: scaleY(0.35); }
+  to   { transform: scaleY(1); }
 }
 @keyframes bot-blink {
   0%, 92%, 100% { transform: scaleY(1); }
@@ -6847,45 +7033,68 @@ input, select, textarea {
   color: var(--t-3);
   font-family: var(--font-mono);
 }
+/* Sticky so the tabs stay reachable from deep inside the long Profil pane.
+   Near-opaque fill (no backdrop blur: that would re-filter on every scroll
+   frame). The zero-height sentinel above it lets Settings.tsx detect the
+   stuck state and scroll the new pane's top into view on a switch. */
+.s-tabs-sentinel { height: 0; }
+/* z 20: above the embedded Profile's `relative z-10` card layers (same
+   stacking context), below the top bar (30), bottom nav (40) and modals. */
 .s-tabs {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  background: rgba(7, 12, 24, 0.7);
+  background: rgba(7, 12, 24, 0.94);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 4px;
   margin-bottom: 14px;
+  box-shadow: 0 10px 20px -14px rgba(0, 0, 0, 0.9);
 }
 .s-tab {
   position: relative; z-index: 2;
   display: inline-flex; align-items: center; justify-content: center;
   gap: 6px;
-  padding: 9px 4px;
+  min-height: 40px;
+  padding: 8px 4px;
   background: transparent;
   border: 0;
   color: var(--t-3);
-  font-size: 12px; font-weight: 600;
+  font-size: 12.5px; font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   border-radius: 8px;
-  transition: color 200ms ease;
+  transition: color 200ms ease, transform var(--dur-1) var(--ease-spring);
 }
+.s-tab svg { flex-shrink: 0; }
+.s-tab:active { transform: scale(0.96); }
 .s-tab.is-on { color: var(--cyan); }
 .s-tab.is-on svg { filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.5)); }
+/* One grid column wide: the absolute box is measured against the padding
+   box, the columns against the content box (padding 4px each side). */
 .s-tabs-indicator {
   position: absolute;
   top: 4px; left: 4px;
-  width: calc(33.333% - 4px);
+  width: calc((100% - 8px) / 3);
   height: calc(100% - 8px);
   background: linear-gradient(180deg, rgba(34, 211, 238, 0.10), rgba(34, 211, 238, 0.04));
   border: 1px solid var(--line-cyan-soft);
   border-radius: 8px;
   box-shadow: inset 0 0 16px rgba(34, 211, 238, 0.06), 0 0 12px -4px rgba(34, 211, 238, 0.3);
-  transition: transform 320ms var(--ease-spring);
+  transition: transform 340ms var(--ease-spring);
   z-index: 1;
 }
-.s-pane-wrap { animation: gym-pane-in 320ms var(--ease-out); }
-.s-pane { display: flex; flex-direction: column; gap: 12px; }
+/* The route reveal (.ol-route) already covers the first paint; only tab
+   switches slide, from the side of the tab you moved toward. */
+.s-pane-wrap { animation: none; }
+.s-pane-slot[data-dir="1"]:not([hidden])  { animation: sPaneInFwd var(--dur-3) var(--ease-out-expo) backwards; }
+.s-pane-slot[data-dir="-1"]:not([hidden]) { animation: sPaneInBack var(--dur-3) var(--ease-out-expo) backwards; }
+@keyframes sPaneInFwd  { from { opacity: 0; transform: translateX(18px); } }
+@keyframes sPaneInBack { from { opacity: 0; transform: translateX(-18px); } }
+.s-screen { padding-bottom: 8px; }
+.s-pane { display: flex; flex-direction: column; gap: 12px; max-width: 42rem; margin: 0 auto; }
 
 .s-section {
   padding: 14px;
@@ -6913,7 +7122,7 @@ input, select, textarea {
 
 .s-cta {
   width: 100%;
-  height: 42px;
+  height: 44px;
   display: inline-flex; align-items: center; justify-content: center;
   gap: 8px;
   font-size: 14px; font-weight: 700;
@@ -6921,7 +7130,8 @@ input, select, textarea {
   border: 0;
   border-radius: 10px;
   cursor: pointer;
-  transition: transform 140ms var(--ease-spring), opacity 200ms ease;
+  transition: transform 140ms var(--ease-spring), opacity 200ms ease,
+    background var(--dur-2) ease, box-shadow var(--dur-2) ease, color var(--dur-2) ease;
 }
 .s-cta-cyan {
   background: linear-gradient(135deg, #67E8F9, #22D3EE 50%, #3B82F6);
@@ -6938,8 +7148,38 @@ input, select, textarea {
   color: var(--t-1);
   border: 1px solid var(--line);
 }
-.s-cta:active { transform: scale(0.98); }
+.s-cta:active { transform: scale(0.97); }
 .s-cta:disabled { opacity: 0.6; cursor: wait; }
+.s-cta-inline { width: auto; padding: 0 16px; flex-shrink: 0; }
+.s-cta-danger:active { background: rgba(239, 68, 68, 0.16); }
+.s-cta-outline:active { background: rgba(255, 255, 255, 0.05); }
+.s-cta-glow { color: var(--cyan); border-color: var(--line-cyan-soft); }
+.s-cta-glow:active { background: rgba(34, 211, 238, 0.08); }
+@media (hover: hover) {
+  .s-cta-danger:hover { background: rgba(239, 68, 68, 0.14); }
+  .s-cta-outline:hover { border-color: var(--line-cyan-soft); }
+}
+/* Save CTA carries its own feedback: the icon swaps with a small pop and
+   the fill settles to a success/error tint for the 1.6s hold. */
+.s-save-icon { display: inline-flex; animation: sSaveIconIn var(--dur-2) var(--ease-spring) both; }
+@keyframes sSaveIconIn { from { opacity: 0; transform: scale(0.5); } }
+.s-save.is-saved {
+  background: linear-gradient(135deg, #6EE7B7, #34D399 55%, #10B981);
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.45), 0 12px 22px -10px rgba(52, 211, 153, 0.55);
+}
+.s-save.is-error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #FECACA;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.5);
+}
+.s-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #FCA5A5;
+  animation: sFadeUp var(--dur-2) var(--ease-out) both;
+}
+@keyframes sFadeUp { from { opacity: 0; transform: translateY(-3px); } }
 .s-cta-mini {
   padding: 5px 11px;
   font-size: 11px; letter-spacing: 0.1em;
@@ -6967,28 +7207,56 @@ input, select, textarea {
   box-shadow: 0 0 12px -4px rgba(34, 211, 238, 0.5);
   overflow: hidden;
 }
+.s-avatar-img { position: relative; flex-shrink: 0; }
 .s-avatar-img img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.s-avatar-busy {
+  position: absolute; inset: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: rgba(4, 6, 13, 0.7);
+  color: var(--cyan);
+}
+.s-account-top { display: flex; align-items: center; gap: 14px; }
+.s-account-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.s-account-email {
+  font-size: 11px;
+  color: var(--t-3);
+  font-family: var(--font-mono);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.s-upload-bar { height: 3px; border-radius: 2px; background: rgba(148, 163, 184, 0.12); overflow: hidden; }
+.s-upload-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), #3B82F6);
+  transform-origin: left center;
+  transition: transform var(--dur-4) var(--ease-out-expo);
+}
 .s-avatar-letter {
   font-size: 26px; font-weight: 800;
   color: var(--cyan);
   text-shadow: 0 0 12px rgba(34, 211, 238, 0.5);
 }
 .s-avatar-edit {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 12px;
-  font-size: 11px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  align-self: flex-start;
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 12px; font-weight: 600;
   background: rgba(34, 211, 238, 0.06);
   border: 1px solid var(--line-cyan-soft);
   color: var(--cyan);
   border-radius: 999px;
   cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-spring), background var(--dur-2) ease;
 }
+.s-avatar-edit:active { transform: scale(0.96); background: rgba(34, 211, 238, 0.12); }
+.s-avatar-edit:disabled { opacity: 0.7; cursor: wait; }
 
 .s-field { display: flex; flex-direction: column; gap: 6px; }
 .s-field > .hud-label-sm { color: var(--t-3); display: inline-flex; align-items: center; gap: 4px; }
 .s-field input[type="text"], .s-field input[type="email"] {
   width: 100%;
-  height: 38px;
+  height: 44px;
   padding: 0 12px;
   background: rgba(7, 12, 24, 0.6);
   border: 1px solid var(--line);
@@ -6998,7 +7266,13 @@ input, select, textarea {
   font-size: 13px;
   outline: none;
 }
-.s-field input[type="text"]:focus, .s-field input[type="email"]:focus { border-color: var(--cyan); }
+.s-field input[type="text"], .s-field input[type="email"] {
+  transition: border-color var(--dur-2) ease, box-shadow var(--dur-2) ease;
+}
+.s-field input[type="text"]:focus, .s-field input[type="email"]:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+}
 .s-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 .s-account-row {
@@ -7008,7 +7282,13 @@ input, select, textarea {
 }
 .s-account-row:last-child { border-bottom: 0; }
 .s-acc-label { font-size: 9.5px; letter-spacing: 0.16em; color: var(--t-3); text-transform: uppercase; font-family: var(--font-mono); }
-.s-acc-val { font-size: 13px; color: var(--t-1); margin-top: 2px; }
+.s-acc-val { font-size: 13px; color: var(--t-1); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Shared row anatomy for security / "coming soon" preference rows. */
+.s-account-row, .s-pref-row { gap: 10px; min-height: 48px; }
+.s-row-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.s-row-icon { color: var(--t-3); flex-shrink: 0; }
+.s-row-text { min-width: 0; }
+.s-account-row .s-soon, .s-pref-row .s-soon { flex-shrink: 0; }
 
 .s-env-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .s-env {
@@ -7021,8 +7301,17 @@ input, select, textarea {
   cursor: pointer;
   font-size: 13px; font-weight: 600;
 }
-.s-env svg { width: 22px; height: 22px; }
+.s-env svg { width: 22px; height: 22px; transition: transform var(--dur-3) var(--ease-spring); }
 .s-env.is-on { color: var(--cyan); border-color: var(--cyan); background: rgba(34, 211, 238, 0.06); box-shadow: 0 0 14px -4px rgba(34, 211, 238, 0.5); }
+.s-env.is-on svg { transform: scale(1.1); }
+.s-env, .s-equip, .s-about-link {
+  transition: color var(--dur-1) ease, border-color var(--dur-2) ease, background var(--dur-2) ease,
+    box-shadow var(--dur-2) ease, transform var(--dur-1) var(--ease-spring);
+}
+.s-env:active, .s-equip:active, .s-about-link:active:not(:disabled) { transform: scale(0.96); }
+.s-prefs { display: flex; flex-direction: column; gap: 10px; }
+.s-label-gap { margin-top: 4px; display: inline-flex; align-items: center; gap: 8px; }
+.s-label-gap .mono { letter-spacing: 0.08em; text-transform: none; }
 
 .s-equip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 @media (min-width: 640px) { .s-equip-grid { grid-template-columns: repeat(4, 1fr); } }
@@ -7036,7 +7325,24 @@ input, select, textarea {
   color: var(--t-2);
   cursor: pointer;
 }
+.s-equip { min-height: 44px; }
 .s-equip.is-on { color: var(--green-bright); border-color: var(--green-bright); background: rgba(34, 197, 94, 0.06); }
+/* The check mounts when a chip turns on, so it pops exactly on toggle. */
+.s-equip-check { flex-shrink: 0; animation: sCheckIn var(--dur-3) var(--ease-spring) both; }
+@keyframes sCheckIn { from { opacity: 0; transform: scale(0.3) rotate(-20deg); } }
+
+/* Preferences skeleton — opacity-only pulse (composited). Shown once per
+   Settings visit now that panes stay mounted. */
+.s-prefs-skeleton { display: flex; flex-direction: column; gap: 10px; }
+.s-skel {
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.08);
+  animation: sSkelPulse 1.1s var(--ease-in-out) infinite alternate;
+}
+.s-skel-label { width: 38%; height: 10px; border-radius: 4px; }
+.s-skel-env { height: 78px; border-radius: 12px; }
+.s-skel-chip { height: 44px; }
+@keyframes sSkelPulse { from { opacity: 0.45; } to { opacity: 1; } }
 
 .s-freeze-card {
   display: flex; justify-content: space-between; align-items: center;
@@ -7055,8 +7361,11 @@ input, select, textarea {
   background: rgba(7, 12, 24, 0.6);
   color: var(--t-mute);
 }
-.s-freeze-slot.is-filled { color: var(--green-bright); border-color: rgba(34, 197, 94, 0.5); background: rgba(34, 197, 94, 0.05); }
-.s-helper { font-size: 12px; color: var(--t-2); line-height: 1.5; }
+.s-freeze-slot { transition: color var(--dur-3) ease, border-color var(--dur-3) ease, background var(--dur-3) ease, box-shadow var(--dur-3) ease; }
+.s-freeze-slot.is-filled { color: var(--green-bright); border-color: rgba(34, 197, 94, 0.5); background: rgba(34, 197, 94, 0.05); box-shadow: 0 0 12px -4px rgba(52, 211, 153, 0.6); }
+.s-helper { margin: 0; font-size: 12px; color: var(--t-2); line-height: 1.5; }
+.s-helper strong { color: var(--t-1); }
+.s-helper strong.fz-cyan { color: var(--cyan); }
 .s-helper-foot {
   font-size: 9.5px; letter-spacing: 0.14em;
   color: var(--t-mute);
@@ -7085,10 +7394,13 @@ input, select, textarea {
 
 .s-toggle-row {
   display: flex; justify-content: space-between; align-items: center;
+  gap: 12px;
+  min-height: 44px;
   padding: 8px 0;
   font-size: 13px;
   color: var(--t-1);
 }
+.s-toggle-row.is-disabled { color: var(--t-3); }
 .s-toggle {
   width: 36px; height: 20px;
   border-radius: 999px;
@@ -7100,13 +7412,15 @@ input, select, textarea {
   padding: 0;
 }
 .s-toggle.is-on { background: var(--cyan); border-color: var(--cyan); box-shadow: 0 0 10px rgba(34, 211, 238, 0.5); }
-.s-toggle.is-disabled { opacity: 0.4; cursor: not-allowed; }
+.s-toggle { flex-shrink: 0; display: inline-block; }
+.s-toggle.is-disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 .s-toggle-knob {
   position: absolute;
   top: 1px; left: 1px;
   width: 16px; height: 16px;
   background: white;
   border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   transition: transform 200ms var(--ease-spring);
 }
 .s-toggle.is-on .s-toggle-knob { transform: translateX(16px); }
@@ -7124,7 +7438,9 @@ input, select, textarea {
   color: var(--t-1);
   cursor: pointer;
 }
-.s-about-link svg { color: var(--cyan); }
+.s-about-link svg { color: var(--cyan); flex-shrink: 0; }
+.s-about-link { min-height: 44px; text-align: left; }
+.s-about-link:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* PWA install card */
 .s-pwa-card {
@@ -8083,7 +8399,9 @@ input, select, textarea {
   stroke: url(#sn-timer-grad);
   stroke-linecap: round;
   filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.55));
-  transition: stroke-dashoffset 200ms linear;
+  /* Ticks once a second; a 1s linear transition turns the steps into a
+     continuous drain. (The re-arm refill overrides this inline.) */
+  transition: stroke-dashoffset 1000ms linear;
 }
 .sn-timer-num {
   position: relative; z-index: 2;
@@ -8097,6 +8415,26 @@ input, select, textarea {
   font-size: 8px; letter-spacing: 0.2em;
   color: rgba(167, 243, 252, 0.7);
   margin-top: 1px;
+}
+.sn-timer-caption,
+.sn-denied {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-align: center;
+  color: #94A3B8;
+}
+/* The System's answer to "TIDAK" — keyed in TSX so each refusal replays it. */
+.sn-denied {
+  color: #FCA5A5;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.45);
+  animation: snDeniedIn var(--dur-4) var(--ease-out-expo) both;
+}
+@keyframes snDeniedIn {
+  from { opacity: 0; transform: translateY(-3px); letter-spacing: 0.3em; }
 }
 .sn-target-label {
   color: #22C55E;
@@ -8128,7 +8466,10 @@ input, select, textarea {
    feel; each row = decorative check + label + editable number target
    + unit suffix. The check is non-interactive in this surface — actual
    ticking happens later on the Habits page. */
-.sys-frame.sys-frame-quest {
+.sys-frame.sys-frame-quest,
+.sys-modal-root.sys-frame-quest .sys-frame-modal {
+  /* SystemNotification puts `className` on the modal root, so the second
+     selector is the one that actually widens the quest frame. */
   max-width: 480px;
 }
 .fdq-list {
@@ -8140,31 +8481,59 @@ input, select, textarea {
 }
 .fdq-row {
   display: grid;
-  grid-template-columns: 22px 1fr 72px 38px;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 8px 8px 8px 12px;
   background: rgba(7, 12, 24, 0.5);
   border: 1px solid rgba(125, 217, 245, 0.22);
   border-radius: 10px;
+  transition: border-color var(--dur-2) ease, background var(--dur-2) ease;
+  /* Rows land one after another once the frame has materialized. */
+  animation: fdqRowIn var(--dur-4) var(--ease-out-expo) backwards;
+  animation-delay: calc(260ms + var(--i, 0) * 60ms);
 }
-.fdq-check {
-  width: 22px; height: 22px;
-  border-radius: 6px;
-  border: 1.5px solid rgba(125, 217, 245, 0.45);
-  background: rgba(7, 12, 24, 0.55);
-  color: transparent; /* decorative — only the box outline shows */
-  display: inline-flex; align-items: center; justify-content: center;
+@keyframes fdqRowIn { from { opacity: 0; transform: translateY(6px); } }
+.fdq-row:focus-within { border-color: rgba(125, 217, 245, 0.55); }
+/* Index badge — replaces the old decorative checkbox, which looked
+   tappable but did nothing (ticking happens later on the Habits page). */
+.fdq-idx {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--sys-cyan-1);
+  text-align: center;
+  opacity: 0.75;
 }
+.fdq-name { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .fdq-label {
   font-family: var(--font-sans, 'Inter', sans-serif);
   font-size: 14px;
   font-weight: 600;
   color: var(--sys-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.fdq-stepper { display: inline-flex; align-items: center; gap: 4px; }
+.fdq-step {
+  width: 34px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0;
+  background: rgba(125, 217, 245, 0.06);
+  border: 1px solid rgba(125, 217, 245, 0.28);
+  border-radius: 8px;
+  color: var(--sys-cyan-1);
+  cursor: pointer;
+  transition: background var(--dur-1) ease, transform var(--dur-1) var(--ease-spring), opacity var(--dur-2) ease;
+}
+.fdq-step:active:not(:disabled) { transform: scale(0.9); background: rgba(125, 217, 245, 0.18); }
+.fdq-step:disabled { opacity: 0.35; cursor: default; }
 .fdq-target {
-  height: 32px;
-  padding: 0 10px;
+  width: 54px;
+  height: 40px;
+  padding: 0 6px;
   background: rgba(7, 12, 24, 0.7);
   border: 1px solid rgba(125, 217, 245, 0.35);
   border-radius: 6px;
@@ -8186,10 +8555,41 @@ input, select, textarea {
 }
 .fdq-unit {
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
   color: var(--sys-ink-dim);
   text-transform: uppercase;
+}
+/* Accept beat: rows lock in green, then the stamp line pops before the
+   frame dematerializes (FirstDailyQuest ACCEPT_HOLD_MS). */
+.fdq-list.is-accepted .fdq-row {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.06);
+}
+.fdq-accepted {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 44px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: var(--green-bright);
+  text-shadow: 0 0 12px rgba(52, 211, 153, 0.55);
+  animation: fdqStamp var(--dur-4) var(--ease-spring) both;
+}
+.fdq-accepted-xp {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: #FBE38A;
+  text-shadow: 0 0 8px rgba(251, 227, 138, 0.6);
+}
+@keyframes fdqStamp {
+  from { opacity: 0; transform: scale(1.5) rotate(-4deg); }
+}
+@media (max-width: 360px) {
+  .fdq-row { gap: 8px; padding-left: 10px; }
+  .fdq-step { width: 30px; }
+  .fdq-target { width: 46px; }
 }
 
 /* ============================================================
@@ -8229,7 +8629,11 @@ input, select, textarea {
     drop-shadow(0 0 28px rgba(251, 191, 36, 0.45));
   transform-origin: 50% 70%;
   animation: ah-beat var(--ah-beat, 1.4s) ease-in-out infinite;
-  transform: scale(var(--ah-scale, 1));
+  /* ah-beat owns `transform`, so the per-tier size rides on the independent
+     `scale` property (it used to be silently overridden by the beat). The
+     transition lets the heart swell as the intro ramps the tier up. */
+  scale: var(--ah-scale, 1);
+  transition: scale 520ms var(--ease-spring-soft);
 }
 @keyframes ah-beat {
   0%, 60%, 100% { transform: scale(1); }
@@ -8238,7 +8642,10 @@ input, select, textarea {
   28%           { transform: scale(1.07); }
   38%           { transform: scale(1); }
 }
-.ah-sparks { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.ah-sparks {
+  position: absolute; inset: 0; pointer-events: none; z-index: 3;
+  animation: ahLayerIn 600ms var(--ease-out-expo) backwards;
+}
 .ah-spark {
   position: absolute;
   width: 2px; height: 2px;
@@ -8262,14 +8669,21 @@ input, select, textarea {
   background: radial-gradient(closest-side, rgba(245, 197, 24, 0.22), transparent 75%);
   filter: blur(10px);
   pointer-events: none;
-  animation: ah-halo-pulse 1.6s 0.4s ease-in-out infinite;
+  animation: ah-halo-pulse 1.6s 0.4s ease-in-out infinite, ahLayerIn 600ms var(--ease-out-expo) backwards;
 }
+/* One drop-shadow instead of two: the flame paths animate every frame, so
+   each extra filter pass was re-rasterized every frame too. */
 .ah-flames {
   position: absolute; inset: 0;
   pointer-events: none; z-index: 1;
-  filter:
-    drop-shadow(0 0 6px rgba(251, 146, 60, 0.6))
-    drop-shadow(0 0 14px rgba(239, 68, 68, 0.35));
+  filter: drop-shadow(0 0 8px rgba(251, 146, 60, 0.55));
+  animation: ahLayerIn 600ms var(--ease-out-expo) backwards;
+}
+/* New tier layers (sparks, flames, orbit, crown) bloom in when the intro
+   ramps the heart up. Uses the independent `scale` property so it composes
+   with each layer's own transform loop instead of fighting it. */
+@keyframes ahLayerIn {
+  from { opacity: 0; scale: 0.6; }
 }
 .ah-flame { transform-origin: 50% 100%; animation: ah-flame-flick 1.6s ease-in-out infinite; }
 .ah-flame-a { animation-delay: 0s; }
@@ -8281,8 +8695,8 @@ input, select, textarea {
 }
 .ah-orbit { position: absolute; inset: -8%; z-index: 0; pointer-events: none; }
 .ah-orbit svg { width: 100%; height: 100%; }
-.ah-orbit-a { animation: ah-orbit-spin 5s linear infinite; transform: rotate(-8deg); }
-.ah-orbit-b { animation: ah-orbit-spin-rev 7s linear infinite; transform: rotate(22deg); }
+.ah-orbit-a { animation: ah-orbit-spin 5s linear infinite, ahLayerIn 600ms var(--ease-out-expo) backwards; transform: rotate(-8deg); }
+.ah-orbit-b { animation: ah-orbit-spin-rev 7s linear infinite, ahLayerIn 600ms var(--ease-out-expo) backwards; transform: rotate(22deg); }
 @keyframes ah-orbit-spin     { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 @keyframes ah-orbit-spin-rev { from { transform: rotate(360deg); } to { transform: rotate(0); } }
 .ah-crown {
@@ -8291,7 +8705,10 @@ input, select, textarea {
   filter:
     drop-shadow(0 0 8px rgba(245, 197, 24, 0.7))
     drop-shadow(0 0 14px rgba(245, 197, 24, 0.45));
-  animation: ah-crown-spin 18s linear infinite, ah-crown-pulse 1.4s ease-in-out infinite;
+  animation:
+    ah-crown-spin 18s linear infinite,
+    ah-crown-pulse 1.4s ease-in-out infinite,
+    ahLayerIn 700ms var(--ease-out-expo) backwards;
   transform-origin: center;
 }
 .ah-crown svg { width: 100%; height: 100%; }
@@ -8313,6 +8730,14 @@ input, select, textarea {
 /* ============================================================
    HEART AWAKENING cinematic — full-screen (.ha-*)
    ============================================================ */
+/* Persistent void under every intro phase (IntroSequence .intro-root):
+   the invitation / welcome frames are portaled above it and the heart stage
+   renders inside it, so the page body never flashes between phases. */
+.intro-root {
+  position: fixed; inset: 0;
+  z-index: 340;
+  background: radial-gradient(closest-side at 50% 50%, rgba(15, 23, 42, 0.6), #02040A 70%);
+}
 .ha-stage {
   position: fixed; inset: 0;
   z-index: 360;
@@ -8321,11 +8746,18 @@ input, select, textarea {
   align-items: center; justify-content: center;
   gap: 22px;
   overflow: hidden;
+  cursor: pointer;
   animation: ha-fade-in 600ms var(--ease-out);
 }
 @keyframes ha-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.ha-stage.is-leaving { animation: haOut 280ms var(--ease-in) forwards; }
+@keyframes haOut { to { opacity: 0; transform: scale(1.04); } }
+/* Star field: an oversized layer drifting on transform (compositor-only)
+   instead of animating background-position, which repainted the whole
+   screen every frame of the cinematic. */
 .ha-void {
-  position: absolute; inset: 0;
+  position: absolute; inset: -120px;
+  will-change: transform;
   background-image:
     radial-gradient(2px 2px at 20% 30%, rgba(251, 191, 36, 0.3) 50%, transparent),
     radial-gradient(1.5px 1.5px at 70% 25%, rgba(167, 243, 252, 0.3) 50%, transparent),
@@ -8333,9 +8765,22 @@ input, select, textarea {
     radial-gradient(1.2px 1.2px at 15% 80%, rgba(167, 243, 252, 0.3) 50%, transparent);
   background-size: 600px 600px;
   pointer-events: none;
-  animation: ha-stars 12s linear infinite;
+  animation: haDrift 12s linear infinite alternate;
 }
-@keyframes ha-stars { to { background-position: 100px 100px, -120px 80px, 160px -90px, -80px 110px; } }
+@keyframes haDrift { to { transform: translate3d(100px, 100px, 0); } }
+.ha-skip {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: rgba(167, 243, 252, 0.55);
+  pointer-events: none;
+  animation: haSkipIn var(--dur-5) var(--ease-out) both;
+}
+@keyframes haSkipIn { from { opacity: 0; transform: translateY(4px); } }
 .ha-caption {
   text-align: center;
   z-index: 2;
@@ -8776,6 +9221,35 @@ input, select, textarea {
 .ob-nav .au-cta { width: auto; flex: 0 0 auto; margin-top: 0; padding: 0 22px; }
 .ob-back { background: transparent; border: 0; color: var(--t-3); font-size: 13px; font-weight: 600; cursor: pointer; padding: 8px 10px; }
 .ob-back:hover { color: var(--t-hi); }
+
+/* Finish outro (App.tsx OnboardingGate) — covers the full reload into the
+   Dashboard with a themed "sync" beat instead of a blank flash. */
+.ob-sync {
+  position: fixed; inset: 0;
+  z-index: 60;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 16px;
+  background: radial-gradient(closest-side at 50% 50%, rgba(15, 23, 42, 0.55), var(--bg-void, #04060D) 75%);
+  animation: obSyncIn 300ms var(--ease-out) both;
+}
+@keyframes obSyncIn { from { opacity: 0; } }
+.ob-sync-ring {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 2px solid rgba(34, 211, 238, 0.18);
+  border-top-color: var(--cyan);
+  box-shadow: 0 0 18px -4px rgba(34, 211, 238, 0.6);
+  animation: obSyncSpin 900ms linear infinite;
+}
+@keyframes obSyncSpin { to { transform: rotate(360deg); } }
+.ob-sync-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: var(--cyan);
+  text-shadow: 0 0 10px rgba(34, 211, 238, 0.45);
+}
 
 /* Text-token helpers (replace raw text-slate-* utilities, keep sizing utilities) */
 .ob-t-hi { color: var(--t-hi); }

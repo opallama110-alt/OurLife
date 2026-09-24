@@ -1,4 +1,7 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { usePresence } from '../../hooks/usePresence';
+import { useInViewPause } from '../../hooks/useInViewPause';
 
 // ─────────────────────────────────────────────────────────────────────────
 // SystemNotification — Solo-Leveling "The System" ornate panel.
@@ -17,17 +20,18 @@ import { ReactNode, useEffect, useState } from 'react';
 //     └─ optional .sys-footer { footer }
 //
 // IMPORTANT: <SystemFrameDefs /> MUST be mounted once in the document
-// (we do this inside <Layout />) so the <use href="#sys-filigree" />
-// references resolve to the gradient-stroked corner ornament.
+// (Layout mounts it for the app shell; the intro stage in App.tsx mounts
+// its own copy because it renders outside Layout) so the
+// <use href="#sys-filigree" /> references resolve to the corner ornament.
 //
 // Two render modes:
 //   - mode='modal'  (default) — full-viewport backdrop + centered .sys-frame,
-//                                driven by `open` for mount/close transitions
+//                                driven by `open`. Portaled to <body> so an
+//                                ancestor transform can never trap the fixed
+//                                overlay. Materializes in AND dematerializes
+//                                out (usePresence keeps it mounted for the
+//                                exit), Esc closes it when closable.
 //   - mode='inline' — .sys-frame in document flow, ignores `open`
-//
-// The modal mount state machine (requestAnimationFrame → setShow(true) →
-// setTimeout(unmount, 360)) is preserved from the previous .sn-* version
-// so existing modal callers keep their transition timing.
 // ─────────────────────────────────────────────────────────────────────────
 
 export type SystemNotificationTone = 'cyan' | 'gold' | 'red';
@@ -51,6 +55,9 @@ export interface SystemNotificationProps {
     footer?: ReactNode;
     className?: string;
 }
+
+// Must cover the CSS exit (.sys-modal-root[data-state="exit"], --dur-2).
+const EXIT_MS = 200;
 
 /** 4× ornate corner filigree referencing the global <symbol id="sys-filigree" />. */
 function Corners() {
@@ -78,6 +85,7 @@ function Divider() {
 function FrameContent({
     title,
     subtitle,
+    titleId,
     children,
     footer,
     closable,
@@ -85,7 +93,7 @@ function FrameContent({
     cta,
 }: Pick<SystemNotificationProps,
     'title' | 'subtitle' | 'children' | 'footer' | 'closable' | 'onClose' | 'cta'
->) {
+> & { titleId?: string }) {
     const hasHead = !!(title || subtitle || cta);
     return (
         <>
@@ -103,7 +111,7 @@ function FrameContent({
                 <header className="sys-head">
                     {(title || subtitle) && (
                         <div className="sys-title-wrap">
-                            {title    && <h2 className="sys-title">{title}</h2>}
+                            {title    && <h2 className="sys-title" id={titleId}>{title}</h2>}
                             {subtitle && <p  className="sys-subtitle">{subtitle}</p>}
                         </div>
                     )}
@@ -133,28 +141,53 @@ export default function SystemNotification({
     footer,
     className = '',
 }: SystemNotificationProps) {
-    // Hooks must run unconditionally — both branches use the same state machine
-    // even though inline mode ignores it at render time.
-    const [mounted, setMounted] = useState(mode === 'inline' ? true : false);
-    const [show, setShow] = useState(mode === 'inline' ? true : false);
+    // Hooks must run unconditionally — inline mode simply never opens the
+    // presence machine.
+    const isModal = mode !== 'inline';
+    const { mounted, state } = usePresence(isModal && open, EXIT_MS);
+    const titleId = useId();
+    const frameRef = useRef<HTMLElement>(null);
+    const inlineRef = useRef<HTMLElement>(null);
+    const onCloseRef = useRef(onClose);
+    onCloseRef.current = onClose;
 
+    // Inline frames (Dashboard verdict) sit in long scrolling pages: stop the
+    // breathing glow while they're off screen.
+    useInViewPause(inlineRef);
+
+    // Esc dismisses a closable modal, matching the backdrop tap.
     useEffect(() => {
-        if (mode === 'inline') return;
-        if (open) {
-            setMounted(true);
-            const id = requestAnimationFrame(() => setShow(true));
-            return () => cancelAnimationFrame(id);
-        }
-        setShow(false);
-        const t = window.setTimeout(() => setMounted(false), 360);
-        return () => window.clearTimeout(t);
-    }, [open, mode]);
+        if (!isModal || !open || !closable) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current?.(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [isModal, open, closable]);
+
+    // Move focus onto the frame itself (not the first input — that would pop
+    // the phone keyboard over the quest list) and hand it back on close.
+    useEffect(() => {
+        if (!isModal || !open) return;
+        const restore = document.activeElement as HTMLElement | null;
+        // The frame may mount one render after `open` flips (usePresence), so
+        // retry for a couple of frames instead of assuming it exists already.
+        let tries = 0;
+        let id = 0;
+        const focusFrame = () => {
+            if (frameRef.current) frameRef.current.focus({ preventScroll: true });
+            else if (tries++ < 3) id = window.requestAnimationFrame(focusFrame);
+        };
+        id = window.requestAnimationFrame(focusFrame);
+        return () => {
+            window.cancelAnimationFrame(id);
+            if (restore && document.contains(restore)) restore.focus?.({ preventScroll: true });
+        };
+    }, [isModal, open]);
 
     const toneClass = tone === 'cyan' ? '' : `tone-${tone}`;
 
-    if (mode === 'inline') {
+    if (!isModal) {
         return (
-            <section className={`sys-frame ${toneClass} ${className}`.trim()}>
+            <section ref={inlineRef} className={`sys-frame ${toneClass} ${className}`.trim()}>
                 <FrameContent
                     title={title}
                     subtitle={subtitle}
@@ -169,15 +202,30 @@ export default function SystemNotification({
         );
     }
 
-    // Modal mode: full-viewport overlay with mount/close transitions.
-    if (!mounted) return null;
-    return (
-        <div className={`sys-modal-root ${show ? 'is-open' : ''} ${className}`.trim()}>
-            <div className="sys-modal-backdrop" onClick={closable ? onClose : undefined} />
-            <section className={`sys-frame sys-frame-modal ${toneClass}`.trim()}>
+    // Modal mode: full-viewport overlay with materialize/dematerialize.
+    if (!mounted || typeof document === 'undefined') return null;
+    return createPortal(
+        <div
+            className={`sys-modal-root ${state === 'enter' ? 'is-open' : ''} ${className}`.trim()}
+            data-state={state}
+        >
+            <div
+                className="sys-modal-backdrop"
+                onClick={closable ? onClose : undefined}
+                aria-hidden="true"
+            />
+            <section
+                ref={frameRef}
+                className={`sys-frame sys-frame-modal ${toneClass}`.trim()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={title ? titleId : undefined}
+                tabIndex={-1}
+            >
                 <FrameContent
                     title={title}
                     subtitle={subtitle}
+                    titleId={titleId}
                     closable={closable}
                     onClose={onClose}
                     cta={cta}
@@ -186,6 +234,7 @@ export default function SystemNotification({
                     {children}
                 </FrameContent>
             </section>
-        </div>
+        </div>,
+        document.body,
     );
 }
