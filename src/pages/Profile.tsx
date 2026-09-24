@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { UserState, GymProfile, WorkoutLog } from '../types';
 import { storageService } from '../services/storageService';
 import {
-    Save, User, UserCircle, Ruler, Weight, Activity, CheckSquare, Calendar, Sparkles,
+    Save, User, UserCircle, Ruler, Weight, Activity, Check, Calendar, Sparkles,
     Flame, Trophy, Crown, BarChart3, Users as UsersIcon, Loader2,
 } from 'lucide-react';
 import {
@@ -13,10 +13,14 @@ import {
     getTitleForLevel,
 } from '../services/gamificationService';
 import { calcBMI, bmiSliderStyle } from '../utils/bmi';
-import { calculateAge } from '../utils/dateUtils';
+import { calculateAge, getTodayString } from '../utils/dateUtils';
+import { liveWorkoutStreak } from '../utils/liveStreak';
 import { DateOfBirthPicker } from '../components/DateOfBirthPicker';
 import { AchievementGallery } from '../components/AchievementGallery';
-import { RankBadge, rankFromTierName } from '../components/hud';
+import { RankBadge, rankFromTierName, CountUp } from '../components/hud';
+import { StreakFlame, StreakNumber } from '../components/streak';
+import { useInViewPause } from '../hooks/useInViewPause';
+import { prefersReducedMotion } from '../hooks/usePresence';
 
 type CompareUser = {
     id: string;
@@ -31,6 +35,42 @@ type CompareUser = {
 
 interface ProfileProps {
     achievementsDefaultExpanded?: boolean;
+}
+
+const fmtId = (v: number) => Math.round(v).toLocaleString('id-ID');
+const pct = (v: number) => `${Math.round(v)}%`;
+const barStyle = (width: number, delayMs: number) =>
+    ({ width: `${width}%`, '--bar-delay': `${delayMs}ms` } as React.CSSProperties);
+
+// ─── Streak "since your last visit" ─────────────────────────────────────
+// Profile lives in Settings, so the streak almost never changes while it is
+// on screen and StreakFlame's burst (which fires on an increase after mount)
+// would never play here. Instead the card opens on the value the viewer saw
+// last time and rolls up to today's streak once the card has landed — the
+// flame bursts, the number rolls. Per-viewer cosmetic, so localStorage (and
+// any storage failure just shows the live value).
+const SEEN_STREAK_KEY = 'ol:pf-seen-streak';
+const STREAK_BUMP_DELAY_MS = 700;
+
+function useStreakSinceLastVisit(live: number): number {
+    const [shown, setShown] = useState<number>(() => {
+        if (prefersReducedMotion()) return live;
+        try {
+            const raw = localStorage.getItem(SEEN_STREAK_KEY);
+            const prev = raw === null ? NaN : Number(raw);
+            return Number.isFinite(prev) && prev >= 0 && prev < live ? prev : live;
+        } catch {
+            return live;
+        }
+    });
+
+    useEffect(() => {
+        try { localStorage.setItem(SEEN_STREAK_KEY, String(live)); } catch { /* storage blocked — cosmetic only */ }
+        const t = window.setTimeout(() => setShown(live), prefersReducedMotion() ? 0 : STREAK_BUMP_DELAY_MS);
+        return () => window.clearTimeout(t);
+    }, [live]);
+
+    return shown;
 }
 
 export const Profile: React.FC<ProfileProps> = ({ achievementsDefaultExpanded = true }) => {
@@ -63,6 +103,19 @@ export const Profile: React.FC<ProfileProps> = ({ achievementsDefaultExpanded = 
         [user.height, user.weight, user.gender, user.experienceLevel],
     );
 
+    // Live workout streak (freeze-token days count). `profile.currentStreak`
+    // is only refreshed on workout save/sync, so after a lapse it keeps
+    // burning an old number. Display-only selector.
+    const liveStreak = useMemo(
+        () => liveWorkoutStreak(workouts, gymProfile),
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- only the protected dates matter
+        [workouts, gymProfile.tokenProtectedDates],
+    );
+    const today = getTodayString();
+    const trainedToday = useMemo(() => workouts.some(w => w.date === today), [workouts, today]);
+    // The stored best can lag the live streak until the next sync.
+    const bestStreak = Math.max(gymProfile.longestStreak ?? 0, liveStreak);
+
     const handleManualSave = async () => {
         setSaveStatus('saving');
         try {
@@ -89,12 +142,18 @@ export const Profile: React.FC<ProfileProps> = ({ achievementsDefaultExpanded = 
         <div className="space-y-6 pb-24">
             {/* ═══════════════════ PHASE 6: PUBLIC HUNTER CARD ═══════════════════ */}
             <div className="reveal" style={revealStyle(0)}>
-                <HunterCard gymProfile={gymProfile} displayName={user.name} />
+                <HunterCard
+                    gymProfile={gymProfile}
+                    displayName={user.name}
+                    liveStreak={liveStreak}
+                    bestStreak={bestStreak}
+                    trainedToday={trainedToday}
+                />
             </div>
 
             {/* ═══════════════════ PENGHARGAAN — Hunter Rank + Consistency Tracks ═══════════════════ */}
             <div className="reveal" style={revealStyle(1)}>
-                <Penghargaan gymProfile={gymProfile} />
+                <Penghargaan gymProfile={gymProfile} liveStreak={liveStreak} bestStreak={bestStreak} />
             </div>
 
             {/* ═══════════════════ PHASE 5B: ACHIEVEMENT GALLERY ═══════════════════ */}
@@ -104,7 +163,7 @@ export const Profile: React.FC<ProfileProps> = ({ achievementsDefaultExpanded = 
 
             {/* ═══════════════════ PHASE 6: COMPARE UI ═══════════════════ */}
             <div className="reveal" style={revealStyle(3)}>
-                <CompareSection gymProfile={gymProfile} displayName={user.name} />
+                <CompareSection gymProfile={gymProfile} displayName={user.name} myStreak={liveStreak} />
             </div>
 
             {/* Save Status Indicator */}
@@ -277,7 +336,7 @@ export const Profile: React.FC<ProfileProps> = ({ achievementsDefaultExpanded = 
                         </>
                     ) : saveStatus === 'saved' ? (
                         <>
-                            <CheckSquare size={20} />
+                            <Check size={20} />
                             <span>Saved Successfully</span>
                         </>
                     ) : (
@@ -294,94 +353,110 @@ export const Profile: React.FC<ProfileProps> = ({ achievementsDefaultExpanded = 
 
 // ═══════════════════════════════════════════════════════════════════
 // Phase 6 — Public Hunter Card: Rank, Lifetime XP bar, Streak counter
+// Hero numbers count up on every visit, the XP bar charges from empty, and
+// the streak row uses the shared tiered StreakFlame (cold ash at 0, System
+// blue at 30d+) with a roll + burst when the streak rose since last visit.
+// Glows are painted gradients (no blur-3xl blobs re-rasterizing under the
+// bar sheen), and the card no longer clips, so the burst isn't cut off.
 // ═══════════════════════════════════════════════════════════════════
-const HunterCard: React.FC<{ gymProfile: GymProfile; displayName: string }> = ({ gymProfile, displayName }) => {
+const HunterCard: React.FC<{
+    gymProfile: GymProfile;
+    displayName: string;
+    liveStreak: number;
+    bestStreak: number;
+    trainedToday: boolean;
+}> = ({ gymProfile, displayName, liveStreak, bestStreak, trainedToday }) => {
+    const ref = useRef<HTMLDivElement>(null);
+    useInViewPause(ref);   // pauses the XP bar sheen while scrolled away
+
     const totalXP = gymProfile.totalXP || 0;
     const level = gymProfile.level || 1;
     const rank = getRankForLevel(level);
     const title = getTitleForLevel(level);
     const progress = getXPProgress(totalXP);
-    const streak = gymProfile.currentStreak ?? 0;
-    const longestStreak = gymProfile.longestStreak ?? 0;
+    const shownStreak = useStreakSinceLastVisit(liveStreak);
+    const atRisk = liveStreak > 0 && !trainedToday;
+
+    const streakHint = liveStreak === 0
+        ? 'Latihan hari ini untuk menyalakan api.'
+        : atRisk
+            ? 'Belum latihan hari ini — jaga apinya.'
+            : 'Api terjaga hari ini.';
 
     return (
-        <div className="relative rounded-3xl overflow-hidden border border-cyan-500/20 bg-gradient-to-br from-slate-900 via-slate-900 to-blue-950 p-6 shadow-2xl shadow-cyan-500/10">
-            {/* Ambient glow */}
-            <div className="absolute -top-24 -right-24 w-72 h-72 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-
-            <div className="relative z-10 space-y-5">
-                {/* Header row — name, rank emblem */}
-                <div className="flex items-start justify-between">
-                    <div>
-                        <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-cyan-400/80">Rekor Personal</div>
-                        <h2 className="text-2xl font-bold text-white mt-1">{displayName || 'Hunter'}</h2>
-                        <p className={`text-sm font-mono mt-0.5 ${title.color}`}>&ldquo;{title.title}&rdquo;</p>
-                    </div>
-                    <div className="flex flex-col items-center">
-                        <RankBadge rank={rankFromTierName(rank.name)} size="lg" isCurrent />
-                        <div className={`text-[11px] font-mono font-bold mt-1 ${rank.color}`}>{rank.name}</div>
-                    </div>
+        <div ref={ref} className="pf-hero">
+            {/* Header row — name, rank emblem */}
+            <div className="pf-hero-head">
+                <div className="min-w-0">
+                    <div className="pf-kicker">Rekor Personal</div>
+                    <h2 className="pf-hero-name">{displayName || 'Hunter'}</h2>
+                    <p className={`pf-hero-title ${title.color}`}>&ldquo;{title.title}&rdquo;</p>
                 </div>
-
-                {/* Stat row */}
-                <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-                        <div className="text-[9px] font-mono uppercase tracking-wider text-slate-500">Level</div>
-                        <div className="text-2xl font-bold text-white font-mono">{level}</div>
-                    </div>
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-                        <div className="text-[9px] font-mono uppercase tracking-wider text-slate-500">Lifetime XP</div>
-                        <div className="text-2xl font-bold text-cyan-300 font-mono">{totalXP.toLocaleString()}</div>
-                    </div>
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
-                        <div className="text-[9px] font-mono uppercase tracking-wider text-slate-500">Workouts</div>
-                        <div className="text-2xl font-bold text-white font-mono">{gymProfile.workoutsCompleted || 0}</div>
-                    </div>
+                <div className="pf-hero-rank">
+                    <RankBadge rank={rankFromTierName(rank.name)} size="lg" isCurrent />
+                    <div className={`pf-hero-rank-name ${rank.color}`}>{rank.name}</div>
                 </div>
+            </div>
 
-                {/* Lifetime XP progress bar — to next level */}
-                <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
-                            Level {level} → {level + 1}
-                        </span>
-                        <span className="text-[11px] font-mono text-cyan-300">
-                            {progress.current.toLocaleString()} / {progress.needed.toLocaleString()} XP
-                        </span>
-                    </div>
-                    <div className="relative h-3 bg-slate-950 border border-slate-800 rounded-full overflow-hidden">
-                        <div
-                            className="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-full transition-all duration-700 ease-out"
-                            style={{ width: `${progress.percent}%`, boxShadow: '0 0 14px rgba(6,182,212,0.6)' }}
-                        />
-                        <div
-                            className="absolute inset-y-0 left-0 shimmer rounded-full"
-                            style={{ width: `${progress.percent}%` }}
-                        />
-                    </div>
-                    <div className="text-right text-[10px] font-mono text-slate-500 mt-1">{progress.percent}%</div>
+            {/* Stat row — counts up on every visit */}
+            <div className="pf-stats">
+                <div className="pf-stat">
+                    <div className="pf-stat-label">Level</div>
+                    <CountUp value={level} duration={700} className="pf-stat-val" />
                 </div>
+                <div className="pf-stat">
+                    <div className="pf-stat-label">Total XP</div>
+                    <CountUp value={totalXP} duration={1100} format={fmtId} className="pf-stat-val is-cyan" />
+                </div>
+                <div className="pf-stat">
+                    <div className="pf-stat-label">Workout</div>
+                    <CountUp value={gymProfile.workoutsCompleted || 0} duration={800} format={fmtId} className="pf-stat-val" />
+                </div>
+            </div>
 
-                {/* Streak counter — fire */}
-                <div className="flex items-center justify-between bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-transparent border border-amber-500/30 rounded-xl p-3">
-                    <div className="flex items-center space-x-3">
-                        <div className="relative">
-                            <Flame size={32} className="text-orange-400 streak-fire animate-breathe" />
-                            {streak >= 7 && (
-                                <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-400 rounded-full animate-ping" />
-                            )}
-                        </div>
-                        <div>
-                            <div className="text-[9px] font-mono uppercase tracking-widest text-amber-400">Current Streak</div>
-                            <div className="text-xl font-bold text-white font-mono">
-                                {streak} <span className="text-xs text-slate-400 font-normal">day{streak === 1 ? '' : 's'}</span>
-                            </div>
-                        </div>
+            {/* Lifetime XP progress bar — to next level */}
+            <div>
+                <div className="pf-bar-head">
+                    <span className="pf-bar-label">Level {level} → {level + 1}</span>
+                    <span className="pf-bar-meta tnum">
+                        {fmtId(progress.current)} / {fmtId(progress.needed)} XP
+                    </span>
+                </div>
+                <div
+                    className="pf-track"
+                    role="progressbar"
+                    aria-label={`Progres ke level ${level + 1}`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={progress.percent}
+                >
+                    <div className="pf-fill pf-fill-xp pf-grow pf-sheen" style={barStyle(progress.percent, 260)} />
+                </div>
+                <div className="pf-bar-foot">
+                    <span />
+                    <CountUp value={progress.percent} duration={900} format={pct} className="pf-bar-pct" />
+                </div>
+            </div>
+
+            {/* Streak counter — tiered flame */}
+            <div className={`pf-streak ${liveStreak > 0 ? '' : 'is-cold'}`}>
+                <span className="pf-sr">Streak latihan {liveStreak} hari, terpanjang {bestStreak} hari.</span>
+                <span className="pf-streak-flame" aria-hidden="true">
+                    <StreakFlame streak={shownStreak} size={34} atRisk={atRisk} />
+                </span>
+                <div className="pf-streak-main" aria-hidden="true">
+                    <div className="pf-streak-label">Streak Saat Ini</div>
+                    <div className="pf-streak-val">
+                        <StreakNumber value={shownStreak} />
+                        <span className="pf-streak-unit">hari</span>
                     </div>
-                    <div className="text-right">
-                        <div className="text-[9px] font-mono uppercase tracking-widest text-slate-500">Longest</div>
-                        <div className="text-lg font-bold text-slate-300 font-mono">{longestStreak}</div>
+                    <p className="pf-streak-hint">{streakHint}</p>
+                </div>
+                <div className="pf-streak-best" aria-hidden="true">
+                    <div className="pf-streak-best-label">Terpanjang</div>
+                    <div className="pf-streak-best-val">
+                        <CountUp value={bestStreak} duration={800} />
+                        <span className="pf-streak-unit">h</span>
                     </div>
                 </div>
             </div>
@@ -394,10 +469,14 @@ const HunterCard: React.FC<{ gymProfile: GymProfile; displayName: string }> = ({
 // Two horizontal progress bars: progress within current rank tier (E/D/C/B/A/S/National)
 // and progress toward the next streak-title milestone (Spark Bearer → Eternal Phoenix).
 // ═══════════════════════════════════════════════════════════════════
-const Penghargaan: React.FC<{ gymProfile: GymProfile }> = ({ gymProfile }) => {
+const Penghargaan: React.FC<{ gymProfile: GymProfile; liveStreak: number; bestStreak: number }> = ({
+    gymProfile, liveStreak, bestStreak,
+}) => {
+    const ref = useRef<HTMLElement>(null);
+    useInViewPause(ref);   // pauses both track sheens while scrolled away
+
     const level = gymProfile.level || 1;
-    const longestStreak = gymProfile.longestStreak ?? 0;
-    const currentStreak = gymProfile.currentStreak ?? 0;
+    const longestStreak = bestStreak;
 
     // ── HUNTER RANK TRACK ─────────────────────────────────────────────
     const currentRank = getRankForLevel(level);
@@ -425,159 +504,130 @@ const Penghargaan: React.FC<{ gymProfile: GymProfile }> = ({ gymProfile }) => {
         : 100;
 
     return (
-        <div className="jarvis-card p-5 rounded-2xl space-y-5">
-            <div className="flex items-center space-x-3">
-                <Trophy size={22} className="text-amber-400" />
-                <div>
-                    <h3 className="text-lg font-bold text-white">Penghargaan</h3>
-                    <p className="text-[11px] text-slate-500 font-mono">Lacak progres rank & konsistensi-mu</p>
+        <section ref={ref} className="s-section pf-stack">
+            <div className="s-section-head pf-sec-head">
+                <span className="s-section-icon s-icon-gold"><Trophy size={15} /></span>
+                <div className="min-w-0">
+                    <h3 className="s-section-title">Penghargaan</h3>
+                    <p className="pf-sec-sub">Lacak progres rank & konsistensi-mu</p>
                 </div>
             </div>
 
             {/* ── HUNTER RANK TRACK ───────────────────────────────────── */}
-            <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
-                <div className="absolute -top-12 -right-12 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <Crown size={14} className="text-cyan-400" />
-                            <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-cyan-400 font-bold">
-                                Hunter Rank Track
-                            </span>
-                        </div>
-                        <span className="text-[10px] font-mono text-slate-500">
-                            Lv.{level}
-                        </span>
-                    </div>
+            <div className="pf-panel pf-panel-rank">
+                <div className="pf-panel-head">
+                    <span className="pf-panel-kicker text-cyan-400">
+                        <Crown size={13} /> Hunter Rank Track
+                    </span>
+                    <span className="pf-panel-meta">Lv.{level}</span>
+                </div>
 
-                    {/* Current → Next emblem row */}
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <RankBadge rank={rankFromTierName(currentRank.name)} size="sm" isCurrent />
+                {/* Current → Next emblem row */}
+                <div className="pf-milestones">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <RankBadge rank={rankFromTierName(currentRank.name)} size="sm" isCurrent />
+                        <div className="min-w-0">
+                            <div className={`text-xs font-bold font-mono ${currentRank.color} truncate`}>{currentRank.name}</div>
+                            <div className="pf-milestone-sub">Lv {rankFloor}</div>
+                        </div>
+                    </div>
+                    {nextRank ? (
+                        <div className="flex items-center gap-2 min-w-0 text-right">
                             <div className="min-w-0">
-                                <div className={`text-xs font-bold font-mono ${currentRank.color} truncate`}>{currentRank.name}</div>
-                                <div className="text-[9px] font-mono text-slate-500">Lv {rankFloor}</div>
+                                <div className={`text-xs font-bold font-mono ${nextRank.color} truncate`}>{nextRank.name}</div>
+                                <div className="pf-milestone-sub">Lv {nextRank.minLevel}</div>
                             </div>
+                            <RankBadge rank={rankFromTierName(nextRank.name)} size="sm" className="opacity-50" />
                         </div>
-                        {nextRank ? (
-                            <div className="flex items-center gap-2 min-w-0 text-right">
-                                <div className="min-w-0">
-                                    <div className={`text-xs font-bold font-mono ${nextRank.color} truncate`}>{nextRank.name}</div>
-                                    <div className="text-[9px] font-mono text-slate-500">Lv {nextRank.minLevel}</div>
-                                </div>
-                                <RankBadge rank={rankFromTierName(nextRank.name)} size="sm" className="opacity-50" />
-                            </div>
-                        ) : (
-                            <div className="text-right">
-                                <div className="text-xs font-bold font-mono text-yellow-400 drop-shadow-[0_0_6px_currentColor]">MAX RANK</div>
-                                <div className="text-[9px] font-mono text-slate-500">Apex Hunter</div>
-                            </div>
-                        )}
-                    </div>
+                    ) : (
+                        <div className="text-right">
+                            <div className="text-xs font-bold font-mono text-yellow-400">MAX RANK</div>
+                            <div className="pf-milestone-sub">Apex Hunter</div>
+                        </div>
+                    )}
+                </div>
 
-                    {/* Horizontal progress bar with shimmer */}
-                    <div className="relative h-3 bg-slate-950 border border-slate-800 rounded-full overflow-hidden">
-                        <div
-                            className="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 rounded-full transition-all duration-700 ease-out"
-                            style={{ width: `${rankPct}%`, boxShadow: '0 0 14px rgba(6,182,212,0.6)' }}
-                        />
-                        <div
-                            className="absolute inset-y-0 left-0 shimmer rounded-full"
-                            style={{ width: `${rankPct}%` }}
-                        />
-                    </div>
-                    <div className="flex items-center justify-between mt-1">
-                        <span className="text-[9px] font-mono text-slate-600">
-                            {nextRank
-                                ? `${level - rankFloor}/${rankSpan} levels into ${currentRank.name}`
-                                : 'Maximum Hunter Rank reached'}
-                        </span>
-                        <span className="text-[10px] font-mono font-bold text-cyan-300">{Math.round(rankPct)}%</span>
-                    </div>
+                <div className="pf-track" role="progressbar" aria-label="Progres rank" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(rankPct)}>
+                    <div className="pf-fill pf-fill-xp pf-grow pf-sheen" style={barStyle(rankPct, 420)} />
+                </div>
+                <div className="pf-bar-foot">
+                    <span>
+                        {nextRank
+                            ? `${level - rankFloor}/${rankSpan} level di ${currentRank.name}`
+                            : 'Rank tertinggi tercapai'}
+                    </span>
+                    <CountUp value={rankPct} duration={900} format={pct} className="pf-bar-pct text-cyan-300" />
                 </div>
             </div>
 
             {/* ── CONSISTENCY TRACK ───────────────────────────────────── */}
-            <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
-                <div className="absolute -top-12 -left-12 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                            <Flame size={14} className="text-orange-400" />
-                            <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-orange-400 font-bold">
-                                Consistency Track
-                            </span>
-                        </div>
-                        <span className="text-[10px] font-mono text-slate-500">
-                            Best: <span className="text-orange-300">{longestStreak}d</span>
-                            {currentStreak > 0 && (
-                                <span className="text-slate-600"> · Now: <span className="text-orange-400">{currentStreak}d</span></span>
-                            )}
-                        </span>
-                    </div>
-
-                    {/* Current → Next milestone row */}
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-2xl drop-shadow-[0_0_6px_rgba(249,115,22,0.5)]">
-                                {prevStreakMilestone?.emoji ?? '🌱'}
-                            </span>
-                            <div className="min-w-0">
-                                <div className={`text-xs font-bold font-mono truncate ${prevStreakMilestone?.color ?? 'text-slate-500'}`}>
-                                    {prevStreakMilestone?.title ?? 'Unawakened'}
-                                </div>
-                                <div className="text-[9px] font-mono text-slate-500">
-                                    {prevStreakMilestone ? `${prevStreakMilestone.minDays}d` : '—'}
-                                </div>
-                            </div>
-                        </div>
-                        {nextStreakMilestone ? (
-                            <div className="flex items-center gap-2 min-w-0 text-right">
-                                <div className="min-w-0">
-                                    <div className={`text-xs font-bold font-mono truncate ${nextStreakMilestone.color}`}>{nextStreakMilestone.title}</div>
-                                    <div className="text-[9px] font-mono text-slate-500">{nextStreakMilestone.minDays}d</div>
-                                </div>
-                                <span className="text-2xl opacity-50 drop-shadow-[0_0_6px_rgba(249,115,22,0.5)]">
-                                    {nextStreakMilestone.emoji}
-                                </span>
-                            </div>
-                        ) : (
-                            <div className="text-right">
-                                <div className="text-xs font-bold font-mono text-yellow-400 drop-shadow-[0_0_6px_currentColor]">LEGEND</div>
-                                <div className="text-[9px] font-mono text-slate-500">All milestones forged</div>
-                            </div>
+            <div className="pf-panel pf-panel-streak">
+                <div className="pf-panel-head">
+                    <span className="pf-panel-kicker text-orange-400">
+                        <Flame size={13} /> Consistency Track
+                    </span>
+                    <span className="pf-panel-meta">
+                        Terbaik <span className="text-orange-300">{longestStreak}h</span>
+                        {liveStreak > 0 && (
+                            <> · Kini <span className="text-orange-400">{liveStreak}h</span></>
                         )}
-                    </div>
+                    </span>
+                </div>
 
-                    {/* Horizontal progress bar with shimmer */}
-                    <div className="relative h-3 bg-slate-950 border border-slate-800 rounded-full overflow-hidden">
-                        <div
-                            className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-full transition-all duration-700 ease-out"
-                            style={{ width: `${streakPct}%`, boxShadow: '0 0 14px rgba(249,115,22,0.6)' }}
-                        />
-                        <div
-                            className="absolute inset-y-0 left-0 shimmer rounded-full"
-                            style={{ width: `${streakPct}%` }}
-                        />
+                {/* Current → Next milestone row */}
+                <div className="pf-milestones">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <span className="pf-milestone-emoji">{prevStreakMilestone?.emoji ?? '🌱'}</span>
+                        <div className="min-w-0">
+                            <div className={`text-xs font-bold font-mono truncate ${prevStreakMilestone?.color ?? 'text-slate-500'}`}>
+                                {prevStreakMilestone?.title ?? 'Unawakened'}
+                            </div>
+                            <div className="pf-milestone-sub">
+                                {prevStreakMilestone ? `${prevStreakMilestone.minDays} hari` : '—'}
+                            </div>
+                        </div>
                     </div>
-                    <div className="flex items-center justify-between mt-1">
-                        <span className="text-[9px] font-mono text-slate-600">
-                            {nextStreakMilestone
-                                ? `${longestStreak - streakFloor}/${streakSpan} days into next milestone`
-                                : 'Eternal Phoenix awakened'}
-                        </span>
-                        <span className="text-[10px] font-mono font-bold text-orange-300">{Math.round(streakPct)}%</span>
-                    </div>
+                    {nextStreakMilestone ? (
+                        <div className="flex items-center gap-2 min-w-0 text-right">
+                            <div className="min-w-0">
+                                <div className={`text-xs font-bold font-mono truncate ${nextStreakMilestone.color}`}>{nextStreakMilestone.title}</div>
+                                <div className="pf-milestone-sub">{nextStreakMilestone.minDays} hari</div>
+                            </div>
+                            <span className="pf-milestone-emoji is-next">{nextStreakMilestone.emoji}</span>
+                        </div>
+                    ) : (
+                        <div className="text-right">
+                            <div className="text-xs font-bold font-mono text-yellow-400">LEGEND</div>
+                            <div className="pf-milestone-sub">Semua milestone tercapai</div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="pf-track" role="progressbar" aria-label="Progres konsistensi" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(streakPct)}>
+                    <div className="pf-fill pf-fill-streak pf-grow pf-sheen" style={barStyle(streakPct, 520)} />
+                </div>
+                <div className="pf-bar-foot">
+                    <span>
+                        {nextStreakMilestone
+                            ? `${longestStreak - streakFloor}/${streakSpan} hari menuju milestone berikutnya`
+                            : 'Eternal Phoenix terbangun'}
+                    </span>
+                    <CountUp value={streakPct} duration={900} format={pct} className="pf-bar-pct text-orange-300" />
                 </div>
             </div>
-        </div>
+        </section>
     );
 };
 
 // ═══════════════════════════════════════════════════════════════════
 // Phase 6 — Compare UI (Monthly XP + Workouts vs another user)
+// A skeleton holds the final geometry while rivals load (no ~350px jump
+// under the reader), and the VS block re-keys per opponent so switching
+// cross-fades and re-charges the bars instead of snapping.
 // ═══════════════════════════════════════════════════════════════════
-const CompareSection: React.FC<{ gymProfile: GymProfile; displayName: string }> = ({ gymProfile, displayName }) => {
+const CompareSection: React.FC<{ gymProfile: GymProfile; displayName: string; myStreak: number }> = ({
+    gymProfile, displayName, myStreak,
+}) => {
     const [loading, setLoading] = useState(true);
     const [users, setUsers] = useState<CompareUser[]>([]);
     const [selectedId, setSelectedId] = useState<string>('');
@@ -606,9 +656,9 @@ const CompareSection: React.FC<{ gymProfile: GymProfile; displayName: string }> 
             setUsers(candidates);
             if (candidates.length > 0) setSelectedId(prev => prev || candidates[0].id);
             setLoaded(true);
-        } catch (e: any) {
+        } catch (e) {
             console.error('[CompareSection] load users failed', e);
-            setError(e?.message || 'Failed to load rivals.');
+            setError('Gagal memuat daftar rival. Coba muat ulang.');
         } finally {
             setLoading(false);
         }
@@ -623,7 +673,6 @@ const CompareSection: React.FC<{ gymProfile: GymProfile; displayName: string }> 
 
     const myMonthlyXP = gymProfile.monthlyXP ?? 0;
     const myMonthlyWorkouts = gymProfile.monthlyWorkouts ?? 0;
-    const myStreak = gymProfile.currentStreak ?? 0;
 
     const maxXP = Math.max(myMonthlyXP, selected?.monthlyXP ?? 0, 1);
     const maxWorkouts = Math.max(myMonthlyWorkouts, selected?.monthlyWorkouts ?? 0, 1);
@@ -633,46 +682,50 @@ const CompareSection: React.FC<{ gymProfile: GymProfile; displayName: string }> 
 
     return (
         <div className="jarvis-card p-5 rounded-2xl">
-            <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-3">
-                    <BarChart3 size={22} className="text-purple-400" />
-                    <div>
-                        <h3 className="text-lg font-bold text-white">Current Month Rank</h3>
+            <div className="flex items-center justify-between gap-3 mb-4">
+                <div className="flex items-center space-x-3 min-w-0">
+                    <BarChart3 size={22} className="text-purple-400 shrink-0" />
+                    <div className="min-w-0">
+                        <h3 className="text-lg font-bold text-white">Peringkat Bulan Ini</h3>
                         <p className="text-[11px] text-slate-500 font-mono">
-                            Resets on the 1st • Compare vs another Hunter
+                            Reset tiap tanggal 1 • Bandingkan dengan Hunter lain
                         </p>
                     </div>
                 </div>
                 <button
+                    type="button"
                     onClick={loadUsers}
                     disabled={loading}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold hover:bg-purple-500/20 transition-all disabled:opacity-50"
+                    className="pf-mini-btn"
                 >
-                    {loading ? <Loader2 size={12} className="animate-spin" /> : <UsersIcon size={12} />}
-                    <span>{loading ? 'Loading' : 'Refresh'}</span>
+                    {loading ? <Loader2 size={13} className="animate-spin" /> : <UsersIcon size={13} />}
+                    <span>{loading ? 'Memuat' : 'Muat ulang'}</span>
                 </button>
             </div>
 
             {error && (
-                <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-3 py-2 rounded-lg text-xs mb-3">
+                <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-3 py-2 rounded-lg text-xs mb-3" role="alert">
                     {error}
                 </div>
             )}
 
             {loading && !loaded ? (
-                <div className="text-center py-6 text-xs text-slate-500 font-mono flex items-center justify-center gap-2">
-                    <Loader2 size={12} className="animate-spin text-purple-400" />
-                    Pulling rivals from the leaderboard…
+                <div className="pf-cmp-skel" aria-busy="true" aria-label="Memuat rival">
+                    <div className="pf-skel" style={{ height: 44 }} />
+                    <div className="pf-skel" style={{ height: 76 }} />
+                    <div className="pf-skel" style={{ height: 64 }} />
+                    <div className="pf-skel" style={{ height: 64 }} />
+                    <div className="pf-skel" style={{ height: 96 }} />
                 </div>
             ) : users.length === 0 ? (
                 <div className="text-center py-6 text-xs text-slate-500 font-mono">
-                    No other Hunters found yet — invite friends!
+                    Belum ada Hunter lain — ajak temanmu!
                 </div>
             ) : (
                 <>
                     {/* Rival Selector */}
                     <div className="mb-4">
-                        <label className="block text-[10px] text-slate-500 font-mono uppercase tracking-wider mb-1.5">Opponent</label>
+                        <label className="block text-[10px] text-slate-500 font-mono uppercase tracking-wider mb-1.5">Lawan</label>
                         <select
                             value={selectedId}
                             onChange={e => setSelectedId(e.target.value)}
@@ -685,45 +738,47 @@ const CompareSection: React.FC<{ gymProfile: GymProfile; displayName: string }> 
                     </div>
 
                     {selected && (
-                        <div className="space-y-4">
+                        <div key={selected.id} className="space-y-4 pf-swap">
                             {/* VS header */}
                             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                                <StatHead name={displayName || 'You'} label="YOU" accent="cyan" />
+                                <StatHead name={displayName || 'Kamu'} label="KAMU" accent="cyan" />
                                 <div className="text-xs font-bold font-mono text-slate-500 px-2">VS</div>
                                 <StatHead name={selected.name} label={selected.rank} accent="purple" photoURL={selected.photoURL} />
                             </div>
 
                             {/* Current Month XP */}
                             <CompareBar
-                                label="Current Month XP"
+                                label="XP Bulan Ini"
                                 myValue={myMonthlyXP}
                                 theirValue={selected.monthlyXP}
                                 max={maxXP}
-                                format={(v) => v.toLocaleString()}
+                                delayMs={120}
                             />
 
                             {/* Current Month Workouts */}
                             <CompareBar
-                                label="Current Month Workouts"
+                                label="Workout Bulan Ini"
                                 myValue={myMonthlyWorkouts}
                                 theirValue={selected.monthlyWorkouts}
                                 max={maxWorkouts}
-                                format={(v) => String(v)}
+                                delayMs={240}
                             />
 
                             {/* Streak mini row + Leading/Behind indicator */}
                             <div className="pt-2 border-t border-slate-800 space-y-2">
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-3 text-center">
-                                        <div className="text-[9px] font-mono uppercase text-cyan-300/70">Your Streak</div>
-                                        <div className="text-xl font-bold text-cyan-300 font-mono flex items-center justify-center gap-1">
-                                            <Flame size={14} /> {myStreak}
+                                        <div className="text-[9px] font-mono uppercase text-cyan-300/70">Streak Kamu</div>
+                                        <div className="text-xl font-bold text-cyan-300 font-mono flex items-center justify-center gap-1.5">
+                                            <StreakFlame streak={myStreak} size={16} celebrate={false} />
+                                            <CountUp value={myStreak} duration={700} />
                                         </div>
                                     </div>
                                     <div className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-3 text-center">
-                                        <div className="text-[9px] font-mono uppercase text-purple-300/70">Rival's Streak</div>
-                                        <div className="text-xl font-bold text-purple-300 font-mono flex items-center justify-center gap-1">
-                                            <Flame size={14} /> {selected.currentStreak}
+                                        <div className="text-[9px] font-mono uppercase text-purple-300/70">Streak Rival</div>
+                                        <div className="text-xl font-bold text-purple-300 font-mono flex items-center justify-center gap-1.5">
+                                            <StreakFlame streak={selected.currentStreak} size={16} celebrate={false} phase={700} />
+                                            <CountUp value={selected.currentStreak} duration={700} />
                                         </div>
                                     </div>
                                 </div>
@@ -735,10 +790,10 @@ const CompareSection: React.FC<{ gymProfile: GymProfile; displayName: string }> 
                                             : 'text-slate-400 bg-slate-800/50 border-slate-700'
                                 }`}>
                                     {streakDelta > 0
-                                        ? `↑ Leading by ${streakDelta} day${streakDelta === 1 ? '' : 's'}`
+                                        ? `↑ Unggul ${streakDelta} hari`
                                         : streakDelta < 0
-                                            ? `↓ Behind by ${Math.abs(streakDelta)} day${Math.abs(streakDelta) === 1 ? '' : 's'}`
-                                            : '⚖ Tied'}
+                                            ? `↓ Tertinggal ${Math.abs(streakDelta)} hari`
+                                            : '⚖ Seri'}
                                 </div>
                             </div>
                         </div>
@@ -752,7 +807,7 @@ const CompareSection: React.FC<{ gymProfile: GymProfile; displayName: string }> 
 const StatHead: React.FC<{ name: string; label: string; accent: 'cyan' | 'purple'; photoURL?: string }> = ({ name, label, accent, photoURL }) => {
     const color = accent === 'cyan' ? 'text-cyan-300 border-cyan-500/40' : 'text-purple-300 border-purple-500/40';
     return (
-        <div className={`flex flex-col items-center text-center rounded-xl p-2 border ${color}`}>
+        <div className={`flex flex-col items-center text-center rounded-xl p-2 border min-w-0 ${color}`}>
             {photoURL ? (
                 <img src={photoURL} alt={name} className="w-8 h-8 rounded-full border border-slate-700 object-cover mb-1" onError={e => { e.currentTarget.style.display = 'none'; }} />
             ) : (
@@ -771,41 +826,35 @@ const CompareBar: React.FC<{
     myValue: number;
     theirValue: number;
     max: number;
-    format: (v: number) => string;
-}> = ({ label, myValue, theirValue, max, format }) => {
+    delayMs: number;
+}> = ({ label, myValue, theirValue, max, delayMs }) => {
     const myPct = (myValue / max) * 100;
     const theirPct = (theirValue / max) * 100;
-    const winning = myValue >= theirValue;
+    const verdict = myValue > theirValue ? 'lead' : myValue < theirValue ? 'behind' : 'tie';
 
     return (
         <div>
             <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">{label}</span>
-                <span className={`text-[10px] font-mono font-bold ${winning ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {winning ? '↑ Leading' : '↓ Behind'}
+                <span className={`text-[10px] font-mono font-bold ${verdict === 'lead' ? 'text-emerald-400' : verdict === 'behind' ? 'text-rose-400' : 'text-slate-400'}`}>
+                    {verdict === 'lead' ? '↑ Unggul' : verdict === 'behind' ? '↓ Tertinggal' : '⚖ Seri'}
                 </span>
             </div>
             {/* Your bar */}
-            <div className="flex items-center space-x-2 mb-1.5">
-                <span className="text-[9px] text-cyan-300 font-mono w-10">YOU</span>
-                <div className="flex-1 h-5 bg-slate-950 border border-slate-800 rounded-md overflow-hidden relative">
-                    <div
-                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-md transition-all duration-700 ease-out"
-                        style={{ width: `${myPct}%`, boxShadow: '0 0 10px rgba(6,182,212,0.5)' }}
-                    />
+            <div className="pf-cmp-row mb-1.5">
+                <span className="pf-cmp-who text-cyan-300">KAMU</span>
+                <div className="pf-cmp-track">
+                    <div className="pf-fill pf-fill-you pf-grow" style={barStyle(myPct, delayMs)} />
                 </div>
-                <span className="text-xs font-bold text-cyan-300 font-mono w-16 text-right">{format(myValue)}</span>
+                <CountUp value={myValue} duration={800} format={fmtId} className="pf-cmp-val text-cyan-300" />
             </div>
             {/* Their bar */}
-            <div className="flex items-center space-x-2">
-                <span className="text-[9px] text-purple-300 font-mono w-10">RIVAL</span>
-                <div className="flex-1 h-5 bg-slate-950 border border-slate-800 rounded-md overflow-hidden relative">
-                    <div
-                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-500 to-fuchsia-500 rounded-md transition-all duration-700 ease-out"
-                        style={{ width: `${theirPct}%`, boxShadow: '0 0 10px rgba(168,85,247,0.5)' }}
-                    />
+            <div className="pf-cmp-row">
+                <span className="pf-cmp-who text-purple-300">RIVAL</span>
+                <div className="pf-cmp-track">
+                    <div className="pf-fill pf-fill-rival pf-grow" style={barStyle(theirPct, delayMs + 100)} />
                 </div>
-                <span className="text-xs font-bold text-purple-300 font-mono w-16 text-right">{format(theirValue)}</span>
+                <CountUp value={theirValue} duration={800} format={fmtId} className="pf-cmp-val text-purple-300" />
             </div>
         </div>
     );

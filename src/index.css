@@ -583,11 +583,6 @@ button, a, [role="button"], label, summary { touch-action: manipulation; }
   color: #ef4444;
 }
 
-/* --- Streak Fire Effect --- */
-.streak-fire {
-  text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
-}
-
 /* --- Responsive Helpers --- */
 @media (max-width: 768px) {
   .chat-drawer {
@@ -6598,6 +6593,187 @@ input, select, textarea {
 .pf-collapse[data-open="true"] > .pf-collapse-inner { opacity: 1; transition-delay: 40ms; }
 .pf-collapse:not([data-open="true"]) .pf-collapse-inner * { animation-play-state: paused; }
 @keyframes pfSubIn { from { opacity: 0; transform: translateY(8px); } }
+
+/* ─── Profile page (Profile.tsx — rendered inside Settings → My Profile) ───
+   Glows are painted radial gradients: the old blur-3xl blobs (64px filter on
+   288px boxes) were re-rasterized every time the bar sheens repainted. */
+.pf-hero {
+  position: relative;
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 18px 16px 16px;
+  border-radius: var(--r-4);
+  border: 1px solid var(--line-cyan-soft);
+  background:
+    radial-gradient(90% 70% at 100% 0%, rgba(34, 211, 238, 0.16), transparent 60%),
+    radial-gradient(80% 70% at 0% 100%, rgba(59, 130, 246, 0.10), transparent 60%),
+    linear-gradient(180deg, rgba(15, 21, 37, 0.92), rgba(7, 11, 22, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(34, 211, 238, 0.14),
+    0 18px 40px -26px rgba(0, 0, 0, 0.9),
+    0 0 32px -18px rgba(34, 211, 238, 0.45);
+}
+@media (min-width: 420px) { .pf-hero { padding: 22px 20px 20px; } }
+.pf-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: 0.25em; text-transform: uppercase;
+  color: rgba(34, 211, 238, 0.8);
+}
+.pf-hero-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pf-hero-name { margin: 4px 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.01em; line-height: 1.2; color: var(--t-hi); overflow-wrap: anywhere; }
+.pf-hero-title { margin: 3px 0 0; font-family: var(--font-mono); font-size: 13px; }
+.pf-hero-rank { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+.pf-hero-rank-name { font-family: var(--font-mono); font-size: 11px; font-weight: 700; }
+/* XP gets the widest tile: "123.456" must fit at 320px. */
+.pf-stats { display: grid; grid-template-columns: 1fr 1.45fr 1fr; gap: 8px; }
+.pf-stat {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background: rgba(7, 12, 24, 0.55);
+}
+.pf-stat-label {
+  font-family: var(--font-mono);
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--t-3);
+  white-space: nowrap;
+}
+.pf-stat-val {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: clamp(17px, 5.2vw, 22px); font-weight: 800; line-height: 1.2;
+  color: var(--t-hi);
+  white-space: nowrap;
+}
+.pf-stat-val.is-cyan { color: var(--cyan-bright); }
+
+/* Progress tracks (fills use the shared .pf-grow / .pf-sheen above). */
+.pf-bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.pf-bar-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--t-2); white-space: nowrap; }
+.pf-bar-meta { font-family: var(--font-mono); font-size: 11px; color: var(--cyan-bright); white-space: nowrap; }
+.pf-track {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: rgba(4, 6, 13, 0.8);
+  overflow: hidden;
+}
+.pf-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: inherit; }
+.pf-fill-xp     { background: linear-gradient(90deg, var(--cyan), var(--blue) 55%, #8B5CF6); box-shadow: 0 0 12px rgba(34, 211, 238, 0.5); }
+.pf-fill-streak { background: linear-gradient(90deg, var(--xp-1), var(--xp-3) 55%, var(--red)); box-shadow: 0 0 12px rgba(249, 115, 22, 0.5); }
+.pf-fill-you    { background: linear-gradient(90deg, var(--cyan), var(--blue)); box-shadow: 0 0 10px rgba(34, 211, 238, 0.45); }
+.pf-fill-rival  { background: linear-gradient(90deg, #A855F7, #D946EF); box-shadow: 0 0 10px rgba(168, 85, 247, 0.45); }
+.pf-bar-foot {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  margin-top: 5px;
+  font-family: var(--font-mono); font-size: 9.5px;
+  color: var(--t-3);
+}
+.pf-bar-pct { font-size: 10.5px; font-weight: 700; color: var(--cyan-bright); }
+
+/* Streak row — the Profile's streak moment. */
+.pf-streak {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px 10px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(251, 146, 60, 0.3);
+  background:
+    linear-gradient(90deg, rgba(251, 146, 60, 0.12), rgba(251, 191, 36, 0.04) 45%, transparent 85%),
+    rgba(7, 12, 24, 0.4);
+}
+.pf-streak.is-cold { border-color: var(--line); background: rgba(7, 12, 24, 0.5); }
+.pf-streak-flame { display: grid; place-items: center; width: 48px; height: 48px; flex-shrink: 0; }
+.pf-streak-main { min-width: 0; flex: 1; }
+.pf-streak-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--xp-1);
+}
+.pf-streak.is-cold .pf-streak-label { color: var(--t-3); }
+.pf-streak-val {
+  display: flex; align-items: baseline; gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 24px; font-weight: 800; line-height: 1.15;
+  color: var(--t-hi);
+}
+.pf-streak-unit { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: var(--t-2); }
+.pf-streak-hint { margin: 2px 0 0; font-size: 11px; color: var(--t-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-streak-best { flex-shrink: 0; text-align: right; }
+.pf-streak-best-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--t-3); }
+.pf-streak-best-val {
+  display: flex; align-items: baseline; justify-content: flex-end; gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 18px; font-weight: 700;
+  color: var(--t-1);
+}
+
+/* Section shell pieces (sections reuse Settings' .s-section). */
+.pf-stack { display: flex; flex-direction: column; gap: 14px; }
+.pf-stack > .s-section-head { margin-bottom: 0; }
+.pf-sec-sub { margin: 1px 0 0; font-family: var(--font-mono); font-size: 10.5px; color: var(--t-3); }
+.pf-panel {
+  position: relative;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background: rgba(7, 12, 24, 0.5);
+}
+.pf-panel-rank   { background: radial-gradient(70% 90% at 100% 0%, rgba(34, 211, 238, 0.09), transparent 60%), rgba(7, 12, 24, 0.5); }
+.pf-panel-streak { background: radial-gradient(70% 90% at 0% 0%, rgba(251, 146, 60, 0.09), transparent 60%), rgba(7, 12, 24, 0.5); }
+.pf-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.pf-panel-kicker {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+  white-space: nowrap;
+}
+.pf-panel-meta { font-family: var(--font-mono); font-size: 10px; color: var(--t-3); white-space: nowrap; }
+.pf-milestones { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.pf-milestone-sub { font-family: var(--font-mono); font-size: 9px; color: var(--t-3); }
+.pf-milestone-emoji { font-size: 22px; line-height: 1; }
+.pf-milestone-emoji.is-next { opacity: 0.5; filter: grayscale(0.4); }
+
+/* Compare card. */
+.pf-mini-btn {
+  position: relative;
+  flex-shrink: 0;
+  min-height: 36px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  background: rgba(168, 85, 247, 0.08);
+  color: #D8B4FE;
+  font-size: 12px; font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-out), background-color var(--dur-2) ease, opacity var(--dur-2) ease;
+}
+.pf-mini-btn::after { content: ''; position: absolute; inset: -4px; }   /* 44px hit area */
+.pf-mini-btn:active { transform: scale(0.96); background-color: rgba(168, 85, 247, 0.16); }
+.pf-mini-btn:disabled { opacity: 0.6; cursor: wait; }
+.pf-cmp-skel { display: flex; flex-direction: column; gap: 12px; }
+.pf-skel {
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background: rgba(7, 12, 24, 0.5);
+  animation: wf-skeleton-pulse 1.4s ease-in-out infinite;
+}
+/* Opponent switch: the keyed VS block cross-fades in (backwards fill). */
+.pf-swap { animation: pfSwapIn var(--dur-4) var(--ease-out-expo) backwards; }
+@keyframes pfSwapIn { from { opacity: 0; transform: translateY(6px); } }
+.pf-cmp-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) 64px; align-items: center; gap: 8px; }
+.pf-cmp-who { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; }
+.pf-cmp-track {
+  position: relative;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid var(--line-soft);
+  background: rgba(4, 6, 13, 0.8);
+  overflow: hidden;
+}
+.pf-cmp-val { text-align: right; font-family: var(--font-mono); font-size: 12px; font-weight: 700; white-space: nowrap; }
 
 /* ─── StatusCard (Dashboard) ─── */
 .stc {
