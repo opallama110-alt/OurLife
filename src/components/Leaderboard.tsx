@@ -98,7 +98,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ profile }) => {
             </div>
 
             {/* Rank Legend */}
-            <div className="jarvis-card p-3 rounded-xl mt-4 border border-slate-800" style={{ transform: 'none' }}>
+            <div className="jarvis-card p-3 rounded-xl mt-4 border border-slate-800">
                 <div className="text-[10px] text-slate-500 font-mono uppercase mb-2 tracking-widest">Rank Boundaries</div>
                 <div className="grid grid-cols-2 gap-2">
                     {RANK_TIERS.map(r => {

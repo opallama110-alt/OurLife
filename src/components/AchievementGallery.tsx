@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Trophy } from 'lucide-react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
+import { ChevronDown, Trophy } from 'lucide-react';
 import { storageService } from '../services/storageService';
 import { achievementService } from '../services/achievementService';
 import type { AchievementCategory } from '../services/gamificationService';
@@ -14,6 +14,10 @@ import { AchievementCard, GalleryEntry } from './AchievementCard';
 
 type StatusFilter = 'all' | 'unlocked' | 'locked' | 'in_progress';
 type CategoryTab = 'all' | AchievementCategory;
+
+interface AchievementGalleryProps {
+  defaultExpanded?: boolean;
+}
 
 const CATEGORY_TABS: { key: CategoryTab; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -35,10 +39,14 @@ const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
 const isInProgress = (e: GalleryEntry): boolean =>
   !e.unlocked && typeof e.requirement === 'number' && (e.progress || 0) > 0;
 
-export const AchievementGallery: React.FC = () => {
+export const AchievementGallery: React.FC<AchievementGalleryProps> = ({
+  defaultExpanded = true,
+}) => {
   const [category, setCategory] = useState<CategoryTab>('all');
   const [status, setStatus] = useState<StatusFilter>('all');
+  const [expanded, setExpanded] = useState(defaultExpanded);
   const [tick, setTick] = useState(0);
+  const catalogId = useId();
 
   // Re-evaluate the catalog whenever storage changes (workout logged, habit
   // toggled, profile synced) so progress bars stay live.
@@ -101,55 +109,80 @@ export const AchievementGallery: React.FC = () => {
         </div>
       </div>
 
-      {/* Category tabs */}
-      <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
-        {CATEGORY_TABS.map(tab => {
-          const active = category === tab.key;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setCategory(tab.key)}
-              className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all ${active
-                ? 'bg-cyan-500/15 border border-cyan-500/40 text-cyan-300'
-                : 'border border-transparent text-slate-500 hover:text-slate-300'}`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      <button
+        type="button"
+        onClick={() => setExpanded(value => !value)}
+        aria-expanded={expanded}
+        aria-controls={catalogId}
+        className="w-full flex items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5 text-left transition-colors hover:border-cyan-500/30 hover:bg-cyan-500/5"
+      >
+        <span>
+          <span className="block text-xs font-bold text-slate-200">
+            {expanded ? 'Tutup daftar' : 'Lihat semua achievement'}
+          </span>
+          <span className="block text-[10px] font-mono text-slate-500 mt-0.5">
+            {expanded ? 'Sembunyikan katalog achievement.' : 'Buka untuk melihat filter dan progres lengkap.'}
+          </span>
+        </span>
+        <ChevronDown
+          size={16}
+          aria-hidden="true"
+          className={`shrink-0 text-cyan-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
 
-      {/* Status filter */}
-      <div className="flex gap-1 -mx-1 px-1">
-        {STATUS_FILTERS.map(f => {
-          const active = status === f.key;
-          return (
-            <button
-              key={f.key}
-              onClick={() => setStatus(f.key)}
-              className={`flex-1 px-2 py-1.5 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all ${active
-                ? 'bg-slate-800 text-white border border-slate-700'
-                : 'bg-slate-900/40 text-slate-500 border border-transparent hover:text-slate-300'}`}
-            >
-              {f.label}
-            </button>
-          );
-        })}
-      </div>
+      {expanded && (
+        <div id={catalogId} className="space-y-4">
+          {/* Category tabs */}
+          <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+            {CATEGORY_TABS.map(tab => {
+              const active = category === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setCategory(tab.key)}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all ${active
+                    ? 'bg-cyan-500/15 border border-cyan-500/40 text-cyan-300'
+                    : 'border border-transparent text-slate-500 hover:text-slate-300'}`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
 
-      {/* Grid */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-10 text-xs text-slate-500 font-mono">
-          No achievements match this filter.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {filtered.map(a => (
-            <AchievementCard key={a.id} achievement={a} />
-          ))}
+          {/* Status filter */}
+          <div className="flex gap-1 -mx-1 px-1">
+            {STATUS_FILTERS.map(f => {
+              const active = status === f.key;
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => setStatus(f.key)}
+                  className={`flex-1 px-2 py-1.5 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-all ${active
+                    ? 'bg-slate-800 text-white border border-slate-700'
+                    : 'bg-slate-900/40 text-slate-500 border border-transparent hover:text-slate-300'}`}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Grid */}
+          {filtered.length === 0 ? (
+            <div className="text-center py-10 text-xs text-slate-500 font-mono">
+              No achievements match this filter.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {filtered.map(a => (
+                <AchievementCard key={a.id} achievement={a} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </section>
   );
 };
-

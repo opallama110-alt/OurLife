@@ -1,11 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, Plus, Trash2, X } from 'lucide-react';
+import { usePresence } from '../../hooks/usePresence';
 
 // ═══════════════════════════════════════════════════════════════
 // NewHabitModal — slide-up panel for creating habits.
 // Ported from prototype components/NewHabitModal.jsx. Emits a
 // payload via onCreate; the parent decides how to persist (we
 // flatten frequency + customDays into the existing Habit shape).
+//
+// Motion: usePresence keeps the sheet mounted for a real exit. Enter
+// uses --ease-out-expo (no overshoot, so the sheet never lifts off the
+// bottom edge and exposes a gap); the backdrop fades opacity only over a
+// fixed blur. Portaled to <body> so no transformed page ancestor can
+// capture the fixed overlay. The handle/header can be dragged down to
+// dismiss (DOM-driven, no per-frame React state).
 // ═══════════════════════════════════════════════════════════════
 
 const HABIT_CATEGORIES = [
@@ -23,6 +32,12 @@ const FREQ_OPTIONS = [
 ] as const;
 
 const DAY_LABELS = ['SEN', 'SEL', 'RAB', 'KAM', 'JUM', 'SAB', 'MIN'];
+
+/** Must match the CSS exit duration (--dur-2). */
+const EXIT_MS = 200;
+/** Drag distance / flick speed (px per ms) that dismisses the sheet. */
+const DISMISS_DISTANCE = 110;
+const DISMISS_VELOCITY = 0.6;
 
 export type NewHabitSubTask = {
   /** Stable id used in Habit.completedSubTasks[date]. */
@@ -49,8 +64,7 @@ interface Props {
 }
 
 export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
-  const [mounted, setMounted] = useState(false);
-  const [show, setShow] = useState(false);
+  const { mounted, state } = usePresence(open, EXIT_MS);
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [cat, setCat] = useState<typeof HABIT_CATEGORIES[number]['key']>('fitness');
@@ -60,20 +74,58 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
   // as NewHabitSubTask[]. Empty list = single-toggle habit.
   const [subTasks, setSubTasks] = useState<NewHabitSubTask[]>([]);
   const titleRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
-  useEffect(() => {
-    if (open) {
-      setMounted(true);
-      const a = requestAnimationFrame(() => setShow(true));
-      const t = window.setTimeout(() => { titleRef.current?.focus(); }, 350);
-      return () => { cancelAnimationFrame(a); window.clearTimeout(t); };
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  /** Set on submit: the form is cleared only once the sheet has slid away. */
+  const resetOnCloseRef = useRef(false);
+  /** The enter slide has finished — dragging is only allowed after it. */
+  const enteredRef = useRef(false);
+  const dragRef = useRef<{ id: number; y0: number; t0: number; dy: number } | null>(null);
+
+  const reset = () => {
+    setTitle(''); setDesc(''); setCat('fitness'); setFreq('daily');
+    setCustomDays(new Set([0, 2, 4]));
+    setSubTasks([]);
+  };
+
+  const focusTitle = () => {
+    const panel = panelRef.current;
+    if (panel && !panel.contains(document.activeElement)) {
+      titleRef.current?.focus({ preventScroll: true });
     }
-    setShow(false);
-    const t = window.setTimeout(() => setMounted(false), 320);
-    return () => window.clearTimeout(t);
+  };
+
+  // Open: Esc closes; focus returns to the trigger on close.
+  useEffect(() => {
+    if (!open) return;
+    // Re-opened within the exit window after a submit: start from a clean form.
+    if (resetOnCloseRef.current) { resetOnCloseRef.current = false; reset(); }
+    const restoreTo = document.activeElement as HTMLElement | null;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current(); };
+    window.addEventListener('keydown', onKey);
+    // Focus normally lands on the enter animation's end (so the keyboard
+    // doesn't open mid-slide); this is only a fallback if that never fires.
+    const t = window.setTimeout(focusTitle, 520);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.clearTimeout(t);
+      restoreTo?.focus?.({ preventScroll: true });
+    };
   }, [open]);
 
-  if (!mounted) return null;
+  // Clear a submitted form after the exit, not before: clearing on submit made
+  // the title and sub-task rows visibly blank out while the sheet slid away.
+  useEffect(() => {
+    if (mounted) return;
+    enteredRef.current = false;
+    dragRef.current = null;
+    if (resetOnCloseRef.current) { resetOnCloseRef.current = false; reset(); }
+  }, [mounted]);
+
+  if (!mounted || typeof document === 'undefined') return null;
 
   // XP reward scales with the difficulty of the frequency commitment
   const xpReward = freq === 'daily' ? 5 : freq === 'work' ? 4 : 3;
@@ -84,12 +136,6 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
       if (next.has(i)) next.delete(i); else next.add(i);
       return next;
     });
-  };
-
-  const reset = () => {
-    setTitle(''); setDesc(''); setCat('fitness'); setFreq('daily');
-    setCustomDays(new Set([0, 2, 4]));
-    setSubTasks([]);
   };
 
   const addSubTask = () => {
@@ -129,21 +175,73 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
       xpReward,
       subTasks: cleanSubTasks,
     });
-    reset();
+    resetOnCloseRef.current = true;
     onClose();
+  };
+
+  // ── Drag-to-dismiss (handle + header) ──
+  const onDragStart = (e: React.PointerEvent<HTMLElement>) => {
+    const panel = panelRef.current;
+    if (!panel || state !== 'enter' || !enteredRef.current) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if ((e.target as HTMLElement).closest('button, input, textarea')) return;
+    dragRef.current = { id: e.pointerId, y0: e.clientY, t0: performance.now(), dy: 0 };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    panel.style.transition = 'none';
+  };
+  const onDragMove = (e: React.PointerEvent<HTMLElement>) => {
+    const d = dragRef.current;
+    const panel = panelRef.current;
+    if (!d || !panel || e.pointerId !== d.id) return;
+    d.dy = Math.max(0, e.clientY - d.y0);
+    panel.style.transform = d.dy > 0 ? `translateY(${d.dy}px)` : '';
+  };
+  const onDragEnd = (e: React.PointerEvent<HTMLElement>) => {
+    const d = dragRef.current;
+    const panel = panelRef.current;
+    if (!d || e.pointerId !== d.id) return;
+    dragRef.current = null;
+    if (!panel) return;
+    const velocity = d.dy / Math.max(1, performance.now() - d.t0);
+    if (e.type === 'pointerup' && (d.dy > DISMISS_DISTANCE || (d.dy > 24 && velocity > DISMISS_VELOCITY))) {
+      // Leave the inline offset in place: the exit keyframe animates from it.
+      onCloseRef.current();
+      return;
+    }
+    // Not far enough — spring back to rest.
+    panel.style.transition = 'transform var(--dur-3) var(--ease-out-expo)';
+    panel.style.transform = '';
+    window.setTimeout(() => { if (!dragRef.current) panel.style.transition = ''; }, 300);
+  };
+  const dragHandlers = {
+    onPointerDown: onDragStart,
+    onPointerMove: onDragMove,
+    onPointerUp: onDragEnd,
+    onPointerCancel: onDragEnd,
   };
 
   const ready = title.trim().length > 0;
 
-  return (
-    <div className={`nh-root ${show ? 'is-open' : ''}`} role="dialog" aria-modal="true">
-      <div className="nh-backdrop" onClick={onClose} />
-      <div className="nh-panel">
-        <div className="nh-handle" />
-        <div className="nh-head">
+  return createPortal(
+    <div className="nh-root" data-state={state}>
+      <div className="nh-backdrop" onClick={onClose} aria-hidden="true" />
+      <div
+        ref={panelRef}
+        className="nh-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onAnimationEnd={(e) => {
+          if (e.target !== e.currentTarget || state !== 'enter') return;
+          enteredRef.current = true;
+          focusTitle();
+        }}
+      >
+        <div className="nh-handle" aria-hidden="true" {...dragHandlers} />
+        <div className="nh-head" {...dragHandlers}>
           <div className="nh-head-info">
             <div className="hud-label-sm fz-cyan">PROTOKOL BARU</div>
-            <h2 className="nh-title">Tambah Habit</h2>
+            <h2 className="nh-title" id={titleId}>Tambah Habit</h2>
           </div>
           <button className="nh-close" onClick={onClose} aria-label="Tutup" type="button">
             <X size={14} />
@@ -154,13 +252,16 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
           <span className="nh-field-lbl">Judul Habit</span>
           <input ref={titleRef} type="text" className="nh-input"
             placeholder="cth: Lari pagi 5km"
+            maxLength={60}
+            autoComplete="off"
+            enterKeyHint="next"
             value={title}
             onChange={(e) => setTitle(e.target.value)} />
         </label>
 
         <label className="nh-field">
           <span className="nh-field-lbl">
-            Deskripsi <span style={{ color: 'var(--t-3)' }}>(opsional)</span>
+            Deskripsi <span className="nh-field-opt">(opsional)</span>
           </span>
           <textarea className="nh-input nh-textarea"
             placeholder="Detail tambahan, niat, atau pemicu kebiasaan…"
@@ -176,6 +277,7 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
               <button key={c.key} type="button"
                 className={`nh-cat ${cat === c.key ? 'is-on' : ''}`}
                 style={{ ['--cat-color' as string]: c.color }}
+                aria-pressed={cat === c.key}
                 onClick={() => setCat(c.key)}>
                 <span className="nh-cat-dot" />
                 <span>{c.label}</span>
@@ -190,6 +292,7 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
             {FREQ_OPTIONS.map((f) => (
               <button key={f.key} type="button"
                 className={`nh-freq ${freq === f.key ? 'is-on' : ''}`}
+                aria-pressed={freq === f.key}
                 onClick={() => setFreq(f.key)}>
                 {f.label}
               </button>
@@ -200,6 +303,7 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
               {DAY_LABELS.map((d, i) => (
                 <button key={i} type="button"
                   className={`nh-day-pick ${customDays.has(i) ? 'is-on' : ''}`}
+                  aria-pressed={customDays.has(i)}
                   onClick={() => toggleDay(i)}>
                   {d}
                 </button>
@@ -214,7 +318,7 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
         <div className="nh-field">
           <div className="nh-subtasks-head">
             <span className="nh-field-lbl">
-              Sub-task <span style={{ color: 'var(--t-3)' }}>(opsional)</span>
+              Sub-task <span className="nh-field-opt">(opsional)</span>
             </span>
             <button type="button" className="nh-subtasks-add" onClick={addSubTask}>
               <Plus size={12} /> Tambah sub-task
@@ -233,11 +337,14 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
                     type="text"
                     className="nh-input nh-subtask-label"
                     placeholder="cth: Push Up"
+                    maxLength={40}
+                    autoComplete="off"
                     value={st.label}
                     onChange={(e) => updateSubTask(st.id, { label: e.target.value })}
                   />
                   <input
                     type="number"
+                    inputMode="numeric"
                     className="nh-input nh-subtask-target"
                     placeholder="100"
                     min={1}
@@ -266,7 +373,8 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
             <span className="hud-label-sm">REWARD XP</span>
             <span className="nh-xp-preview-help">per checkmark</span>
           </div>
-          <div className="nh-xp-preview-val">+{xpReward} XP</div>
+          {/* Keyed so the value pops when the frequency changes it. */}
+          <div className="nh-xp-preview-val" key={xpReward}>+{xpReward} XP</div>
         </div>
 
         <div className="nh-actions">
@@ -278,6 +386,7 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };

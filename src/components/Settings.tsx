@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { updateProfile } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -8,27 +8,33 @@ import {
   Loader2, Check, AlertTriangle, UserCircle, Settings as SettingsIcon, Target,
   Upload, ImagePlus, Bell, Lock, Mail, KeyRound, Shield, Palette, Languages,
   Type, Download, Database, Info, FileText, HelpCircle, MessageCircle,
-  Sparkles, Clock, ChevronRight, Smartphone,
+  Sparkles, Clock, Smartphone, Film,
 } from 'lucide-react';
 import { db, storage } from '../../firebase-config';
 import { useAuth } from '../context/AuthContext';
 import { storageService } from '../services/storageService';
 import { Profile } from '../pages/Profile';
-import { TokenDisplay } from './TokenDisplay';
+import { ConfirmDialog } from './hud/HudDialog';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SETTINGS — 3-tab redesign
-// Tab 1: My Profile        → Account (avatar/name) + <Profile /> + Security stubs
-// Tab 2: Goals & Tracking  → Workout prefs (real) + Habit tracking stubs
-// Tab 3: App Settings      → Notifications stubs + Appearance stubs + Data &
-//                            Privacy (real delete) + Session (real logout) + About
+// SETTINGS — 3-tab redesign on the ported .s-* design-system kit
+// Tab 1: Profil    → Account (avatar/name) + <Profile /> + Security stubs
+// Tab 2: Target    → Workout prefs (real) + Streak protection + Habit stubs
+// Tab 3: Aplikasi  → Notifications/Appearance stubs + Data & Privacy (real
+//                    delete, behind a ConfirmDialog) + intro replay + Session
+//                    (real logout) + About
 // Admin moved out of Settings — /admin is now its own gated route in App.tsx.
 // Tools/Calculator likewise — /tools renders CalculatorSuite directly.
+//
+// Visited panes stay mounted (hidden) so switching tabs neither re-fetches
+// preferences (spinner flash) nor throws away unsaved edits, and the heavy
+// embedded <Profile/> doesn't remount on every return.
 // ═══════════════════════════════════════════════════════════════════════════
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 type TabKey = 'profile' | 'goals' | 'app';
+type IconType = React.ComponentType<{ size?: number; className?: string }>;
 
 const EQUIPMENT_OPTIONS = [
   'Barbell', 'Dumbbell', 'Cable', 'Machine',
@@ -36,32 +42,63 @@ const EQUIPMENT_OPTIONS = [
 ];
 
 const APP_VERSION = '1.0.0';
+const MAX_FREEZE_TOKENS = 3;
 
-const SaveBadge: React.FC<{ state: SaveState }> = ({ state }) => {
-  if (state === 'saving') return <span className="flex items-center text-xs text-cyan-400"><Loader2 size={12} className="animate-spin mr-1" />Saving…</span>;
-  if (state === 'saved') return <span className="flex items-center text-xs text-emerald-400"><Check size={12} className="mr-1" />Saved</span>;
-  if (state === 'error') return <span className="flex items-center text-xs text-rose-400"><AlertTriangle size={12} className="mr-1" />Failed</span>;
-  return null;
+const TABS: { key: TabKey; label: string; icon: IconType }[] = [
+  { key: 'profile', label: 'Profil', icon: UserCircle },
+  { key: 'goals', label: 'Target', icon: Target },
+  { key: 'app', label: 'Aplikasi', icon: SettingsIcon },
+];
+
+// Nearest scrolling ancestor (Layout's main column today; window-level
+// scrolling as a fallback) so a tab switch can bring the new pane's top
+// into view without hard-coding the shell's class names.
+const getScrollParent = (el: HTMLElement | null): HTMLElement => {
+  let node = el?.parentElement ?? null;
+  while (node) {
+    const oy = getComputedStyle(node).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight) return node;
+    node = node.parentElement;
+  }
+  return (document.scrollingElement as HTMLElement) || document.documentElement;
 };
 
-const ComingSoonBadge: React.FC = () => (
-  <span className="ml-2 px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-[9px] font-mono uppercase tracking-wider text-slate-500">
-    Coming soon
-  </span>
+const SoonTag: React.FC = () => <span className="s-soon">SEGERA</span>;
+
+// Save CTA that carries its own state (spinner → check → idle) so the
+// feedback lands where the user tapped, not in an off-screen header badge.
+const SaveButton: React.FC<{ state: SaveState; label: string; onClick: () => void }> = ({ state, label, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={state === 'saving'}
+    className={`s-cta s-cta-cyan s-save${state === 'saved' ? ' is-saved' : ''}${state === 'error' ? ' is-error' : ''}`}
+    aria-live="polite"
+  >
+    <span className="s-save-icon" key={state}>
+      {state === 'saving' ? <Loader2 size={15} className="animate-spin" />
+        : state === 'saved' ? <Check size={15} />
+          : state === 'error' ? <AlertTriangle size={15} />
+            : <Save size={15} />}
+    </span>
+    <span>
+      {state === 'saving' ? 'Menyimpan…'
+        : state === 'saved' ? 'Tersimpan'
+          : state === 'error' ? 'Gagal — coba lagi'
+            : label}
+    </span>
+  </button>
 );
 
-// Unified section wrapper — design-system .s-section (replaces the per-section
-// jarvis-card markup). Header: icon chip + title; `titleAfter` (e.g. a Coming-Soon
-// badge) sits beside the title, `right` (e.g. a SaveBadge) is pushed to the far
-// edge via .s-section-count. Body content is laid out by .s-section-body.
+// Unified section wrapper — design-system .s-section. Header: icon chip +
+// title; `titleAfter` (e.g. a SEGERA tag) sits beside the title.
 const Section: React.FC<{
-  icon?: React.ComponentType<{ size?: number; className?: string }>;
+  icon?: IconType;
   title: string;
   color?: 'orange' | 'gold' | 'red';
   titleAfter?: React.ReactNode;
-  right?: React.ReactNode;
   children: React.ReactNode;
-}> = ({ icon: Icon, title, color, titleAfter, right, children }) => (
+}> = ({ icon: Icon, title, color, titleAfter, children }) => (
   <section className="s-section">
     <div className="s-section-head">
       {Icon && (
@@ -71,7 +108,6 @@ const Section: React.FC<{
       )}
       <h2 className="s-section-title">{title}</h2>
       {titleAfter}
-      {right && <span className="s-section-count">{right}</span>}
     </div>
     <div className="s-section-body">{children}</div>
   </section>
@@ -85,38 +121,67 @@ export const Settings: React.FC = () => {
     tabParam && ['profile', 'goals', 'app'].includes(tabParam)
       ? (tabParam as TabKey)
       : 'profile';
+  const tabIdx = TABS.findIndex(t => t.key === activeTab);
+
+  // Direction of the last switch (null until the first one, so the initial
+  // pane rides the route reveal instead of also sliding in sideways).
+  const [dir, setDir] = useState<1 | -1 | null>(null);
+  const [visited, setVisited] = useState<Set<TabKey>>(() => new Set([activeTab]));
+  const tabsSentinelRef = useRef<HTMLDivElement>(null);
+  const firstRender = useRef(true);
+
+  useEffect(() => {
+    setVisited(v => (v.has(activeTab) ? v : new Set(v).add(activeTab)));
+  }, [activeTab]);
+
+  // Tabs are sticky; after a switch from deep inside a long pane, bring the
+  // new pane's top to the tab bar instead of leaving the user wherever the
+  // shorter pane clamps the scroll.
+  useLayoutEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return; }
+    const sentinel = tabsSentinelRef.current;
+    if (!sentinel) return;
+    const scroller = getScrollParent(sentinel);
+    const isRoot = scroller === document.scrollingElement || scroller === document.documentElement;
+    const scrollerTop = isRoot ? 0 : scroller.getBoundingClientRect().top;
+    const offset = sentinel.getBoundingClientRect().top - scrollerTop;
+    if (offset < 0) scroller.scrollTop += offset;
+  }, [activeTab]);
 
   const setActiveTab = (tab: TabKey) => {
+    if (tab === activeTab) return;
+    const nextIdx = TABS.findIndex(t => t.key === tab);
+    setDir(nextIdx > tabIdx ? 1 : -1);
     const next = new URLSearchParams(searchParams);
     if (tab === 'profile') next.delete('tab');
     else next.set('tab', tab);
     setSearchParams(next, { replace: true });
   };
 
-  const TABS: { key: TabKey; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
-    { key: 'profile', label: 'My Profile', icon: UserCircle },
-    { key: 'goals', label: 'Goals & Tracking', icon: Target },
-    { key: 'app', label: 'App Settings', icon: SettingsIcon },
-  ];
-
-  const tabIdx = TABS.findIndex(t => t.key === activeTab);
-
   return (
-    <div className="pb-24">
+    <div className="s-screen">
       <header className="s-header">
-        <h1 className="s-title">Settings</h1>
-        <p className="s-subtitle">Profile, goals, and app preferences — all in one place.</p>
+        <h1 className="s-title">Pengaturan</h1>
+        <p className="s-subtitle">Profil, target, dan preferensi aplikasi — semua di satu tempat.</p>
       </header>
 
-      {/* Tab Bar (prototype settings.css .s-tabs port) */}
-      <div className="s-tabs">
+      <div ref={tabsSentinelRef} className="s-tabs-sentinel" aria-hidden="true" />
+      {/* Tab Bar (prototype settings.css .s-tabs port) — sticky */}
+      <div className="s-tabs" role="tablist" aria-label="Bagian pengaturan">
         <div className="s-tabs-indicator" style={{ transform: `translateX(${tabIdx * 100}%)` }} />
         {TABS.map(tab => {
           const active = activeTab === tab.key;
           return (
-            <button key={tab.key} type="button"
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              id={`s-tab-${tab.key}`}
+              aria-selected={active}
+              aria-controls={`s-pane-${tab.key}`}
               onClick={() => setActiveTab(tab.key)}
-              className={`s-tab ${active ? 'is-on' : ''}`}>
+              className={`s-tab ${active ? 'is-on' : ''}`}
+            >
               <tab.icon size={14} />
               <span>{tab.label}</span>
             </button>
@@ -125,16 +190,28 @@ export const Settings: React.FC = () => {
       </div>
 
       <div className="s-pane-wrap">
-        {activeTab === 'profile' && <MyProfileTab />}
-        {activeTab === 'goals' && <GoalsTrackingTab />}
-        {activeTab === 'app' && <AppSettingsTab />}
+        {TABS.map(t => (visited.has(t.key) || t.key === activeTab) && (
+          <div
+            key={t.key}
+            id={`s-pane-${t.key}`}
+            role="tabpanel"
+            aria-labelledby={`s-tab-${t.key}`}
+            className="s-pane-slot"
+            data-dir={t.key === activeTab && dir !== null ? String(dir) : undefined}
+            hidden={t.key !== activeTab}
+          >
+            {t.key === 'profile' ? <MyProfileTab />
+              : t.key === 'goals' ? <GoalsTrackingTab />
+                : <AppSettingsTab />}
+          </div>
+        ))}
       </div>
     </div>
   );
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAB 1 — MY PROFILE
+// TAB 1 — PROFIL
 // Account (avatar/name) on top, then full <Profile /> (DOB/Identity/Penghargaan/
 // Compare), then Account Security stubs. Email/password/2FA are placeholders
 // until those flows are wired through Firebase Auth.
@@ -150,22 +227,27 @@ const MyProfileTab: React.FC = () => {
     storageService.getUserState().name || user?.displayName || ''
   );
   const [photoURL, setPhotoURL] = useState(user?.photoURL || '');
+  // Display-only: a dead avatar URL falls back to the letter badge without
+  // clearing photoURL (which saveAccount would then write back to Auth).
+  const [photoBroken, setPhotoBroken] = useState(false);
   const [profileSave, setProfileSave] = useState<SaveState>('idle');
   const [profileError, setProfileError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => { setPhotoBroken(false); }, [photoURL]);
+
   const handleAvatarFile = async (file: File) => {
     if (!user) return;
     setProfileError(null);
 
     if (!file.type.startsWith('image/')) {
-      setProfileError('File must be an image (PNG, JPG, WebP).');
+      setProfileError('File harus berupa gambar (PNG, JPG, WebP).');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setProfileError('Image too large — keep it under 5 MB.');
+      setProfileError('Gambar terlalu besar — maksimal 5 MB.');
       return;
     }
 
@@ -187,7 +269,7 @@ const MyProfileTab: React.FC = () => {
       setUploadProgress(100);
     } catch (e: any) {
       console.error('[Settings] avatar upload:', e);
-      setProfileError(e?.message || 'Failed to upload avatar.');
+      setProfileError(e?.message || 'Gagal mengunggah avatar.');
     } finally {
       setUploading(false);
       setTimeout(() => setUploadProgress(0), 1200);
@@ -209,7 +291,7 @@ const MyProfileTab: React.FC = () => {
       setTimeout(() => setProfileSave('idle'), 1600);
     } catch (e: any) {
       console.error('[Settings] save account:', e);
-      setProfileError(e?.message || 'Failed to update account.');
+      setProfileError(e?.message || 'Gagal memperbarui akun.');
       setProfileSave('error');
     }
   };
@@ -222,28 +304,27 @@ const MyProfileTab: React.FC = () => {
     return `${local.slice(0, Math.min(4, local.length))}${'*'.repeat(Math.max(3, local.length - 4))}@${domain}`;
   }, [user?.email]);
 
-  return (
-    <div className="space-y-6 max-w-2xl mx-auto animate-fade-in">
-      {/* ═══════════ ACCOUNT (avatar + display name) ═══════════ */}
-      <Section icon={UserIcon} title="Account" right={<SaveBadge state={profileSave} />}>
+  const initial = (displayName || user?.email || 'H').trim().charAt(0).toUpperCase();
+  const showPhoto = !!photoURL && !photoBroken;
 
-        <div className="flex items-center space-x-4 mb-4">
-          <div className="relative">
-            {photoURL ? (
-              <img src={photoURL} alt="Avatar" className="w-20 h-20 rounded-full border-2 border-slate-700 object-cover"
-                onError={e => { e.currentTarget.style.display = 'none'; }} />
+  return (
+    <div className="s-pane">
+      {/* ═══════════ ACCOUNT (avatar + display name) ═══════════ */}
+      <Section icon={UserIcon} title="Akun">
+        <div className="s-account-top">
+          <div className={`s-avatar-img${uploading ? ' is-busy' : ''}`}>
+            {showPhoto ? (
+              <img src={photoURL} alt="Avatar" onError={() => setPhotoBroken(true)} />
             ) : (
-              <div className="w-20 h-20 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center">
-                <UserIcon size={32} className="text-slate-500" />
-              </div>
+              <span className="s-avatar-letter">{initial}</span>
             )}
             {uploading && (
-              <div className="absolute inset-0 rounded-full bg-slate-950/70 backdrop-blur-sm flex items-center justify-center">
-                <Loader2 size={22} className="text-cyan-400 animate-spin" />
-              </div>
+              <span className="s-avatar-busy" aria-hidden="true">
+                <Loader2 size={20} className="animate-spin" />
+              </span>
             )}
           </div>
-          <div className="flex-1 min-w-0 space-y-2">
+          <div className="s-account-meta">
             <input
               ref={fileInputRef}
               type="file"
@@ -259,109 +340,67 @@ const MyProfileTab: React.FC = () => {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-slate-900 border border-slate-700 hover:border-cyan-500/60 text-sm text-slate-200 hover:text-white transition-all disabled:opacity-60"
+              className="s-avatar-edit"
             >
               {uploading ? <Loader2 size={14} className="animate-spin" /> : photoURL ? <ImagePlus size={14} /> : <Upload size={14} />}
-              <span>{uploading ? `Uploading… ${uploadProgress}%` : photoURL ? 'Change avatar' : 'Upload avatar'}</span>
+              <span>{uploading ? `Mengunggah… ${uploadProgress}%` : photoURL ? 'Ganti avatar' : 'Unggah avatar'}</span>
             </button>
-            {uploading && (
-              <div className="h-1 bg-slate-800 rounded overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }} />
+            {uploadProgress > 0 && (
+              <div className="s-upload-bar" aria-hidden="true">
+                <div className="s-upload-fill" style={{ transform: `scaleX(${uploadProgress / 100})` }} />
               </div>
             )}
-            <div className="text-[10px] text-slate-500 font-mono truncate">{user?.email}</div>
+            <div className="s-account-email">{user?.email}</div>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <label className="block">
-            <span className="text-[11px] text-slate-400 font-mono uppercase tracking-wider">Display Name</span>
-            <input
-              type="text"
-              value={displayName}
-              onChange={e => setDisplayName(e.target.value)}
-              className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500"
-              placeholder="How you appear on leaderboards"
-            />
-          </label>
+        <label className="s-field">
+          <span className="hud-label-sm">Nama Tampilan</span>
+          <input
+            type="text"
+            value={displayName}
+            onChange={e => setDisplayName(e.target.value)}
+            placeholder="Nama yang tampil di leaderboard"
+            enterKeyHint="done"
+            autoComplete="nickname"
+          />
+        </label>
 
-          {profileError && <p className="text-xs text-rose-400">{profileError}</p>}
+        {profileError && <p className="s-error" role="alert">{profileError}</p>}
 
-          <button
-            onClick={saveAccount}
-            disabled={profileSave === 'saving'}
-            className="w-full py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-white font-bold shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 disabled:opacity-60"
-          >
-            <Save size={14} /><span className="text-sm">Save Account</span>
-          </button>
-        </div>
+        <SaveButton state={profileSave} label="Simpan Akun" onClick={saveAccount} />
       </Section>
 
       {/* ═══════════ EMBEDDED PROFILE (HunterCard / Penghargaan / Compare / Identity / DOB) ═══════════ */}
-      <Profile />
+      <Profile achievementsDefaultExpanded={false} />
 
-      {/* ═══════════ ACCOUNT SECURITY (mostly stubs until wired through Firebase Auth) ═══════════ */}
-      <Section icon={Shield} title="Account Security">
-
-        <SecurityRow
-          icon={Mail}
-          label="Email Address"
-          value={maskedEmail}
-          actionLabel="Change Email"
-          disabled
-        />
-        <SecurityRow
-          icon={KeyRound}
-          label="Password"
-          value="••••••••••"
-          actionLabel="Change Password"
-          disabled
-        />
-        <SecurityRow
-          icon={Lock}
-          label="Two-Factor Authentication"
-          value="Disabled"
-          actionLabel="Enable 2FA"
-          disabled
-        />
+      {/* ═══════════ ACCOUNT SECURITY (stubs until wired through Firebase Auth) ═══════════ */}
+      <Section icon={Shield} title="Keamanan Akun">
+        <SecurityRow icon={Mail} label="Email" value={maskedEmail} />
+        <SecurityRow icon={KeyRound} label="Kata Sandi" value="••••••••••" />
+        <SecurityRow icon={Lock} label="Autentikasi 2 Langkah" value="Nonaktif" />
       </Section>
     </div>
   );
 };
 
-const SecurityRow: React.FC<{
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  label: string;
-  value: string;
-  actionLabel: string;
-  disabled?: boolean;
-  onClick?: () => void;
-}> = ({ icon: Icon, label, value, actionLabel, disabled, onClick }) => (
-  <div className="flex items-center justify-between gap-3 py-2 border-b border-slate-800/60 last:border-b-0">
-    <div className="flex items-center gap-3 min-w-0">
-      <Icon size={14} className="text-slate-500 shrink-0" />
-      <div className="min-w-0">
-        <div className="text-xs text-slate-400 font-mono uppercase tracking-wider">{label}</div>
-        <div className="text-sm text-white truncate">{value}</div>
+const SecurityRow: React.FC<{ icon: IconType; label: string; value: string }> = ({ icon: Icon, label, value }) => (
+  <div className="s-account-row">
+    <div className="s-row-main">
+      <Icon size={14} className="s-row-icon" />
+      <div className="s-row-text">
+        <div className="s-acc-label">{label}</div>
+        <div className="s-acc-val">{value}</div>
       </div>
     </div>
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="shrink-0 text-xs text-cyan-400 hover:text-cyan-300 disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-1"
-    >
-      <span>{actionLabel}</span>
-      {disabled && <ComingSoonBadge />}
-    </button>
+    <SoonTag />
   </div>
 );
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAB 2 — GOALS & TRACKING
-// Workout Preferences (real, persisted to Firestore.preferences) + Habit
-// Tracking (stubs — Streak Protection lands in Phase 4).
+// TAB 2 — TARGET
+// Workout Preferences (real, persisted to Firestore.preferences) + Streak
+// Protection (read-only token count) + Habit Tracking stubs.
 // ═══════════════════════════════════════════════════════════════════════════
 const GoalsTrackingTab: React.FC = () => {
   const { user } = useAuth();
@@ -417,156 +456,141 @@ const GoalsTrackingTab: React.FC = () => {
     setEquipment(prev => prev.includes(item) ? prev.filter(e => e !== item) : [...prev, item]);
   };
 
-  return (
-    <div className="space-y-6 max-w-2xl mx-auto animate-fade-in">
-      {/* ═══════════ WORKOUT PREFERENCES ═══════════ */}
-      <Section icon={Dumbbell} title="Workout Preferences" right={<SaveBadge state={prefsSave} />}>
+  const safeTokens = Math.max(0, Math.min(MAX_FREEZE_TOKENS, tokens));
 
+  return (
+    <div className="s-pane">
+      {/* ═══════════ WORKOUT PREFERENCES ═══════════ */}
+      <Section icon={Dumbbell} title="Preferensi Latihan">
         {prefsLoading ? (
-          <div className="flex items-center justify-center py-6 text-slate-500 text-xs">
-            <Loader2 size={14} className="animate-spin mr-2" />Loading preferences…
+          <div className="s-prefs-skeleton" aria-busy="true" aria-label="Memuat preferensi">
+            <div className="s-skel s-skel-label" />
+            <div className="s-env-grid">
+              <div className="s-skel s-skel-env" />
+              <div className="s-skel s-skel-env" />
+            </div>
+            <div className="s-skel s-skel-label" />
+            <div className="s-equip-grid">
+              {EQUIPMENT_OPTIONS.map(i => <div key={i} className="s-skel s-skel-chip" />)}
+            </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            <div>
-              <span className="text-[11px] text-slate-400 font-mono uppercase tracking-wider">Environment</span>
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                {([
-                  { key: 'Home' as const, icon: Home, label: 'Home' },
-                  { key: 'Gym' as const, icon: Building2, label: 'Gym' },
-                ]).map(opt => {
-                  const active = environment === opt.key;
-                  return (
-                    <button
-                      key={opt.key}
-                      onClick={() => setEnvironment(opt.key)}
-                      className={`flex items-center justify-center space-x-2 py-3 rounded-xl border transition-all ${active
-                        ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-300 shadow-[0_0_12px_rgba(6,182,212,0.15)]'
-                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-600'}`}
-                    >
-                      <opt.icon size={16} /><span className="text-sm font-bold">{opt.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+          <div className="s-prefs">
+            <span className="hud-label-sm">Lokasi Latihan</span>
+            <div className="s-env-grid">
+              {([
+                { key: 'Home' as const, icon: Home, label: 'Rumah' },
+                { key: 'Gym' as const, icon: Building2, label: 'Gym' },
+              ]).map(opt => {
+                const active = environment === opt.key;
+                return (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setEnvironment(opt.key)}
+                    className={`s-env ${active ? 'is-on' : ''}`}
+                  >
+                    <opt.icon size={22} /><span>{opt.label}</span>
+                  </button>
+                );
+              })}
             </div>
 
-            <div>
-              <span className="text-[11px] text-slate-400 font-mono uppercase tracking-wider">Available Equipment</span>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
-                {EQUIPMENT_OPTIONS.map(item => {
-                  const active = equipment.includes(item);
-                  return (
-                    <button
-                      key={item}
-                      onClick={() => toggleEquipment(item)}
-                      className={`py-2 rounded-lg text-xs font-bold border transition-all ${active
-                        ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300'
-                        : 'bg-slate-900 border-slate-800 text-slate-500 hover:border-slate-600'}`}
-                    >
-                      {item}
-                    </button>
-                  );
-                })}
-              </div>
+            <span className="hud-label-sm s-label-gap">
+              Peralatan Tersedia <span className="fz-cyan mono">{equipment.length} dipilih</span>
+            </span>
+            <div className="s-equip-grid">
+              {EQUIPMENT_OPTIONS.map(item => {
+                const active = equipment.includes(item);
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => toggleEquipment(item)}
+                    className={`s-equip ${active ? 'is-on' : ''}`}
+                  >
+                    {active && <Check size={13} className="s-equip-check" />}
+                    <span>{item}</span>
+                  </button>
+                );
+              })}
             </div>
 
-            <button
-              onClick={savePrefs}
-              disabled={prefsSave === 'saving'}
-              className="w-full py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-white font-bold shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30 active:scale-[0.98] transition-all flex items-center justify-center space-x-2 disabled:opacity-60"
-            >
-              <Save size={14} /><span className="text-sm">Save Preferences</span>
-            </button>
+            <SaveButton state={prefsSave} label="Simpan Preferensi" onClick={savePrefs} />
           </div>
         )}
       </Section>
 
       {/* ═══════════ STREAK PROTECTION (Phase 4 — real) ═══════════ */}
-      <Section icon={Shield} title="Streak Protection">
-
-        <div className="flex items-center justify-between bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+      <Section icon={Shield} title="Proteksi Streak">
+        <div className="s-freeze-card">
           <div>
-            <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 mb-1">
-              Freeze Tokens
-            </div>
-            <div className="text-xs text-slate-400">{tokens}/3 available</div>
+            <div className="hud-label-sm">Freeze Token</div>
+            <div className="s-freeze-val tnum">{safeTokens}/{MAX_FREEZE_TOKENS} tersedia</div>
           </div>
-          <TokenDisplay count={tokens} size="lg" />
+          <div className="s-freeze-slots" role="img" aria-label={`${safeTokens} dari ${MAX_FREEZE_TOKENS} freeze token tersedia`}>
+            {Array.from({ length: MAX_FREEZE_TOKENS }).map((_, i) => (
+              <span key={i} className={`s-freeze-slot${i < safeTokens ? ' is-filled' : ''}`}>
+                <Shield size={16} strokeWidth={i < safeTokens ? 2.2 : 1.6} />
+              </span>
+            ))}
+          </div>
         </div>
 
-        <div className="text-xs text-slate-400 space-y-1.5">
-          <p><span className="text-cyan-400 font-bold">How to earn:</span> Complete <span className="text-white">ALL</span> daily habits → +1 token (max 1/day, cap 3).</p>
-          <p><span className="text-cyan-400 font-bold">How they work:</span> Auto-applied when you miss a day, bridging the gap so your streak survives.</p>
-        </div>
+        <p className="s-helper">
+          <strong className="fz-cyan">Cara dapat:</strong> Selesaikan <strong>SEMUA</strong> habit harian → +1 token (maks 1/hari, kapasitas 3).
+        </p>
+        <p className="s-helper">
+          <strong className="fz-cyan">Cara kerja:</strong> Otomatis aktif saat kamu melewatkan satu hari, jadi streak tetap bertahan.
+        </p>
       </Section>
 
       {/* ═══════════ HABIT TRACKING (remaining stubs) ═══════════ */}
-      <Section icon={Sparkles} title="Habit Tracking">
-
-        <PrefRow
-          icon={Clock}
-          label="Daily Check-in Reminder"
-          value="09:00 AM"
-          disabled
-        />
-        <PrefRow
-          icon={FileText}
-          label="Progress Reports"
-          value="Weekly digest"
-          disabled
-        />
+      <Section icon={Sparkles} title="Pelacakan Habit">
+        <PrefRow icon={Clock} label="Pengingat Check-in Harian" value="09:00" />
+        <PrefRow icon={FileText} label="Laporan Progres" value="Ringkasan mingguan" />
       </Section>
     </div>
   );
 };
 
-const PrefRow: React.FC<{
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  label: string;
-  value: string;
-  disabled?: boolean;
-  onClick?: () => void;
-}> = ({ icon: Icon, label, value, disabled, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    disabled={disabled}
-    className="w-full flex items-center justify-between gap-3 py-2 border-b border-slate-800/60 last:border-b-0 disabled:cursor-not-allowed text-left"
-  >
-    <div className="flex items-center gap-3 min-w-0">
-      <Icon size={14} className="text-slate-500 shrink-0" />
-      <div className="min-w-0">
-        <div className="text-xs text-slate-400 font-mono uppercase tracking-wider flex items-center">
-          {label}
-          {disabled && <ComingSoonBadge />}
-        </div>
-        <div className="text-sm text-slate-300 truncate">{value}</div>
+// Read-only "coming soon" preference row.
+const PrefRow: React.FC<{ icon: IconType; label: string; value: string }> = ({ icon: Icon, label, value }) => (
+  <div className="s-pref-row">
+    <div className="s-row-main">
+      <Icon size={14} className="s-row-icon" />
+      <div className="s-row-text">
+        <div className="s-pref-lbl">{label}</div>
+        <div className="s-pref-val">{value}</div>
       </div>
     </div>
-    {!disabled && <ChevronRight size={14} className="text-slate-500 shrink-0" />}
-  </button>
+    <SoonTag />
+  </div>
 );
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAB 3 — APP SETTINGS
+// TAB 3 — APLIKASI
 // Notifications + Appearance stubs, real Data & Privacy (delete account),
-// real Session (logout), and About. Notification toggles are local-only stubs
-// until notificationService.subscribeTopic() is wired.
+// intro replay, real Session (logout), and About. Notification switches are
+// shown disabled until notificationService FCM topic subscriptions ship —
+// a working-looking switch whose state silently resets would be a lie.
 // ═══════════════════════════════════════════════════════════════════════════
+const NOTIF_DEFAULTS: { label: string; on: boolean }[] = [
+  { label: 'Pengingat Latihan', on: true },
+  { label: 'Peringatan Streak', on: true },
+  { label: 'Achievement Terbuka', on: true },
+  { label: 'Kutipan Motivasi Harian', on: false },
+  { label: 'Pengingat Check-in Habit', on: true },
+];
+
 const AppSettingsTab: React.FC = () => {
   const { logout, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const { isInstallable, install } = usePWAInstall();
 
-  const [notifs, setNotifs] = useState({
-    workouts: true,
-    streaks: true,
-    achievements: true,
-    motivation: false,
-    habits: true,
-  });
-
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // navigator.standalone exists on iOS Safari; otherwise display-mode media query
@@ -580,12 +604,9 @@ const AppSettingsTab: React.FC = () => {
     navigate('/login', { replace: true });
   };
 
-  const handleDelete = async () => {
-    const confirmed = window.confirm(
-      'This will permanently delete your account and all associated data. This cannot be undone. Proceed?',
-    );
-    if (!confirmed) return;
-
+  // Confirmation now comes from the HUD ConfirmDialog (Tier 0.6) instead of
+  // the unstyled English window.confirm; the deletion itself is unchanged.
+  const runDelete = async () => {
     setDeleting(true);
     setDeleteError(null);
     try {
@@ -594,19 +615,20 @@ const AppSettingsTab: React.FC = () => {
     } catch (e: any) {
       console.error('[Settings] delete account:', e);
       if (e?.code === 'auth/requires-recent-login') {
-        setDeleteError('For security, please sign out and sign back in, then try deleting your account again.');
+        setDeleteError('Demi keamanan, keluar lalu masuk lagi, kemudian coba hapus akun sekali lagi.');
       } else {
-        setDeleteError(e?.message || 'Failed to delete account.');
+        setDeleteError(e?.message || 'Gagal menghapus akun.');
       }
       setDeleting(false);
+      setConfirmDelete(false);
     }
   };
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto animate-fade-in">
+    <div className="s-pane">
       {/* ═══════════ INSTALL APP (PWA) ═══════════ */}
       {(isInstallable || isInstalled) && (
-        <Section icon={Smartphone} title="Install App">
+        <Section icon={Smartphone} title="Pasang Aplikasi">
           <div className="s-pwa-card">
             <div className="s-pwa-card-info">
               <div className="s-pwa-card-title">OurLife Hunter</div>
@@ -618,7 +640,7 @@ const AppSettingsTab: React.FC = () => {
             </div>
             {isInstalled
               ? <span className="s-pwa-card-installed"><Check size={12} /> TERPASANG</span>
-              : <button type="button" className="s-cta s-cta-cyan" style={{ width: 'auto', padding: '0 16px' }} onClick={install}>
+              : <button type="button" className="s-cta s-cta-cyan s-cta-inline" onClick={install}>
                   <Smartphone size={14} /> Pasang
                 </button>}
           </div>
@@ -626,125 +648,102 @@ const AppSettingsTab: React.FC = () => {
       )}
 
       {/* ═══════════ NOTIFICATIONS ═══════════ */}
-      <Section icon={Bell} title="Notifications" titleAfter={<ComingSoonBadge />}>
-
-        <NotifToggle label="Workout Reminders" checked={notifs.workouts}
-          onChange={(v) => setNotifs(p => ({ ...p, workouts: v }))} />
-        <NotifToggle label="Streak Alerts" checked={notifs.streaks}
-          onChange={(v) => setNotifs(p => ({ ...p, streaks: v }))} />
-        <NotifToggle label="Achievement Unlocked" checked={notifs.achievements}
-          onChange={(v) => setNotifs(p => ({ ...p, achievements: v }))} />
-        <NotifToggle label="Daily Motivation Quote" checked={notifs.motivation}
-          onChange={(v) => setNotifs(p => ({ ...p, motivation: v }))} />
-        <NotifToggle label="Habit Check-in Reminder" checked={notifs.habits}
-          onChange={(v) => setNotifs(p => ({ ...p, habits: v }))} />
-
-        <p className="text-[10px] text-slate-600 font-mono pt-2">
-          Toggles are local until notificationService FCM topic subscriptions ship.
-        </p>
+      <Section icon={Bell} title="Notifikasi" titleAfter={<SoonTag />}>
+        {NOTIF_DEFAULTS.map(n => (
+          <div key={n.label} className="s-toggle-row is-disabled">
+            <span>{n.label}</span>
+            <span
+              role="switch"
+              aria-checked={n.on}
+              aria-disabled="true"
+              aria-label={n.label}
+              className={`s-toggle is-disabled${n.on ? ' is-on' : ''}`}
+            >
+              <span className="s-toggle-knob" />
+            </span>
+          </div>
+        ))}
+        <p className="s-helper-foot">Aktif setelah notifikasi push (FCM) rilis.</p>
       </Section>
 
       {/* ═══════════ APPEARANCE (stubs) ═══════════ */}
-      <Section icon={Palette} title="Appearance">
-
-        <PrefRow icon={Palette} label="Theme" value="Dark (system locked)" disabled />
-        <PrefRow icon={Languages} label="Language" value="Bahasa Indonesia" disabled />
-        <PrefRow icon={Type} label="Font Size" value="Medium" disabled />
+      <Section icon={Palette} title="Tampilan">
+        <PrefRow icon={Palette} label="Tema" value="Gelap (terkunci)" />
+        <PrefRow icon={Languages} label="Bahasa" value="Bahasa Indonesia" />
+        <PrefRow icon={Type} label="Ukuran Font" value="Sedang" />
       </Section>
 
       {/* ═══════════ DATA & PRIVACY ═══════════ */}
-      <Section icon={Database} title="Data & Privacy" color="red">
+      <Section icon={Database} title="Data & Privasi" color="red">
+        <PrefRow icon={Download} label="Ekspor Data" value="JSON / CSV" />
+        <PrefRow icon={Database} label="Bersihkan Cache" value="Kosongkan penyimpanan lokal" />
 
-        <PrefRow icon={Download} label="Export My Data" value="JSON / CSV" disabled />
-        <PrefRow icon={Database} label="Clear Cache" value="Free up local storage" disabled />
-
-        <div className="pt-2 border-t border-slate-800/60">
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="w-full py-3 bg-red-500/10 border border-red-500/40 rounded-xl text-red-400 hover:bg-red-500/20 transition-all flex items-center justify-center space-x-2 disabled:opacity-60"
-          >
-            {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-            <span className="text-sm font-bold">{deleting ? 'Deleting…' : 'Delete Account'}</span>
-          </button>
-          {deleteError && <p className="text-[11px] text-rose-400 mt-2">{deleteError}</p>}
-          <p className="text-[10px] text-slate-600 mt-2 font-mono">
-            Deletes your Firestore profile, RTDB data, and Firebase Auth identity. This cannot be undone.
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={() => { setDeleteError(null); setConfirmDelete(true); }}
+          disabled={deleting}
+          className="s-cta s-cta-danger"
+        >
+          {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+          <span>{deleting ? 'Menghapus…' : 'Hapus Akun'}</span>
+        </button>
+        {deleteError && <p className="s-error" role="alert">{deleteError}</p>}
+        <p className="s-helper-foot">
+          Menghapus profil Firestore, data RTDB, dan identitas Firebase Auth. Tidak bisa dibatalkan.
+        </p>
       </Section>
 
       {/* ═══════════ EXPERIENCE ═══════════ */}
-      <Section icon={Sparkles} title="Experience">
+      <Section icon={Sparkles} title="Pengalaman">
         <button
           type="button"
-          onClick={() => {
-            // Clear the intro-done flag and bounce to /onboarding so the
-            // cinematic Player Invitation + Heart Awakening plays again.
-            try { localStorage.removeItem('ol_intro_done'); } catch { /* */ }
-            navigate('/onboarding');
-          }}
-          className="w-full py-3 bg-slate-800 border border-cyan-500/30 rounded-xl text-cyan-200 hover:bg-cyan-500/10 transition-all flex items-center justify-center space-x-2"
+          // /intro plays the cinematic outside the onboarding gate (which
+          // redirects anyone with a profile) and returns here afterwards.
+          onClick={() => navigate('/intro')}
+          className="s-cta s-cta-outline s-cta-glow"
         >
-          <Sparkles size={14} /><span className="text-sm font-bold">Replay Intro Cinematic</span>
+          <Film size={15} /><span>Putar Ulang Intro</span>
         </button>
-        <p className="text-[10px] text-slate-500 font-mono">
-          Memutar ulang Informasi Sistem · Heart Awakening · Player Welcome.
+        <p className="s-helper-foot">
+          Informasi Sistem · Heart Awakening · Player Welcome
         </p>
       </Section>
 
       {/* ═══════════ SESSION ═══════════ */}
-      <Section icon={LogOut} title="Session" color="red">
-        <button
-          onClick={handleLogout}
-          className="w-full py-3 bg-slate-800 border border-slate-700 rounded-xl text-slate-200 hover:bg-slate-700 transition-all flex items-center justify-center space-x-2"
-        >
-          <LogOut size={16} /><span className="text-sm font-bold">Log Out</span>
+      <Section icon={LogOut} title="Sesi" color="red">
+        <button type="button" onClick={handleLogout} className="s-cta s-cta-outline">
+          <LogOut size={16} /><span>Keluar</span>
         </button>
       </Section>
 
       {/* ═══════════ ABOUT ═══════════ */}
-      <Section icon={Info} title="About">
-        <div className="text-xs text-slate-400 font-mono">Version: {APP_VERSION}</div>
-        <div className="grid grid-cols-2 gap-2 pt-2">
-          <AboutLink icon={FileText} label="Privacy Policy" />
-          <AboutLink icon={FileText} label="Terms of Service" />
-          <AboutLink icon={HelpCircle} label="Help Center" />
-          <AboutLink icon={MessageCircle} label="Contact Support" />
+      <Section icon={Info} title="Tentang">
+        <div className="s-about-version">Versi: <span className="fz-cyan">{APP_VERSION}</span></div>
+        <div className="s-about-grid">
+          <AboutLink icon={FileText} label="Kebijakan Privasi" />
+          <AboutLink icon={FileText} label="Ketentuan Layanan" />
+          <AboutLink icon={HelpCircle} label="Pusat Bantuan" />
+          <AboutLink icon={MessageCircle} label="Hubungi Dukungan" />
         </div>
       </Section>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Hapus akun?"
+        message="Semua data profil, latihan, dan habit akan dihapus permanen. Tindakan ini tidak bisa dibatalkan."
+        confirmLabel={deleting ? 'Menghapus…' : 'Hapus Permanen'}
+        busy={deleting}
+        onConfirm={() => { void runDelete(); }}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 };
 
-const NotifToggle: React.FC<{
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}> = ({ label, checked, onChange }) => (
-  <button
-    type="button"
-    onClick={() => onChange(!checked)}
-    className="w-full flex items-center justify-between gap-3 py-2 text-left"
-  >
-    <span className="text-sm text-slate-300">{label}</span>
-    <span className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? 'bg-cyan-500' : 'bg-slate-700'}`}>
-      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
-    </span>
-  </button>
-);
-
-const AboutLink: React.FC<{
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  label: string;
-}> = ({ icon: Icon, label }) => (
-  <button
-    type="button"
-    disabled
-    className="flex items-center gap-2 py-2 px-3 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-400 cursor-not-allowed"
-  >
-    <Icon size={12} />
-    <span className="truncate">{label}</span>
+const AboutLink: React.FC<{ icon: IconType; label: string }> = ({ icon: Icon, label }) => (
+  <button type="button" disabled className="s-about-link" title="Segera hadir">
+    <Icon size={13} />
+    <span>{label}</span>
   </button>
 );
 

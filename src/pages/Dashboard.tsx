@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { storageService } from '../services/storageService';
-import { WorkoutLog, Habit, MuscleGroup, GymSchedule, getRecoveryHours, GymProfile, ExerciseDefinition, UserState } from '../types';
+import { WorkoutLog, Habit, MuscleGroup, GymSchedule, GymProfile, ExerciseDefinition, UserState } from '../types';
 import { Calendar, Edit3, Save, X, Plus, Play, Repeat, Activity, CheckCircle2, Sparkles, Pencil } from 'lucide-react';
 import { MUSCLE_GROUP_CONFIG } from '../config/constants';
-import { calculateStreak } from '../services/gamificationService';
+import { liveWorkoutStreak } from '../utils/liveStreak';
 import { computeFatigue } from '../services/fatigueService';
 import { StatusCard } from '../components/StatusCard';
-import { SystemNotification, BodyAnatomy, splitExhaustedByView, CornerBracket } from '../components/hud';
+import { SystemNotification, BodyAnatomy, splitExhaustedByView, CornerBracket, BodyTurntable, BodyViewToggle, HudDialog, CountUp } from '../components/hud';
+import { RecoveryCountdown, getRecoveringMuscles } from '../components/dashboard/RecoveryCountdown';
 import { useNavigate } from 'react-router-dom';
 
 // Maps free-form schedule strings ("Push — Chest, Shoulders, Triceps") to MuscleGroup keys.
@@ -72,50 +73,64 @@ const formatRelativeID = (input: number | string | undefined): string => {
   return new Date(ts).toLocaleDateString('en-CA');
 };
 
-// Get muscles currently recovering based on workout history.
-// Phase 9: gender modifier — Female users recover ~18% faster.
-function getRecoveringMuscles(
-  workouts: WorkoutLog[],
-  nowMs: number,
-  gender?: 'Male' | 'Female',
-): { muscle: MuscleGroup; hoursLeft: number; minutesLeft: number; secondsLeft: number }[] {
-  const recovering: { muscle: MuscleGroup; hoursLeft: number; minutesLeft: number; secondsLeft: number }[] = [];
-  const seen = new Set<MuscleGroup>();
+// getRecoveringMuscles lives in dashboard/RecoveryCountdown.tsx (moved
+// verbatim) so the per-second countdown and this page share one definition.
 
-  for (const w of workouts) {
-    const workoutTime = w.timestamp
-      ? new Date(w.timestamp).getTime()
-      : new Date(w.date + 'T12:00:00').getTime();
+/**
+ * Minute-resolution wall clock for everything on the page that doesn't need
+ * seconds (greeting, date, today's key, body map, fatigue). Aligned to the
+ * minute boundary and re-synced when the tab becomes visible again. Only the
+ * recovery countdown ticks per second, inside its own leaf component, so the
+ * page (StatusCard, both body faces) no longer re-renders every second —
+ * that per-second reconciliation used to drop frames mid body-turn.
+ */
+function useMinuteClock(): [number, () => void] {
+  const [now, setNow] = useState(() => Date.now());
+  const resync = useCallback(() => setNow(Date.now()), []);
+  useEffect(() => {
+    let t = 0;
+    const schedule = () => {
+      t = window.setTimeout(() => { setNow(Date.now()); schedule(); }, 60_000 - (Date.now() % 60_000) + 50);
+    };
+    const onVisibility = () => {
+      window.clearTimeout(t);
+      if (document.hidden) return;
+      setNow(Date.now());
+      schedule();
+    };
+    schedule();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+  return [now, resync];
+}
 
-    if (isNaN(workoutTime)) continue;
+/**
+ * Weight field sanitiser: many Android keyboards type "65,5", which a
+ * type=number input silently turns into an empty value (Save disabled for no
+ * visible reason). Accept the comma as a decimal point, drop anything that
+ * isn't a digit and keep a single dot. handleWeightUpdate still parses it.
+ */
+const normalizeWeightInput = (raw: string): string => {
+  const s = raw.replace(/,/g, '.').replace(/[^0-9.]/g, '');
+  const dot = s.indexOf('.');
+  return dot === -1 ? s : s.slice(0, dot + 1) + s.slice(dot + 1).replace(/\./g, '');
+};
 
-    const msSince = nowMs - workoutTime;
-    if (msSince < 0) continue;
+/** "65" / "65.5" / "65.25" — no trailing zeros, like the stored value. */
+const formatWeight = (v: number): string => String(Math.round(v * 100) / 100);
 
-    const muscles: MuscleGroup[] = w.muscleGroups && w.muscleGroups?.length > 0
-      ? w.muscleGroups
-      : [];
-
-    for (const m of muscles) {
-      if (seen.has(m)) continue;
-      const recoveryH = getRecoveryHours(m, gender);
-      const recoveryMs = recoveryH * 60 * 60 * 1000;
-
-      if (msSince < recoveryMs) {
-        const msLeft = recoveryMs - msSince;
-        const totalSecondsLeft = Math.floor(msLeft / 1000);
-        const hoursLeft = Math.floor(totalSecondsLeft / 3600);
-        const minutesLeft = Math.floor((totalSecondsLeft % 3600) / 60);
-        const secondsLeft = totalSecondsLeft % 60;
-
-        if (totalSecondsLeft > 0) {
-          recovering.push({ muscle: m, hoursLeft, minutesLeft, secondsLeft });
-          seen.add(m);
-        }
-      }
-    }
+/** First-render read from the storageService cache (it is synchronous). */
+function readOr<T>(read: () => T, fallback: T): T {
+  try {
+    return read();
+  } catch (err) {
+    console.error('[Dashboard] Failed to load data from storage:', err);
+    return fallback;
   }
-  return recovering;
 }
 
 function getReadyMuscles(
@@ -146,17 +161,19 @@ const DAY_LABELS: Record<string, string> = {
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [workouts, setWorkouts] = useState<WorkoutLog[]>([]);
-  const [habits, setHabits] = useState<Habit[]>([]);
-  const [profile, setProfile] = useState<GymProfile | null>(null);
-  const [schedule, setSchedule] = useState<GymSchedule>({});
+  // Read synchronously from the storageService cache on first render (the
+  // same data the old mount effect loaded), so there's no one-render
+  // "Initializing" flash before the reveal stagger starts.
+  const [workouts, setWorkouts] = useState<WorkoutLog[]>(() => readOr(() => storageService.getWorkouts(), []));
+  const [habits, setHabits] = useState<Habit[]>(() => readOr(() => storageService.getHabits(), []));
+  const [profile, setProfile] = useState<GymProfile | null>(() => readOr<GymProfile | null>(() => storageService.getGymProfile(), null));
+  const [schedule, setSchedule] = useState<GymSchedule>(() => readOr(() => storageService.getGymSchedule(), {}));
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [editSchedule, setEditSchedule] = useState<GymSchedule>({});
-  const [userState, setUserState] = useState<UserState | null>(null);
+  const [userState, setUserState] = useState<UserState | null>(() => readOr<UserState | null>(() => storageService.getUserState(), null));
   const [editingWeight, setEditingWeight] = useState(false);
   const [newWeight, setNewWeight] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [currentTime, setCurrentTime] = useState(Date.now());
+  const [currentTime, resyncClock] = useMinuteClock();
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState('');
   const [newHabitName, setNewHabitName] = useState('');
@@ -166,28 +183,19 @@ export const Dashboard: React.FC = () => {
   const [verdictExpanded, setVerdictExpanded] = useState(false);
   useEffect(() => { setVerdictExpanded(false); }, [systemMessage]);
 
-  // Muscle Recovery 3D flip state (Q4: 600ms cubic ease-out)
+  // Muscle Recovery body view. The turn itself is animated inside
+  // BodyTurntable (DOM-driven spring), so this page never re-renders per frame.
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
-  const [bodyAngle, setBodyAngle] = useState(0);
 
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    try {
-      setWorkouts(storageService.getWorkouts());
-      setHabits(storageService.getHabits());
-      setProfile(storageService.getGymProfile());
-      setSchedule(storageService.getGymSchedule());
-      setUserState(storageService.getUserState());
-    } catch (err) {
-      console.error('[Dashboard] Failed to load data from storage:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // The edit sheets keep showing the last typed value while they slide away
+  // (the save handlers clear the field in the same tick they close).
+  const lastWeightRef = useRef(newWeight);
+  if (editingWeight) lastWeightRef.current = newWeight;
+  const weightShown = editingWeight ? newWeight : lastWeightRef.current;
+  const weightValid = newWeight !== '' && Number.isFinite(parseFloat(newWeight));
+  const lastNameRef = useRef(newName);
+  if (editingName) lastNameRef.current = newName;
+  const nameShown = editingName ? newName : lastNameRef.current;
 
   useEffect(() => {
     const unsubscribe = storageService.subscribe(() => {
@@ -198,25 +206,6 @@ export const Dashboard: React.FC = () => {
     });
     return unsubscribe;
   }, []);
-
-  // Body flip RAF — interpolate to target angle (600ms cubic ease-out)
-  useEffect(() => {
-    const target = bodyView === 'back' ? 180 : 0;
-    const from = bodyAngle;
-    if (Math.abs(target - from) < 0.1) return;
-    const start = performance.now();
-    const dur = 600;
-    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
-    let raf = 0;
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / dur);
-      setBodyAngle(from + (target - from) * ease(t));
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bodyView]);
 
   const launchTodaysPlan = () => {
     const label = schedule[currentDayKey];
@@ -306,15 +295,6 @@ export const Dashboard: React.FC = () => {
     setEditingSchedule(false);
   };
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <div className="text-center">
-        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 animate-breathe" />
-        <p className="text-slate-500 font-mono text-sm">Initializing Systems...</p>
-      </div>
-    </div>
-  );
-
   const today = new Date(currentTime).toLocaleDateString('en-CA');
   const now = new Date(currentTime);
   const currentDayKey = DAYS[now.getDay() === 0 ? 6 : now.getDay() - 1];
@@ -335,31 +315,43 @@ export const Dashboard: React.FC = () => {
   const habitCompletion = habits.filter(h => h.completedDates?.includes(today))?.length;
   const habitTotal = habits?.length;
   const habitPercentage = habitTotal > 0 ? Math.round((habitCompletion / habitTotal) * 100) : 0;
-  const workoutStreak = calculateStreak(workouts);
+  // Same live value StatusCard shows on this screen (freeze-token days count).
+  const workoutStreak = liveWorkoutStreak(workouts, profile);
 
   const weekStart = new Date(now);
   weekStart.setDate(now.getDate() - now.getDay());
   const weekStartStr = weekStart.toLocaleDateString('en-CA');
   const workoutsThisWeek = workouts.filter(w => w.date >= weekStartStr)?.length;
 
-  const recoveringData = getRecoveringMuscles(workouts, currentTime, userState?.gender);
-  const recoveringMuscles = recoveringData.map(r => r.muscle);
-  const readyMuscles = getReadyMuscles(workouts, currentTime, new Set(recoveringMuscles));
+  // Minute-resolution recovery state. The countdown leaf below calls
+  // `resyncClock` the moment a muscle finishes, so the body map and the
+  // ready chips flip in sync with the timer hitting zero.
+  const userGender = userState?.gender;
+  const recoveringKey = useMemo(
+    () => getRecoveringMuscles(workouts, currentTime, userGender).map(r => r.muscle).join('|'),
+    [workouts, currentTime, userGender],
+  );
+  // Keyed on the muscle list (not the clock) so both BodyAnatomy faces get
+  // the same array instances — and skip rebuilding their tint CSS — until
+  // the set of exhausted muscles actually changes.
+  const recoveringMuscles = useMemo(
+    () => (recoveringKey ? (recoveringKey.split('|') as MuscleGroup[]) : []),
+    [recoveringKey],
+  );
+  const readyMuscles = useMemo(
+    () => getReadyMuscles(workouts, currentTime, new Set(recoveringMuscles)),
+    [workouts, currentTime, recoveringMuscles],
+  );
 
-  const fatigue = computeFatigue(workouts, currentTime, userState?.gender);
+  const fatigue = useMemo(
+    () => computeFatigue(workouts, currentTime, userGender),
+    [workouts, currentTime, userGender],
+  );
 
   // Split exhausted muscles by view (front/back) — feeds BodyAnatomy
-  const exhaustedSplit = splitExhaustedByView(recoveringMuscles);
+  const exhaustedSplit = useMemo(() => splitExhaustedByView(recoveringMuscles), [recoveringMuscles]);
 
-  // 3D body flip transform math
-  const rad = bodyAngle * Math.PI / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const scaleX = 0.04 + 0.96 * Math.abs(cos);
-  const showFront = cos >= 0;
-  const edgeIntensity = Math.pow(1 - Math.abs(cos), 1.5);
-  const rotateShade = Math.abs(sin) * 0.85;
-  const visibleExhausted = showFront ? exhaustedSplit.front : exhaustedSplit.back;
+  const visibleExhausted = bodyView === 'front' ? exhaustedSplit.front : exhaustedSplit.back;
   const exhaustedCount = visibleExhausted.length;
 
   const gender: 'male' | 'female' = (userState?.gender === 'Female' ? 'female' : 'male');
@@ -381,19 +373,29 @@ export const Dashboard: React.FC = () => {
       <section className="d-greet reveal" style={{ '--reveal-i': 0 } as React.CSSProperties}>
         <div className="d-greet-date">{formattedDate}</div>
         <h1 className="d-greet-hello">
-          {getGreeting()}, <span
-            className="fz-cyan"
+          {getGreeting()},{' '}
+          <button
+            type="button"
+            className="fz-cyan d-greet-name"
             onClick={() => { setNewName(userState?.name || ''); setEditingName(true); }}
-          >{userState?.name || 'Hunter'}</span>
+            aria-label={`Ubah nama, saat ini ${userState?.name || 'Hunter'}`}
+          >{userState?.name || 'Hunter'}</button>
         </h1>
-        <div
+        <button
+          type="button"
           className="d-greet-weight"
           onClick={() => { setNewWeight(userState?.weight?.toString() || ''); setEditingWeight(true); }}
+          aria-label={`Ubah berat badan${typeof userState?.weight === 'number' ? `, saat ini ${userState.weight} kg` : ''}`}
         >
           <span className="hud-label-sm">CURRENT WEIGHT:</span>
-          <span className="d-greet-weight-val">{userState?.weight ?? '--'} <span className="d-greet-unit">kg</span></span>
-          <button className="d-greet-edit" aria-label="Edit berat"><Pencil size={11} /></button>
-        </div>
+          <span className="d-greet-weight-val tnum">
+            {typeof userState?.weight === 'number'
+              ? <CountUp value={userState.weight} fromZero={false} decimals={1} format={formatWeight} />
+              : '--'}
+            {' '}<span className="d-greet-unit">kg</span>
+          </span>
+          <span className="d-greet-edit" aria-hidden="true"><Pencil size={11} /></span>
+        </button>
       </section>
 
       {/* ── 2. SYSTEM VERDICT (inline .sys-frame) ──
@@ -457,7 +459,7 @@ export const Dashboard: React.FC = () => {
         <div className="d-last-foot">
           <span className="d-last-streak">
             <Sparkles size={11} />
-            {workoutsThisWeek} minggu ini · {workoutStreak} day streak
+            {workoutsThisWeek} minggu ini · streak {workoutStreak} hari
           </span>
           <span className="d-last-xp">+{(lastWorkout?.xpEarned ?? 0).toLocaleString()} XP</span>
         </div>
@@ -548,6 +550,7 @@ export const Dashboard: React.FC = () => {
             workouts={workouts}
             fatigue={fatigue}
             displayName={userState?.name || ''}
+            today={today}
           />
         </div>
       )}
@@ -565,43 +568,20 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <CornerBracket className="d-body-stage" tone="cyan" size={11} inset={6}>
-          <div className="d-body-toggle">
-            <button className={`d-body-toggle-opt ${bodyView === 'front' ? 'is-on' : ''}`} onClick={() => setBodyView('front')}>FRONT</button>
-            <button className={`d-body-toggle-opt ${bodyView === 'back' ? 'is-on' : ''}`} onClick={() => setBodyView('back')}>BACK</button>
-          </div>
+          <BodyViewToggle view={bodyView} onChange={setBodyView} />
 
           <div className="d-body-fig-wrap">
             <div className="d-body-scan" />
-            <div
-              className="d-body-3d"
-              style={{
-                transform: `rotateY(${bodyAngle}deg) scaleX(${scaleX})`,
-                filter: `brightness(${0.6 + 0.4 * Math.abs(cos)})`,
-              }}
-            >
-              <div
-                className="d-body-face-real"
-                style={{ opacity: showFront ? 1 : 0, '--rotate-shade': rotateShade } as React.CSSProperties}
-              >
-                <BodyAnatomy view="front" exhausted={exhaustedSplit.front} gender={gender} />
-              </div>
-              <div
-                className="d-body-face-real d-body-face-mirror"
-                style={{ opacity: showFront ? 0 : 1, '--rotate-shade': rotateShade } as React.CSSProperties}
-              >
-                <BodyAnatomy view="back" exhausted={exhaustedSplit.back} gender={gender} />
-              </div>
-            </div>
-            <div
-              className="d-body-edge"
-              style={{
-                opacity: edgeIntensity * 0.9,
-                transform: `translateX(-50%) scaleY(${1 - edgeIntensity * 0.05})`,
-              }}
+            <BodyTurntable
+              view={bodyView}
+              onViewChange={setBodyView}
+              front={<BodyAnatomy view="front" exhausted={exhaustedSplit.front} gender={gender} />}
+              back={<BodyAnatomy view="back" exhausted={exhaustedSplit.back} gender={gender} />}
             />
           </div>
 
-          <div className="d-body-active">
+          {/* Keyed on the face so the count re-enters when the body turns. */}
+          <div className="d-body-active" key={bodyView}>
             <span style={{ color: 'var(--red)' }}>●</span> {exhaustedCount} LELAH
           </div>
         </CornerBracket>
@@ -625,32 +605,9 @@ export const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {recoveringData.length > 0 && (
-          <div className="mt-3 space-y-2">
-            {recoveringData.map((data) => {
-              const maxH = getRecoveryHours(data.muscle, userState?.gender);
-              const totalSecsLeft = (data.hoursLeft * 3600) + (data.minutesLeft * 60) + (data.secondsLeft || 0);
-              const pct = Math.max(0, Math.min(100, 100 - (totalSecsLeft / (maxH * 3600)) * 100));
-              const nearlyDone = pct > 80;
-              return (
-                <div key={data.muscle} className="p-2.5 bg-slate-950/60 border border-slate-800 rounded-lg relative overflow-hidden">
-                  <div className={`absolute top-0 left-0 w-1 h-full ${nearlyDone ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ boxShadow: nearlyDone ? undefined : '0 0 8px rgba(239,68,68,0.7)' }} />
-                  <div className="flex items-center justify-between pl-2 mb-1.5">
-                    <span className="text-xs font-bold text-slate-200 capitalize">
-                      {MUSCLE_GROUP_CONFIG[data.muscle]?.label || data.muscle}
-                    </span>
-                    <span className={`text-[10px] font-mono font-bold tracking-wider ${nearlyDone ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {data.hoursLeft}h {data.minutesLeft}m {data.secondsLeft}s
-                    </span>
-                  </div>
-                  <div className="w-full ml-2 h-1 bg-slate-900 rounded-full overflow-hidden">
-                    <div className={`h-full ${nearlyDone ? 'bg-emerald-700/70' : 'bg-gradient-to-r from-red-600 to-red-400'}`} style={{ width: `${pct}%`, transition: 'width 1s linear' }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {/* Per-muscle countdown — owns the only 1s tick on this page. */}
+        <RecoveryCountdown workouts={workouts} gender={userGender} onSetChange={resyncClock} />
+
       </article>
 
       {/* ── 7. WEEKLY SCHEDULE ── */}
@@ -712,74 +669,79 @@ export const Dashboard: React.FC = () => {
         </ul>
       </article>
 
-      {/* ── Weight Update Modal ── */}
-      {editingWeight && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
-            <h3 className="text-xl font-bold text-white mb-4">Update Weight</h3>
-            <div className="relative mb-6">
-              <input
-                type="number"
-                value={newWeight}
-                onChange={(e) => setNewWeight(e.target.value)}
-                autoFocus
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-white text-lg focus:outline-none focus:border-cyan-500 transition-colors"
-                placeholder="Ex: 65.5"
-              />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">kg</span>
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setEditingWeight(false)}
-                className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-400 font-bold hover:bg-slate-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleWeightUpdate}
-                disabled={!newWeight}
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold hover:shadow-lg hover:shadow-cyan-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Update
-              </button>
-            </div>
+      {/* ── Weight / Name edit sheets ──
+          Shared HudDialog: portaled (a fixed overlay inside the transformed
+          route wrapper would anchor to it), real enter + exit, Esc/backdrop
+          dismiss, focus in and back. Bottom-anchored so the mobile keyboard
+          pushes the sheet up instead of jumping a centred box. A <form> per
+          sheet makes Enter / the keyboard's "done" key submit. */}
+      <HudDialog
+        open={editingWeight}
+        onClose={() => setEditingWeight(false)}
+        variant="sheet"
+        title="Perbarui Berat Badan"
+        subtitle="Status fisik"
+        footer={
+          <>
+            <button type="button" className="hd-btn hd-btn--ghost" onClick={() => setEditingWeight(false)}>Batal</button>
+            <button type="submit" form="d-weight-form" className="hd-btn hd-btn--primary" disabled={!weightValid}>Simpan</button>
+          </>
+        }
+      >
+        <form
+          id="d-weight-form"
+          onSubmit={(e) => { e.preventDefault(); if (weightValid) handleWeightUpdate(); }}
+        >
+          <div className="hd-field">
+            <input
+              className="hd-input tnum"
+              type="text"
+              inputMode="decimal"
+              enterKeyHint="done"
+              autoComplete="off"
+              maxLength={6}
+              value={weightShown}
+              onChange={(e) => setNewWeight(normalizeWeightInput(e.target.value))}
+              placeholder="cth: 65.5"
+              aria-label="Berat badan (kg)"
+            />
+            <span className="hd-input-suffix">kg</span>
           </div>
-        </div>
-      )}
+        </form>
+      </HudDialog>
 
-      {/* ── Name Update Modal ── */}
-      {editingName && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scale-in">
-            <h3 className="text-xl font-bold text-white mb-4">Update Name</h3>
-            <div className="relative mb-6">
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                autoFocus
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 px-4 text-white text-lg focus:outline-none focus:border-cyan-500 transition-colors"
-                placeholder="Enter your name"
-              />
-            </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setEditingName(false)}
-                className="flex-1 py-3 rounded-xl bg-slate-800 text-slate-400 font-bold hover:bg-slate-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleNameUpdate}
-                disabled={!newName}
-                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold hover:shadow-lg hover:shadow-cyan-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Save
-              </button>
-            </div>
+      <HudDialog
+        open={editingName}
+        onClose={() => setEditingName(false)}
+        variant="sheet"
+        title="Ubah Nama Hunter"
+        subtitle="Identitas"
+        footer={
+          <>
+            <button type="button" className="hd-btn hd-btn--ghost" onClick={() => setEditingName(false)}>Batal</button>
+            <button type="submit" form="d-name-form" className="hd-btn hd-btn--primary" disabled={!newName.trim()}>Simpan</button>
+          </>
+        }
+      >
+        <form
+          id="d-name-form"
+          onSubmit={(e) => { e.preventDefault(); if (newName.trim()) handleNameUpdate(); }}
+        >
+          <div className="hd-field">
+            <input
+              className="hd-input"
+              type="text"
+              enterKeyHint="done"
+              autoComplete="nickname"
+              maxLength={24}
+              value={nameShown}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Nama Hunter-mu"
+              aria-label="Nama"
+            />
           </div>
-        </div>
-      )}
+        </form>
+      </HudDialog>
     </div>
   );
 };

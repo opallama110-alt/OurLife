@@ -22,11 +22,16 @@ import {
 import { Leaderboard } from '../components/Leaderboard';
 import { useAchievements } from '../context/AchievementContext';
 import { achievementService } from '../services/achievementService';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 import AnatomyViewer, { getViewForMuscle } from '../components/Anatomy/AnatomyViewer';
+import { BodyViewToggle } from '../components/hud/BodyTurntable';
 import { RankBadge, rankFromTierName } from '../components/hud';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
 import { getLocalDateString } from '../utils/dateUtils';
+import { GymAnalytics } from '../components/gym/GymAnalytics';
+import { WorkoutSummary, WorkoutSummaryData } from '../components/gym/WorkoutSummary';
+import { liveWorkoutStreak } from '../utils/liveStreak';
+import { StepperSlider } from '../components/gym/StepperSlider';
+import { RestTimerRing } from '../components/gym/RestTimerRing';
 
 const createWorkoutId = (): string =>
   globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -45,157 +50,6 @@ const getWorkoutSaveError = (error: unknown): string => {
   }
   return 'Workout belum tersimpan ke cloud. Datamu masih ada di layar ini; silakan coba lagi.';
 };
-
-// ═══════════ STEPPER SLIDER (workout.css .ae-step port) ═══════════
-const StepperSlider: React.FC<{
-  label: string; value: number; onChange: (v: number) => void;
-  min?: number; max?: number; step?: number; unit?: string;
-}> = ({ label, value, onChange, min = 1, max = 30, step = 1, unit }) => {
-  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
-  const dec = useCallback(() => onChange(Math.max(min, parseFloat((value - step).toFixed(2)))), [onChange, value, min, step]);
-  const inc = useCallback(() => onChange(Math.min(max, parseFloat((value + step).toFixed(2)))), [onChange, value, max, step]);
-  return (
-    <div className="ae-step">
-      <div className="ae-step-top">
-        <span className="ae-step-label">{label}</span>
-        <span className="ae-step-val">
-          {value}
-          {unit && <span className="ae-step-unit">{unit}</span>}
-        </span>
-      </div>
-      <div className="ae-step-row">
-        <button className="ae-step-btn" onClick={dec} aria-label="Kurang" type="button">
-          <Minus size={14} />
-        </button>
-        <div className="ae-step-track">
-          <div className="ae-step-fill" style={{ width: `${pct}%` }} />
-          <input type="range" min={min} max={max} step={step} value={value}
-            onChange={(e) => onChange(parseFloat(e.target.value))}
-            className="ae-step-input" />
-          <div className="ae-step-thumb" style={{ left: `${pct}%` }} />
-        </div>
-        <button className="ae-step-btn" onClick={inc} aria-label="Tambah" type="button">
-          <Plus size={14} />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ═══════════ REST TIMER RING (workout.css .ae-timer port) ═══════════
-// Circular SVG countdown with preset chips. The `trigger` prop kicks off a
-// new countdown — used by the "Log & Next" handler to auto-start rest.
-const RestTimerRing: React.FC<{ trigger?: boolean; defaultTime?: number; onTimerEnd?: () => void }> = ({
-  trigger = false, defaultTime = 60, onTimerEnd,
-}) => {
-  const [target, setTarget] = useState(defaultTime);
-  const [remaining, setRemaining] = useState(defaultTime);
-  const [running, setRunning] = useState(false);
-  const audioCtx = useRef<AudioContext | null>(null);
-
-  const beep = useCallback(() => {
-    try {
-      if (!audioCtx.current) audioCtx.current = new AudioContext();
-      const osc = audioCtx.current.createOscillator();
-      const gain = audioCtx.current.createGain();
-      osc.connect(gain); gain.connect(audioCtx.current.destination);
-      osc.frequency.value = 880; gain.gain.value = 0.3;
-      osc.start(); osc.stop(audioCtx.current.currentTime + 0.2);
-    } catch { /* AudioContext may be blocked pre-interaction */ }
-  }, []);
-
-  // Auto-start when trigger flips true
-  useEffect(() => {
-    if (trigger) {
-      setTarget(defaultTime);
-      setRemaining(defaultTime);
-      setRunning(true);
-    }
-  }, [trigger, defaultTime]);
-
-  useEffect(() => {
-    if (!running) return;
-    let raf = 0;
-    let prev = performance.now();
-    const tick = (t: number) => {
-      const dt = (t - prev) / 1000;
-      prev = t;
-      setRemaining((r) => {
-        const next = r - dt;
-        if (next <= 0) {
-          setRunning(false);
-          beep();
-          onTimerEnd?.();
-          return 0;
-        }
-        return next;
-      });
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [running, beep, onTimerEnd]);
-
-  const setPreset = (sec: number) => { setTarget(sec); setRemaining(sec); setRunning(true); };
-  const addTen = () => { setTarget((t) => t + 10); setRemaining((r) => r + 10); setRunning(true); };
-  const reset = () => { setRemaining(target); setRunning(false); };
-
-  const SIZE = 110;
-  const R = 47;
-  const C = 2 * Math.PI * R;
-  const pct = target > 0 ? Math.max(0, Math.min(1, remaining / target)) : 0;
-  const dash = C * pct;
-  const displaySec = Math.ceil(remaining);
-
-  return (
-    <section className="ae-timer">
-      <div className="ae-timer-head">
-        <span className="ae-step-label"><Timer size={11} style={{ display: 'inline', marginRight: 4 }} />REST TIMER</span>
-        <button className="ae-timer-close" onClick={reset} aria-label="Reset" type="button">
-          <X size={12} />
-        </button>
-      </div>
-      <div className="ae-timer-body">
-        <div className="ae-timer-ring">
-          <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
-            <defs>
-              <linearGradient id="rt-grad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#67E8F9" />
-                <stop offset="100%" stopColor="#3B82F6" />
-              </linearGradient>
-            </defs>
-            <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="rgba(34, 211, 238, 0.1)" strokeWidth="6" />
-            <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="url(#rt-grad)" strokeWidth="6"
-              strokeLinecap="round"
-              strokeDasharray={`${dash} ${C}`}
-              transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-              style={{ filter: 'drop-shadow(0 0 6px rgba(34, 211, 238, 0.55))', transition: 'stroke-dasharray 200ms linear' }} />
-          </svg>
-          <div className="ae-timer-center">
-            <div className="ae-timer-sec">{displaySec}</div>
-            <div className="ae-timer-unit">SEC</div>
-          </div>
-          {running && <div className="ae-timer-pulse" />}
-        </div>
-        <div className="ae-timer-presets">
-          {[30, 60, 90, 120].map((s) => (
-            <button key={s} type="button"
-              className={`ae-timer-preset ${target === s ? 'is-on' : ''}`}
-              onClick={() => setPreset(s)}>{s}s</button>
-          ))}
-          <button type="button" className="ae-timer-preset ae-timer-add" onClick={addTen}>+10s</button>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ═══════════ DIFFICULTY STARS ═══════════
-const DifficultyStars: React.FC<{ d: number }> = ({ d }) => (
-  <div className="flex space-x-0.5">{Array.from({ length: 5 }, (_, i) => (
-    <Star key={i} size={10} className={i < d ? 'text-amber-400 fill-amber-400' : 'text-slate-700'} />
-  ))}</div>
-);
 
 // ═══════════ WORKOUT.CSS STARS (wf-stars — gold, 1-5) ═══════════
 const WfStars: React.FC<{ value: number }> = ({ value }) => (
@@ -629,208 +483,6 @@ const sortRoutinesByFocus = (routines: WorkoutRoutine[], focus?: FocusArea): Wor
   return [...routines].sort((a, b) => score(b) - score(a));
 };
 
-// ═══════════ ANALYTICS — HEART-FIRE STREAK (prototype Analytics.jsx port) ═══════════
-// 5-tier evolution: ember → flame → blaze → phoenix → eternal. Animations are
-// driven entirely by CSS classes (`.hf-tier-N`) — JS just toggles the tier.
-type StreakTier = { tier: 1 | 2 | 3 | 4 | 5; name: string; min: number; color: string; sub: string };
-const STREAK_TIERS: StreakTier[] = [
-  { tier: 1, name: 'EMBER',   min: 1,   color: '#FB923C', sub: 'Bara' },
-  { tier: 2, name: 'FLAME',   min: 7,   color: '#F97316', sub: 'Nyala' },
-  { tier: 3, name: 'BLAZE',   min: 30,  color: '#EF4444', sub: 'Membara' },
-  { tier: 4, name: 'PHOENIX', min: 180, color: '#A855F7', sub: 'Phoenix' },
-  { tier: 5, name: 'ETERNAL', min: 365, color: '#F5C518', sub: 'Abadi' },
-];
-const tierFromDays = (d: number): StreakTier => {
-  let t = STREAK_TIERS[0];
-  STREAK_TIERS.forEach((x) => { if (d >= x.min) t = x; });
-  return t;
-};
-const nextTier = (current: StreakTier): StreakTier | null =>
-  STREAK_TIERS.find((t) => t.tier === ((current.tier + 1) as StreakTier['tier'])) || null;
-
-/** Anatomical heart fused with flame; lub-dub beat. Layers scale by tier. */
-const HeartFire: React.FC<{ tier?: 1 | 2 | 3 | 4 | 5; size?: number }> = ({ tier = 1, size = 150 }) => {
-  const auraTongues = useMemo(() => {
-    const out: { x: number; y: number; rot: number; delay: number }[] = [];
-    for (let i = 0; i < 6; i++) {
-      const a = (i * 60 - 90) * Math.PI / 180;
-      out.push({
-        x: 70 + Math.cos(a) * 64,
-        y: 96 + Math.sin(a) * 64,
-        rot: i * 60,
-        delay: i * 0.18,
-      });
-    }
-    return out;
-  }, []);
-  return (
-    <div className={`an-hf-wrap hf-tier-${tier}`} style={{ width: size, height: size * 1.05 }}>
-      <div className="an-hf-haze" />
-      <div className="an-hf-halo" />
-      <div className="an-hf-pulsehalo" />
-
-      {tier >= 4 && (
-        <>
-          <div className="an-hf-orbit an-hf-orbit-1">
-            <svg viewBox="-100 -100 200 200" width="100%" height="100%">
-              <ellipse cx="0" cy="0" rx="90" ry="38" fill="none" stroke="#A855F7" strokeWidth="1.4" strokeDasharray="4 6" opacity="0.65" />
-              <circle cx="90" cy="0" r="3" fill="#C4B5FD" />
-              <circle cx="-90" cy="0" r="2" fill="#A855F7" opacity="0.7" />
-            </svg>
-          </div>
-          <div className="an-hf-orbit an-hf-orbit-2">
-            <svg viewBox="-100 -100 200 200" width="100%" height="100%">
-              <ellipse cx="0" cy="0" rx="92" ry="38" fill="none" stroke="#F5C518" strokeWidth="1.2" strokeDasharray="2 5" opacity="0.55" />
-              <circle cx="0" cy="38" r="2.5" fill="#FBBF24" />
-            </svg>
-          </div>
-        </>
-      )}
-
-      {tier >= 5 && (
-        <div className="an-hf-rays">
-          <svg viewBox="-100 -100 200 200" width="100%" height="100%">
-            {Array.from({ length: 12 }).map((_, i) => {
-              const a = (i * 30 - 90) * Math.PI / 180;
-              const r1 = 70, r2 = i % 2 === 0 ? 96 : 84;
-              return (
-                <line key={i}
-                  x1={Math.cos(a) * r1} y1={Math.sin(a) * r1}
-                  x2={Math.cos(a) * r2} y2={Math.sin(a) * r2}
-                  stroke="#F5C518"
-                  strokeWidth={i % 2 === 0 ? 2.4 : 1.4}
-                  strokeLinecap="round"
-                  opacity={i % 2 === 0 ? 0.9 : 0.55} />
-              );
-            })}
-          </svg>
-        </div>
-      )}
-
-      {tier >= 3 && (
-        <div className="an-hf-flame-aura">
-          <svg viewBox="0 0 140 160" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
-            <defs>
-              <linearGradient id="hf-aura-flame" x1="0" y1="1" x2="0" y2="0">
-                <stop offset="0%" stopColor="#EF4444" />
-                <stop offset="50%" stopColor="#FB923C" />
-                <stop offset="100%" stopColor="#FEF3C7" stopOpacity="0.85" />
-              </linearGradient>
-            </defs>
-            {auraTongues.map((t, i) => (
-              <g key={i} className="hf-aura-tongue"
-                 style={{ transformOrigin: `${t.x}px ${t.y}px`, animationDelay: `${t.delay}s` }}
-                 transform={`rotate(${t.rot}, ${t.x}, ${t.y})`}>
-                <path
-                  d={`M ${t.x - 6} ${t.y + 10} Q ${t.x} ${t.y - 18} ${t.x + 6} ${t.y + 10} Q ${t.x} ${t.y + 4} ${t.x - 6} ${t.y + 10} Z`}
-                  fill="url(#hf-aura-flame)" opacity="0.75" />
-              </g>
-            ))}
-          </svg>
-        </div>
-      )}
-
-      <svg className="an-hf-svg" viewBox="0 0 140 160" width={size} height={size * 1.05} aria-hidden="true">
-        <defs>
-          <radialGradient id="hf-heart" cx="50%" cy="80%" r="65%">
-            <stop offset="0%"   stopColor="#FBBF24" />
-            <stop offset="30%"  stopColor="#FB923C" />
-            <stop offset="70%"  stopColor="#DC2626" />
-            <stop offset="100%" stopColor="#7F1D1D" />
-          </radialGradient>
-          <linearGradient id="hf-flame" x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0%"   stopColor="#FB923C" stopOpacity="0.95" />
-            <stop offset="50%"  stopColor="#FBBF24" stopOpacity="0.95" />
-            <stop offset="100%" stopColor="#FEF3C7" stopOpacity="0.8" />
-          </linearGradient>
-          <radialGradient id="hf-core" cx="50%" cy="50%" r="50%">
-            <stop offset="0%"   stopColor="#FFF7ED" stopOpacity="0.95" />
-            <stop offset="55%"  stopColor="#FBBF24" stopOpacity="0.5" />
-            <stop offset="100%" stopColor="#F97316" stopOpacity="0" />
-          </radialGradient>
-          <radialGradient id="hf-rim" cx="50%" cy="40%" r="60%">
-            <stop offset="0%"   stopColor="#7F1D1D" stopOpacity="0" />
-            <stop offset="80%"  stopColor="#7F1D1D" stopOpacity="0" />
-            <stop offset="100%" stopColor="#450A0A" stopOpacity="0.6" />
-          </radialGradient>
-          <filter id="hf-glow" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="2.2" result="b" />
-            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          <filter id="hf-soft" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="3" />
-          </filter>
-        </defs>
-
-        <ellipse cx="70" cy="100" rx="58" ry="62" fill="url(#hf-core)" filter="url(#hf-soft)" opacity="0.7" />
-
-        <g className="hf-flame-group" filter="url(#hf-glow)">
-          <path d="M 40 56 C 28 44, 22 26, 32 12 C 36 22, 42 18, 44 28 C 50 34, 52 46, 50 56 Z" fill="url(#hf-flame)" opacity="0.88" />
-          <path d="M 60 50 C 56 32, 60 14, 72 -4 C 80 12, 82 30, 80 48 C 78 54, 74 56, 70 56 C 66 56, 62 54, 60 50 Z" fill="url(#hf-flame)" opacity="0.95" />
-          <path d="M 100 56 C 112 44, 118 26, 108 12 C 104 22, 98 18, 96 28 C 90 34, 88 46, 90 56 Z" fill="url(#hf-flame)" opacity="0.88" />
-        </g>
-
-        <g className="hf-heart-group">
-          <path d="M 70 142 C 30 118, 8 92, 18 64 C 24 48, 38 42, 50 50 C 58 54, 64 60, 70 66 C 76 60, 82 54, 90 50 C 102 42, 116 48, 122 64 C 132 92, 110 118, 70 142 Z"
-            fill="url(#hf-heart)" stroke="#7F1D1D" strokeWidth="1.2" filter="url(#hf-glow)" />
-          <path d="M 70 142 C 30 118, 8 92, 18 64 C 24 48, 38 42, 50 50 C 58 54, 64 60, 70 66 C 76 60, 82 54, 90 50 C 102 42, 116 48, 122 64 C 132 92, 110 118, 70 142 Z"
-            fill="url(#hf-rim)" />
-          <path d="M 72 60 Q 78 52, 82 48 Q 88 42, 92 50" stroke="#450A0A" strokeWidth="2" fill="none" opacity="0.55" strokeLinecap="round" />
-          <path d="M 50 80 Q 56 90, 58 100 M 50 80 Q 44 88, 42 100" stroke="#7F1D1D" strokeWidth="1.2" fill="none" opacity="0.7" strokeLinecap="round" />
-          <path d="M 90 82 Q 96 92, 96 102 M 90 82 Q 86 94, 84 105" stroke="#7F1D1D" strokeWidth="1.2" fill="none" opacity="0.6" strokeLinecap="round" />
-          <ellipse cx="60" cy="85" rx="14" ry="22" fill="url(#hf-core)" opacity="0.85" />
-          <ellipse cx="50" cy="74" rx="7" ry="11" fill="white" opacity="0.32" />
-          <ellipse cx="48" cy="70" rx="3" ry="5" fill="white" opacity="0.55" />
-        </g>
-
-        <g className="hf-embers">
-          <circle className="hf-ember hf-ember-1" cx="50" cy="40" r="1.5" fill="#FBBF24" />
-          <circle className="hf-ember hf-ember-2" cx="90" cy="38" r="1.2" fill="#FB923C" />
-          <circle className="hf-ember hf-ember-3" cx="70" cy="30" r="1.8" fill="#FFF7ED" />
-          {tier >= 3 && <circle className="hf-ember hf-ember-4" cx="40" cy="60" r="1.3" fill="#FBBF24" />}
-          {tier >= 3 && <circle className="hf-ember hf-ember-5" cx="100" cy="62" r="1.6" fill="#FB923C" />}
-          {tier >= 4 && <circle className="hf-ember hf-ember-6" cx="35" cy="100" r="1.4" fill="#C4B5FD" />}
-          {tier >= 4 && <circle className="hf-ember hf-ember-7" cx="105" cy="105" r="1.5" fill="#A855F7" />}
-        </g>
-      </svg>
-    </div>
-  );
-};
-
-/** Continuously scrolling ECG waveform behind the heart-fire. */
-const ECGLine: React.FC = () => {
-  const wave = (offset: number) => `
-    M ${offset + 0} 30   L ${offset + 60} 30
-    L ${offset + 75} 28  L ${offset + 85} 24
-    L ${offset + 95} 28  L ${offset + 110} 30
-    L ${offset + 125} 30 L ${offset + 132} 36
-    L ${offset + 138} 6  L ${offset + 144} 50
-    L ${offset + 150} 30 L ${offset + 170} 30
-    L ${offset + 182} 26 L ${offset + 192} 30
-    L ${offset + 280} 30
-  `;
-  const d = wave(0) + ' ' + wave(280);
-  return (
-    <div className="an-ecg">
-      <div className="an-ecg-grid" />
-      <svg className="an-ecg-svg" viewBox="0 0 280 60" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="ecg-fade" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%"   stopColor="#22D3EE" stopOpacity="0" />
-            <stop offset="20%"  stopColor="#22D3EE" stopOpacity="0.4" />
-            <stop offset="80%"  stopColor="#22D3EE" stopOpacity="1" />
-            <stop offset="100%" stopColor="#67E8F9" stopOpacity="1" />
-          </linearGradient>
-        </defs>
-        <g className="an-ecg-track">
-          <path d={d} fill="none" stroke="url(#ecg-fade)" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
-        </g>
-      </svg>
-      <div className="an-ecg-dot" />
-    </div>
-  );
-};
-
 // ═══════════ MAIN GYMTRACKER ═══════════
 export const GymTracker: React.FC = () => {
   const { addUnlocks } = useAchievements();
@@ -850,19 +502,23 @@ export const GymTracker: React.FC = () => {
   const [triggerTimer, setTriggerTimer] = useState(false);
   const [isSavingWorkout, setIsSavingWorkout] = useState(false);
   const [workoutSaveError, setWorkoutSaveError] = useState<string | null>(null);
+  // Finish-workout reward sheet. `summary` outlives `summaryOpen` so the sheet
+  // keeps its content during the exit animation.
+  const [summary, setSummary] = useState<WorkoutSummaryData | null>(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const workoutIdRef = useRef<string>('');
   const [userEquipment, setUserEquipment] = useState<string[]>([]);
   const [userEnvironment, setUserEnvironment] = useState<'Home' | 'Gym' | null>(null);
   // Body-anatomy front/back toggle for the active exercise stage. Lives on the
-  // root so it survives between exercises in a session.
+  // root so it survives re-renders within an exercise.
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
-  // Heart-Fire tier preview (Analytics streak). Defaults to the user's current tier,
-  // user can tap any tier in the roadmap to simulate visuals at that level.
-  const [previewTier, setPreviewTier] = useState<1 | 2 | 3 | 4 | 5>(1);
-  // Sync previewTier whenever the actual streak crosses a tier boundary.
+  // Each new exercise turns the body to the side where its primary muscle is
+  // visible (e.g. hamstring curl → back), so the red highlight is never hidden
+  // on the far face. The user can still tap/swipe freely within an exercise.
+  const activeExerciseMuscle = flowStep === 'active' ? selectedExercises[currentExIndex]?.muscleGroup : undefined;
   useEffect(() => {
-    setPreviewTier(tierFromDays(profile.currentStreak ?? 0).tier);
-  }, [profile.currentStreak]);
+    if (activeExerciseMuscle) setBodyView(getViewForMuscle(activeExerciseMuscle));
+  }, [activeExerciseMuscle, currentExIndex]);
 
   useEffect(() => {
     try {
@@ -1085,7 +741,7 @@ export const GymTracker: React.FC = () => {
       muscleGroups: finalMuscles,
       exercises: enrichedData,
       coreWork: finalMuscles.some(m => ['abs', 'obliques'].includes(m)),
-      notes: notes || undefined,
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
       xpEarned: totalXP,
     };
 
@@ -1103,6 +759,32 @@ export const GymTracker: React.FC = () => {
       // achievement can never get ahead of the workout history it depends on.
       const unlocks = achievementService.checkAndGrant();
       if (unlocks.length > 0) addUnlocks(unlocks);
+
+      // Reward sheet — display-only snapshot of before/after values the save
+      // flow already produced; no XP or streak math happens here.
+      const fromXP = profile.totalXP || 0;
+      const toXP = newProfile.totalXP || 0;
+      const fromLevel = getLevelFromXP(fromXP);
+      const toLevel = getLevelFromXP(toXP);
+      const fromProg = getXPProgress(fromXP);
+      const toProg = getXPProgress(toXP);
+      setSummary({
+        xp: totalXP,
+        exercises: enrichedData.length,
+        sets: totalSets,
+        volume: enrichedData.reduce((v, e) => v + e.sets * e.reps * e.weight, 0),
+        fromLevel,
+        toLevel,
+        fromPct: fromProg.percent / 100,
+        toPct: toProg.percent / 100,
+        toCurrent: toProg.current,
+        toNeeded: toProg.needed,
+        fromRank: getRankForLevel(fromLevel).name,
+        toRank: getRankForLevel(toLevel).name,
+        fromStreak: liveWorkoutStreak(logs, profile),
+        toStreak: liveWorkoutStreak(newLogs, newProfile),
+      });
+      setSummaryOpen(true);
 
       workoutIdRef.current = '';
       setFlowStep('idle');
@@ -1130,60 +812,6 @@ export const GymTracker: React.FC = () => {
     setProfile(newProfile);
     try { storageService.saveGymProfile(newProfile); } catch { }
   };
-
-  // ── Project Chimera Phase 4: Weekly / Monthly / Yearly trend selector ──
-  const [trendRange, setTrendRange] = useState<'weekly' | 'monthly' | 'yearly'>('weekly');
-
-  const volumeData = useMemo(() => {
-    if (!logs || logs.length === 0) return [] as { date: string; volume: number; xp: number }[];
-
-    const volumeOf = (l: WorkoutLog) =>
-      (l.exercises || []).reduce((s, e) => s + e.sets * e.reps * e.weight, 0);
-
-    const now = new Date();
-
-    if (trendRange === 'weekly') {
-      // Last 7 daily buckets
-      return Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(now);
-        d.setDate(d.getDate() - (6 - i));
-        const key = d.toLocaleDateString('en-CA');
-        const dayLogs = logs.filter(l => l.date === key);
-        return {
-          date: d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }),
-          volume: dayLogs.reduce((s, l) => s + volumeOf(l), 0),
-          xp: dayLogs.reduce((s, l) => s + (l.xpEarned || 0), 0),
-        };
-      });
-    }
-
-    if (trendRange === 'monthly') {
-      // Last 30 daily buckets — empty days kept at zero so the line shows breaks
-      return Array.from({ length: 30 }, (_, i) => {
-        const d = new Date(now);
-        d.setDate(d.getDate() - (29 - i));
-        const key = d.toLocaleDateString('en-CA');
-        const dayLogs = logs.filter(l => l.date === key);
-        return {
-          date: d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }),
-          volume: dayLogs.reduce((s, l) => s + volumeOf(l), 0),
-          xp: dayLogs.reduce((s, l) => s + (l.xpEarned || 0), 0),
-        };
-      });
-    }
-
-    // Yearly: last 12 monthly buckets
-    return Array.from({ length: 12 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const monthLogs = logs.filter(l => (l.date || '').startsWith(monthKey));
-      return {
-        date: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
-        volume: monthLogs.reduce((s, l) => s + volumeOf(l), 0),
-        xp: monthLogs.reduce((s, l) => s + (l.xpEarned || 0), 0),
-      };
-    });
-  }, [logs, trendRange]);
 
   const currentExercise = flowStep === 'active' ? selectedExercises[currentExIndex] : null;
 
@@ -1375,23 +1003,23 @@ export const GymTracker: React.FC = () => {
                 style={{ width: `${(currentExIndex / Math.max(1, selectedExercises.length)) * 100}%` }} />
             </div>
 
-            {/* Body highlight stage — preserve-3d toggle around AnatomyViewer */}
+            {/* Body highlight stage — the stage owns the frame + toggle; the
+                viewer is chromeless and controlled, so the toggle and swipe
+                both turn the same shared BodyTurntable. */}
             <section className="ae-bodystage">
               <span className="brk-c brk-tl" /><span className="brk-c brk-tr" />
               <span className="brk-c brk-bl" /><span className="brk-c brk-br" />
-              <div className="d-body-toggle ae-bodystage-toggle">
-                <button type="button" className={`d-body-toggle-opt ${bodyView === 'front' ? 'is-on' : ''}`}
-                  onClick={() => setBodyView('front')}>FRONT</button>
-                <button type="button" className={`d-body-toggle-opt ${bodyView === 'back' ? 'is-on' : ''}`}
-                  onClick={() => setBodyView('back')}>BACK</button>
-              </div>
+              <BodyViewToggle view={bodyView} onChange={setBodyView} className="ae-bodystage-toggle" />
               <div className="ae-bodystage-fig">
                 <AnatomyViewer
                   trainedMuscles={getTrainedMuscleIds([
                     currentExercise.muscleGroup,
                     ...(currentExercise.secondaryMuscles || []),
                   ])}
-                  defaultView={bodyView}
+                  view={bodyView}
+                  onViewChange={setBodyView}
+                  chrome={false}
+                  showToggle={false}
                 />
               </div>
               <div className="ae-bodystage-tag">
@@ -1453,7 +1081,8 @@ export const GymTracker: React.FC = () => {
               placeholder="Catatan sesi (opsional)…" />
 
             {/* Rest Timer (auto-starts via trigger from logExercise) */}
-            <RestTimerRing trigger={triggerTimer} defaultTime={60} />
+            <RestTimerRing trigger={triggerTimer} defaultTime={60}
+              suppressPill={viewMode !== 'workout'} />
 
             {/* Cancel link */}
             <button type="button" className="ae-cancel"
@@ -1516,184 +1145,10 @@ export const GymTracker: React.FC = () => {
         </div>
       )}
 
-      {/* ═══ ANALYTICS VIEW (prototype Analytics.jsx port) ═══ */}
-      {viewMode === 'analytics' && (() => {
-        const streakDays = profile.currentStreak ?? 0;
-        const longestStreak = profile.longestStreak ?? 0;
-        const current = tierFromDays(streakDays);
-        const next = nextTier(current);
-        const showTier = STREAK_TIERS.find((t) => t.tier === previewTier) || current;
-        const hasData = volumeData.some(d => d.volume > 0 || d.xp > 0);
-        const muscleXPMap = (profile?.muscleXP || {}) as Record<MuscleGroup, number>;
-        const maxMuscleXP = Math.max(...(Object.values(muscleXPMap) as number[]), 1);
-        const muscleXPRows = (Object.entries(muscleXPMap) as [MuscleGroup, number][])
-          .filter(([, xp]) => xp > 0)
-          .sort((a, b) => b[1] - a[1]);
-        const trendIdx = ['weekly', 'monthly', 'yearly'].indexOf(trendRange);
-        return (
-        <div className="g-tabbody">
-          <div className="an-title-row">
-            <span className="an-title-ico"><TrendingUp size={14} /></span>
-            <h2 className="an-title">Analytics</h2>
-          </div>
+      {/* ═══ ANALYTICS VIEW — Heart-Fire streak, trend, muscle XP (components/gym/GymAnalytics) ═══ */}
+      {viewMode === 'analytics' && <GymAnalytics logs={logs} profile={profile} dir="fwd" />}
 
-          {/* Streak — Heart-Fire + ECG */}
-          <section className="card an-streak-card">
-            <div className="an-streak-top">
-              <div className="hud-label an-streak-label">WORKOUT STREAK</div>
-              <div className="an-streak-tier-pill"
-                style={{ borderColor: showTier.color, color: showTier.color }}>
-                <span>TIER {showTier.tier}</span>
-                <span className="an-streak-tier-name">{showTier.name}</span>
-              </div>
-            </div>
-
-            <div className="an-streak-stage">
-              <ECGLine />
-              <HeartFire size={150} tier={showTier.tier} />
-            </div>
-
-            <div className="an-streak-day">
-              <span className="an-streak-num">{streakDays}</span>
-              <span className="an-streak-unit">Hari</span>
-            </div>
-            <div className="an-streak-best">
-              BEST: <span style={{ color: 'var(--orange)' }}>{longestStreak}H</span>
-            </div>
-
-            {next && (
-              <div className="an-streak-next">
-                <span className="an-streak-next-arrow">→</span>
-                <span>{next.name} dalam</span>
-                <strong style={{ color: next.color }}>{next.min - streakDays} hari</strong>
-              </div>
-            )}
-
-            <div className="an-streak-roadmap">
-              {STREAK_TIERS.map((t) => {
-                const reached = streakDays >= t.min;
-                const active = previewTier === t.tier;
-                return (
-                  <button key={t.tier} type="button"
-                    className={`an-streak-rmark ${reached ? 'is-reached' : ''} ${active ? 'is-active' : ''}`}
-                    style={{ ['--rm-color' as string]: t.color }}
-                    onClick={() => setPreviewTier(t.tier)}
-                    aria-label={`Preview ${t.name}`}>
-                    <span className="an-streak-rmark-dot">
-                      <span className="an-streak-rmark-glow" />
-                    </span>
-                    <span className="an-streak-rmark-name">{t.name}</span>
-                    <span className="an-streak-rmark-day">
-                      {t.min >= 365 ? `${Math.floor(t.min / 365)}thn+`
-                        : t.min >= 30 ? `${Math.floor(t.min / 30)}bln`
-                        : `${t.min}h`}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            {previewTier !== current.tier && (
-              <div className="an-streak-preview-hint">
-                ⌬ PREVIEW · ketuk tier untuk simulasi ·
-                <button type="button" className="an-streak-preview-reset"
-                  onClick={() => setPreviewTier(current.tier)}>
-                  kembali ke tier kamu
-                </button>
-              </div>
-            )}
-
-            <p className="an-streak-quote">
-              {streakDays > 0
-                ? 'Jaga detak jantungmu menyala. Jangan biarkan rantai terputus.'
-                : 'Mulai workout pertamamu untuk menyalakan bara.'}
-            </p>
-          </section>
-
-          {/* Trend */}
-          <section className="card">
-            <div className="card-head">
-              <span className="hud-label">VOLUME &amp; XP TREND</span>
-              <div className="an-range">
-                {(['weekly', 'monthly', 'yearly'] as const).map(r => (
-                  <button key={r} type="button"
-                    className={`an-range-opt ${trendRange === r ? 'is-on' : ''}`}
-                    onClick={() => setTrendRange(r)}>
-                    {r === 'weekly' ? '7D' : r === 'monthly' ? '30D' : '12M'}
-                  </button>
-                ))}
-                <div className="an-range-indicator"
-                  style={{ transform: `translateX(${trendIdx * 100}%)` }} />
-              </div>
-            </div>
-
-            <div className="an-chart">
-              {hasData ? (
-                <div className="an-chart-recharts">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={volumeData} margin={{ top: 10, right: 12, left: 0, bottom: 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(34,211,238,0.08)" />
-                      <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} />
-                      <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} />
-                      <Tooltip contentStyle={{ background: 'rgba(7,12,24,0.95)', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }} />
-                      <Line type="monotone" dataKey="volume" stroke="#22D3EE" strokeWidth={2} dot={{ r: 3 }} name="Volume (kg)" />
-                      <Line type="monotone" dataKey="xp" stroke="#FB923C" strokeWidth={2} dot={{ r: 3 }} name="XP" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <>
-                  <div className="an-chart-grid">
-                    {Array.from({ length: 5 }).map((_, i) => <div key={i} className="an-chart-grid-line" />)}
-                  </div>
-                  <div className="an-chart-empty">
-                    <div className="an-chart-empty-icon">⌬</div>
-                    <div>NO DATA · {trendRange === 'weekly' ? '7D' : trendRange === 'monthly' ? '30D' : '12M'}</div>
-                    <div className="an-chart-empty-sub">Catat satu sesi untuk mulai mengisi tren.</div>
-                  </div>
-                  <div className="an-chart-axis">
-                    {['SEN','SEL','RAB','KAM','JUM','SAB','MIN'].map((d) => <span key={d}>{d}</span>)}
-                  </div>
-                </>
-              )}
-            </div>
-          </section>
-
-          {/* Muscle XP Distribution */}
-          <section className="card">
-            <div className="card-head">
-              <span className="hud-label">MUSCLE XP DISTRIBUTION</span>
-            </div>
-            <div className="an-mx-grid">
-              {muscleXPRows.length === 0 && (
-                <p className="text-sm text-slate-600 text-center py-4">Selesaikan workout untuk melihat muscle XP</p>
-              )}
-              {muscleXPRows.map(([muscle, xp]) => {
-                const cfg = MUSCLE_GROUP_CONFIG[muscle];
-                const pct = Math.round((xp / maxMuscleXP) * 100);
-                return (
-                  <div key={muscle} className="an-mx-row">
-                    <div className="an-mx-row-l">
-                      <div className="an-puck">
-                        <img src={`/assets/muscles/${muscle}.webp`} alt={cfg?.label}
-                          className="an-puck-img"
-                          onError={e => { e.currentTarget.style.display = 'none'; }} />
-                      </div>
-                      <span className="an-mx-name">{cfg?.label || muscle}</span>
-                    </div>
-                    <div className="an-mx-row-r">
-                      <div className="an-mx-bar">
-                        <div className="an-mx-bar-fill" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="an-mx-val">{xp}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        </div>
-        );
-      })()}
+      <WorkoutSummary open={summaryOpen} data={summary} onClose={() => setSummaryOpen(false)} />
     </div>
   );
 };

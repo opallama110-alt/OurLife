@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { AchievementEmblem, TIER_THEMES, tierFromRarity, EmblemTier, EmblemCategory } from './AchievementEmblem';
 import type { GalleryEntry } from './AchievementCard';
+import { usePresence } from '../hooks/usePresence';
 
 // ═══════════════════════════════════════════════════════════════
 // AchievementModal — slide-up detail panel; shows current tier,
@@ -12,9 +14,18 @@ import type { GalleryEntry } from './AchievementCard';
 // the existing rarity becomes the *current* tier, and the grid
 // renders the canonical Bronze→Mythic ladder with everything past
 // the entry's rarity rendered as locked.
+//
+// Portaled to <body>: the sheet is opened from a gallery row deep inside
+// Profile, and any ancestor carrying a transform (page reveal, card enter)
+// would otherwise become the containing block for this position:fixed
+// overlay — anchoring the sheet to the bottom of the ~3000px Profile block
+// instead of the viewport, under the bottom nav.
 // ═══════════════════════════════════════════════════════════════
 
 const TIER_ORDER: EmblemTier[] = ['bronze', 'silver', 'gold', 'platinum', 'mythic'];
+
+/** Must match the `.am-root[data-state="exit"]` animation duration (--dur-2). */
+const EXIT_MS = 200;
 
 interface Props {
   open: boolean;
@@ -23,21 +34,28 @@ interface Props {
 }
 
 export const AchievementModal: React.FC<Props> = ({ open, achievement, onClose }) => {
-  const [mounted, setMounted] = useState(false);
-  const [show, setShow] = useState(false);
+  const { mounted, state } = usePresence(open, EXIT_MS);
+  const titleId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
+  // Esc closes; focus moves into the sheet on open and back to the row that
+  // opened it on close (keyboard / switch users keep their place).
   useEffect(() => {
-    if (open) {
-      setMounted(true);
-      const id = requestAnimationFrame(() => setShow(true));
-      return () => cancelAnimationFrame(id);
-    }
-    setShow(false);
-    const t = window.setTimeout(() => setMounted(false), 320);
-    return () => window.clearTimeout(t);
+    if (!open) return;
+    const restore = document.activeElement as HTMLElement | null;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current(); };
+    window.addEventListener('keydown', onKey);
+    const raf = window.requestAnimationFrame(() => panelRef.current?.focus({ preventScroll: true }));
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.cancelAnimationFrame(raf);
+      restore?.focus?.({ preventScroll: true });
+    };
   }, [open]);
 
-  if (!mounted || !achievement) return null;
+  if (!mounted || !achievement || typeof document === 'undefined') return null;
 
   const currentTier = tierFromRarity(achievement.rarity);
   const currentIdx = achievement.unlocked ? TIER_ORDER.indexOf(currentTier) : -1;
@@ -48,13 +66,24 @@ export const AchievementModal: React.FC<Props> = ({ open, achievement, onClose }
   const progressPct = hasProgress && !achievement.unlocked
     ? Math.min(100, Math.round(((achievement.progress || 0) / (achievement.requirement as number)) * 100))
     : (achievement.unlocked ? 100 : 0);
+  const remaining = hasProgress
+    ? Math.max(0, (achievement.requirement as number) - (achievement.progress || 0))
+    : 0;
 
-  return (
-    <div className={`am-root ${show ? 'is-open' : ''}`} role="dialog" aria-modal="true">
-      <div className="am-backdrop" onClick={onClose} />
-      <div className="am-panel">
+  return createPortal(
+    <div className="am-root" data-state={state}>
+      <div className="am-backdrop" onClick={onClose} aria-hidden="true" />
+      <div
+        ref={panelRef}
+        className="am-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+      >
+        <span className="am-grabber" aria-hidden="true" />
         <button className="am-close" onClick={onClose} aria-label="Tutup" type="button">
-          <X size={14} />
+          <X size={16} />
         </button>
 
         <div className="am-header">
@@ -70,7 +99,7 @@ export const AchievementModal: React.FC<Props> = ({ open, achievement, onClose }
           <div className="hud-label-sm fz-cyan">
             {(achievement.category || 'workout').toUpperCase()} · ACHIEVEMENT
           </div>
-          <h2 className="am-title">{achievement.label}</h2>
+          <h2 className="am-title" id={titleId}>{achievement.label}</h2>
           <p className="am-desc">{achievement.description}</p>
         </div>
 
@@ -86,14 +115,14 @@ export const AchievementModal: React.FC<Props> = ({ open, achievement, onClose }
           <div className="am-next">
             <div className="am-next-head">
               <span className="hud-label-sm">PROGRES BERIKUTNYA</span>
-              <span className="mono" style={{ color: 'var(--orange)' }}>+{achievement.xpReward.toLocaleString()} XP</span>
+              <span className="mono" style={{ color: 'var(--orange)' }}>+{achievement.xpReward.toLocaleString('id-ID')} XP</span>
             </div>
             <div className="am-next-progress">
               <div className="am-next-progress-fill" style={{ width: `${progressPct}%` }} />
             </div>
             <div className="am-next-meta">
-              {(achievement.progress || 0).toLocaleString()} / {(achievement.requirement as number).toLocaleString()}
-              {` · ${(achievement.requirement as number) - (achievement.progress || 0)} lagi`}
+              {(achievement.progress || 0).toLocaleString('id-ID')} / {(achievement.requirement as number).toLocaleString('id-ID')}
+              {` · ${remaining.toLocaleString('id-ID')} lagi`}
             </div>
           </div>
         )}
@@ -103,7 +132,11 @@ export const AchievementModal: React.FC<Props> = ({ open, achievement, onClose }
             const reached = i <= currentIdx;
             const tt = TIER_THEMES[t];
             return (
-              <div key={t} className={`am-tier ${reached ? 'is-reached' : ''}`}>
+              <div
+                key={t}
+                className={`am-tier ${reached ? 'is-reached' : ''}`}
+                style={{ '--i': i } as React.CSSProperties}
+              >
                 <AchievementEmblem
                   category={cat}
                   tier={t}
@@ -120,6 +153,7 @@ export const AchievementModal: React.FC<Props> = ({ open, achievement, onClose }
           })}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };

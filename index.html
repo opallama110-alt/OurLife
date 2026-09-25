@@ -1,14 +1,53 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/png" href="/ourlife-logo.png" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#0f172a" />
+  <!--
+    Viewport:
+    - Pinch-zoom stays available (accessibility / WCAG 1.4.4) — no
+      maximum-scale / user-scalable=no for everyone.
+    - viewport-fit=cover lets env(safe-area-inset-*) report the notch and home
+      indicator, which the top bar, bottom nav, sheets and toasts pad against.
+    - interactive-widget=resizes-content (Chrome Android): the soft keyboard
+      shrinks the layout viewport, so 100dvh sheets (System chat) and the app
+      shell end above the keyboard instead of being panned behind it.
+  -->
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <script>
+    // iOS/iPadOS only: Safari zooms into any focused field under 16px and
+    // stays zoomed after blur (chat, auth and habit fields are 13-14px).
+    // maximum-scale=1 turns that auto-zoom off, while Safari (iOS 10+)
+    // ignores it for the user's own pinch-zoom — so iOS keeps zoom for
+    // accessibility. Android is left untouched: it has no focus auto-zoom,
+    // and there maximum-scale would genuinely block pinch-zoom.
+    (function () {
+      var ua = navigator.userAgent || '';
+      var isIOS = /iPad|iPhone|iPod/.test(ua) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (!isIOS) return;
+      var meta = document.querySelector('meta[name="viewport"]');
+      if (meta) meta.setAttribute('content', meta.getAttribute('content') + ', maximum-scale=1');
+    })();
+  </script>
+  <!-- Dark-only app: dark UA canvas + the shell's void navy from the very first
+       frame (before the CDN script and fonts load), so boot never flashes
+       white or a mismatched slate band. -->
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0A0E1A" />
+  <style>
+    html,
+    body {
+      background-color: #0A0E1A;
+    }
+  </style>
   <meta name="description"
-    content="OurLife - Personal Growth Architect. Track gym workouts, manage finances, build habits, and get AI coaching." />
+    content="OurLife — catat latihan gym, bangun habit harian, kumpulkan XP untuk naik rank, dan dapatkan arahan dari The System (AI coach)." />
   <title>OurLife - Personal Growth Architect</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <script src="https://cdn.tailwindcss.com"></script>
   <link
     href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap"
