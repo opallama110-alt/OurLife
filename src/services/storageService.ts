@@ -277,11 +277,6 @@ export const storageService = {
     const user = auth.currentUser;
     if (!user) return;
 
-    // Enforce Admin Role
-    if (user.email === 'opallama110@gmail.com' && localCache.profile.role !== 'admin') {
-      localCache.profile.role = 'admin';
-    }
-
     const gp = localCache.gymProfile;
     const payload = {
       workouts: localCache.workouts,

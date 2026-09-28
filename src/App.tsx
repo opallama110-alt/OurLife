@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Loader } from 'lucide-react';
 import { Layout } from './components/Layout';
 import { SystemFrameDefs } from './components/hud/SystemFrameDefs';
 import { prefersReducedMotion } from './hooks/usePresence';
@@ -21,8 +22,6 @@ import { storageService } from './services/storageService';
 import { migrationService } from './services/migrationService';
 import { streakProtectionService, StreakProtectionResult } from './services/streakProtectionService';
 import { achievementService } from './services/achievementService';
-
-const OWNER_EMAILS = ['opallama110@gmail.com', 'opallama11@gmail.com'];
 
 const INTRO_FLAG_KEY = 'ol_intro_done';
 const FIRST_QUEST_FLAG_KEY = 'ol_first_quest_offered';
@@ -159,13 +158,29 @@ const FirstDailyQuestGate: React.FC = () => {
   return <FirstDailyQuest open={open && ready} onClose={dismiss} onAccept={handleAccept} />;
 };
 
-// Admin route guard — non-admins land on /settings instead of seeing AdminDashboard
+// Admin route guard — non-admins land on /settings instead of seeing AdminDashboard.
+// Before redirecting, force one token refresh so a freshly granted claim counts.
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
-  const profileRole = storageService.getUserProfile()?.role;
-  const isAdmin = profileRole === 'admin' || OWNER_EMAILS.includes(user?.email || '');
-  if (!isAdmin) return <Navigate to="/settings" replace />;
-  return <>{children}</>;
+  const { isAdmin, refreshAdminClaim } = useAuth();
+  const [checked, setChecked] = useState(isAdmin);
+
+  useEffect(() => {
+    if (isAdmin) return;
+    let cancelled = false;
+    refreshAdminClaim().finally(() => { if (!cancelled) setChecked(true); });
+    return () => { cancelled = true; };
+  }, [isAdmin, refreshAdminClaim]);
+
+  if (isAdmin) return <>{children}</>;
+  if (!checked) {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 text-slate-500 animate-fade-in">
+        <Loader size={32} className="animate-spin mb-3 text-cyan-500" />
+        <p className="text-sm">Memeriksa akses admin…</p>
+      </div>
+    );
+  }
+  return <Navigate to="/settings" replace />;
 };
 
 // --- Protected Route Wrapper ---

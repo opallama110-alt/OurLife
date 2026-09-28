@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, TrendingUp, DollarSign, Activity, Shield, Loader, Eye, X, Calendar, Dumbbell, CreditCard, Wallet, BarChart3, ArrowUpRight, ArrowDownRight, Filter, Trash2, ShieldAlert, Bell, BellOff, Flame } from 'lucide-react';
+import { Users, Search, TrendingUp, DollarSign, Activity, Shield, Loader, Eye, X, Calendar, Dumbbell, CreditCard, Wallet, BarChart3, ArrowUpRight, ArrowDownRight, Filter, Trash2, Bell, BellOff, Flame } from 'lucide-react';
 import { storageService } from '../services/storageService';
-import { useAuth } from '../context/AuthContext';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, AreaChart, Area } from 'recharts';
 import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 import { GymProfile, WorkoutLog, MuscleGroup } from '../types';
@@ -10,41 +9,11 @@ import { calculateAge } from '../utils/dateUtils';
 import { ref, get, remove } from 'firebase/database';
 import { rtdb } from '../../firebase-config';
 
+// Only mounted behind <AdminRoute>, which gates on the `admin` custom claim.
 export const AdminDashboard: React.FC = () => {
-    const { user, loading: authLoading } = useAuth();
     const [users, setUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [isOwner, setIsOwner] = useState(false);
-
-    if (authLoading) {
-        return (
-            <div className="flex flex-col items-center justify-center p-8 text-slate-500 animate-fade-in">
-                <Loader size={48} className="animate-spin mb-4 text-cyan-500" />
-                <p>Loading authentication status...</p>
-            </div>
-        );
-    }
-
-    if (!loading && !isOwner) {
-        return (
-            <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 animate-fade-in">
-                <ShieldAlert size={64} className="text-rose-500 mb-4" />
-                <h1 className="text-2xl font-bold text-white mb-2 font-mono">ACCESS DENIED</h1>
-                <p className="text-slate-400 text-center max-w-md font-mono mb-6">
-                    This area is restricted to authorized personnel only.
-                    <br />
-                    Current User: <span className="text-cyan-400">{user?.email}</span>
-                </p>
-                <button
-                    onClick={() => window.location.href = '/'}
-                    className="px-6 py-3 bg-slate-900 border border-slate-700 text-white rounded-xl hover:bg-slate-800 hover:border-cyan-500/50 transition-all font-mono text-sm flex items-center"
-                >
-                    <Activity size={16} className="mr-2" /> Return to Training
-                </button>
-            </div>
-        );
-    }
 
     // Detail Modal State
     const [selectedUser, setSelectedUser] = useState<any | null>(null);
@@ -170,19 +139,6 @@ export const AdminDashboard: React.FC = () => {
     };
 
     useEffect(() => {
-        // Strict email check for Owner View
-        const email = user?.email?.toLowerCase().trim();
-        const authorized = email === 'opallama11@gmail.com' || email === 'opallama110@gmail.com';
-
-        setIsOwner(authorized);
-
-        if (!authorized) {
-            setLoading(false);
-            return;
-        }
-
-        setLoading(true);
-
         // RTDB holds rich nested data, the public leaderboard holds ranking
         // fields, and the private Firestore directory holds account metadata.
         // Security Rules only permit the directory query for an admin claim.
@@ -250,9 +206,7 @@ export const AdminDashboard: React.FC = () => {
         };
 
         fetchUsers();
-
-        return () => { };
-    }, [user, isOwner]);
+    }, []);
 
     const handleViewUser = async (uid: string) => {
         setLoadingDetails(true);
@@ -268,8 +222,6 @@ export const AdminDashboard: React.FC = () => {
     };
 
     const handleDeleteUser = async (uid: string, userName: string) => {
-        if (!isOwner) return;
-
         if (window.confirm(`Are you sure you want to delete user "${userName}"? This action cannot be undone.`)) {
             try {
                 await remove(ref(rtdb, `users/${uid}`));
@@ -289,19 +241,6 @@ export const AdminDashboard: React.FC = () => {
         setIsDetailOpen(false);
         setSelectedUser(null);
     };
-
-    if (!user || !isOwner) {
-        return (
-            <div className="flex flex-col items-center justify-center p-8 text-slate-500 animate-fade-in">
-                <Shield size={48} className="mb-4 text-rose-500" />
-                <h2 className="text-xl font-bold text-white mb-2">Access Denied</h2>
-                <p>This dashboard is restricted to the owner account.</p>
-                <div className="mt-4 p-3 bg-slate-900/50 rounded-lg text-xs font-mono">
-                    Current User: {user?.email || 'Guest'}
-                </div>
-            </div>
-        );
-    }
 
     const filteredUsers = users.filter(u =>
         u.name.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
