@@ -68,7 +68,6 @@ const XPHeader: React.FC<{ profile: GymProfile }> = ({ profile }) => {
   const rank = getRankForLevel(profile.level);
   return (
     <div className="g-rank-card">
-      <div className="g-rank-progress-bar" style={{ width: `${progress.percent}%` }} />
       <div className="g-rank-body">
         <div className="g-rank-medal">
           <RankBadge rank={rankFromTierName(rank.name)} size="md" isCurrent />
