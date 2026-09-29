@@ -421,9 +421,13 @@ export const storageService = {
 
   getHabits: (): Habit[] => localCache.habits || INITIAL_HABITS,
   saveHabits: (habits: Habit[]) => {
-    localCache.habits = habits;
-    localStorage.setItem('jarvis_habits', JSON.stringify(habits));
-    storageService.saveData('habits', habits);
+    // Optional fields (cue, subTasks, sub-task target) are often `undefined`,
+    // which RTDB set()/update() reject outright — that failed the habits write
+    // and every later syncToRemote. The JSON round-trip drops them.
+    const clean: Habit[] = JSON.parse(JSON.stringify(habits));
+    localCache.habits = clean;
+    localStorage.setItem('jarvis_habits', JSON.stringify(clean));
+    storageService.saveData('habits', clean);
     notifyCtx();
   },
 
