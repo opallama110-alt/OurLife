@@ -6060,7 +6060,14 @@ input, select, textarea {
   display: inline-flex; align-items: center; gap: 4px;
 }
 .h-card-cue-ico { color: var(--orange); }
-.h-card-meta { display: flex; gap: 6px; align-items: center; }
+.h-card-meta,
+.h-card-stats,
+.h-card-actions { display: flex; gap: 6px; align-items: center; }
+/* Phones: stack edit/trash under the stat chips. In one row, chips + two
+   buttons squeezed the title column to ~100px at 375px and split words. */
+@media (max-width: 420px) {
+  .h-card-meta { flex-direction: column; align-items: flex-end; }
+}
 /* Streak chip: tiered StreakFlame + rolling number. The chip itself warms up
    with the flame level (data-lvl mirrors constants/streak flameLevel). */
 .h-card-streak {
@@ -6095,7 +6102,8 @@ input, select, textarea {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
-.h-card-trash {
+.h-card-trash,
+.h-card-edit {
   position: relative;
   width: 26px; height: 26px;
   background: transparent;
@@ -6107,9 +6115,12 @@ input, select, textarea {
   transition: color var(--dur-2) ease, border-color var(--dur-2) ease, background var(--dur-2) ease, transform var(--dur-1) ease;
 }
 /* Taller hit-area (the delete itself is behind a confirm dialog). */
-.h-card-trash::after { content: ""; position: absolute; inset: -9px -3px; }
+.h-card-trash::after,
+.h-card-edit::after { content: ""; position: absolute; inset: -9px -3px; }
 .h-card-trash:hover { color: var(--red); border-color: rgba(239, 68, 68, 0.4); }
 .h-card-trash:active { transform: scale(0.9); color: var(--red); background: rgba(239, 68, 68, 0.08); }
+.h-card-edit:hover { color: var(--cyan); border-color: rgba(34, 211, 238, 0.4); }
+.h-card-edit:active { transform: scale(0.9); color: var(--cyan); background: rgba(34, 211, 238, 0.08); }
 
 /* ─── Week row (.h-week / .h-day) ──────────────────────────────────────
    7 day-cells = the trailing 7 days (today−6 … today). Ported back from
