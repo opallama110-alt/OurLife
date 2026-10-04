@@ -9258,3 +9258,22 @@ input, select, textarea {
 .ob-t-2 { color: var(--t-2); }
 .ob-t-3 { color: var(--t-3); }
 .ob-t-mute { color: var(--t-mute); }
+
+/* ── Body3D — rotating 3D anatomy (components/anatomy3d) ──────────────────
+   The 2D fallback fills the box until the first 3D frame is ready, then the
+   canvas fades in over it. touch-action: pan-y keeps vertical page scroll
+   with the browser while horizontal drags turn the body. */
+.body3d { position: relative; width: 100%; height: 100%; }
+.body3d-fallback { position: absolute; inset: 0; }
+.body3d-canvas {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  touch-action: pan-y;
+  cursor: grab;
+  transition: opacity var(--dur-4) var(--ease-out-expo);
+}
+.body3d-canvas > canvas { display: block; width: 100%; height: 100%; touch-action: pan-y; }
+.body3d-canvas.is-ready { opacity: 1; pointer-events: auto; }
+.body3d-canvas.is-ready:active { cursor: grabbing; }
