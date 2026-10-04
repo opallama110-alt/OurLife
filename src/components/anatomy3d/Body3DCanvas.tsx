@@ -70,9 +70,9 @@ function loadAssets(gender: BodyGender): Promise<BodyAssets> {
 }
 
 // Rendered face textures keyed by gender + highlight set. Revisiting a page
-// (or flipping between two highlight sets) then skips the SVG raster pass,
-// the only expensive main-thread step. Small: each entry is two ~4 MB canvases.
-const FACE_CACHE_LIMIT = 4;
+// (or flipping between two highlight sets) then skips the SVG raster pass.
+// Each entry pins two ~4.5 MB canvases for the session, so keep it small.
+const FACE_CACHE_LIMIT = 2;
 const faceCache = new Map<string, Promise<[HTMLCanvasElement, HTMLCanvasElement]>>();
 
 function renderFaces(gender: BodyGender, assets: BodyAssets, lit: readonly string[]) {
@@ -135,6 +135,9 @@ function Body3DCanvas({
         autoRotate,
         reducedMotion,
         onContextLost: () => onErrorRef.current(new Error('WebGL context lost')),
+        // Ready only once pixels are on the canvas: a body that loads while
+        // scrolled off screen keeps the 2D fallback until it is really drawn.
+        onFirstFrame: () => onReadyRef.current(),
       });
     } catch (err) {
       canvas.remove();
@@ -180,7 +183,6 @@ function Body3DCanvas({
       loadedGenderRef.current = gender;
       renderedKeyRef.current = lit.join('|');
       setLoadedTick(t => t + 1);
-      onReadyRef.current();
     })().catch(err => { if (!cancelled) onErrorRef.current(err); });
     return () => { cancelled = true; };
   }, [gender]);
@@ -200,12 +202,27 @@ function Body3DCanvas({
     return () => { cancelled = true; };
   }, [gender, highlightKey, loadedTick]);
 
+  // Keyboard: arrows turn the body 45° at a time, Enter/Space flips it.
+  const onKeyDown = (e: { key: string; preventDefault: () => void }) => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const step = Math.PI / 4;
+    if (e.key === 'ArrowLeft') scene.turnBy(-step);
+    else if (e.key === 'ArrowRight') scene.turnBy(step);
+    else if (e.key === 'Enter' || e.key === ' ') scene.turnBy(Math.PI);
+    else return;
+    e.preventDefault();
+  };
+
   return (
     <div
       ref={hostRef}
       className={`body3d-canvas ${className}`.trim()}
       role="img"
+      aria-roledescription="model 3D"
       aria-label={label}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
     />
   );
 }

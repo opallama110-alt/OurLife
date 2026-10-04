@@ -51,7 +51,20 @@ export function supportsWebGL2(): boolean {
   return webgl2Support;
 }
 
-export type Body3DMode = '3d' | '2d';
+/**
+ * '3d'      — the 3D body is on screen.
+ * 'loading' — 3D is coming (WebGL2 present); the 2D fallback shows meanwhile.
+ * '2d'      — no 3D on this device / after a failure: the fallback stays.
+ * Hosts keep 2D-only controls (the FRONT/BACK toggle) for '2d', so they
+ * don't flash on and off while 3D loads.
+ */
+export type Body3DMode = '3d' | 'loading' | '2d';
+
+/** Mode a host should assume before <Body3D> reports one. */
+export const initialBody3DMode = (): Body3DMode => (supportsWebGL2() ? 'loading' : '2d');
+
+/** Matches the .body3d-canvas opacity transition (--dur-4). */
+const FADE_MS = 420;
 
 export interface Body3DProps {
   gender: BodyGender;
@@ -89,11 +102,19 @@ export default function Body3D({
 }: Body3DProps) {
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
+  // The fallback stays mounted under the canvas until its fade-in is done,
+  // so the hand-over never shows an empty frame.
+  const [faded, setFaded] = useState(false);
   const reducedMotion = useReducedMotion();
   const can3D = !failed && supportsWebGL2();
-  const mode: Body3DMode = can3D && ready ? '3d' : '2d';
+  const mode: Body3DMode = !can3D ? '2d' : ready ? '3d' : 'loading';
 
   useEffect(() => { onModeChange?.(mode); }, [mode, onModeChange]);
+  useEffect(() => {
+    if (mode !== '3d') { setFaded(false); return; }
+    const t = window.setTimeout(() => setFaded(true), FADE_MS);
+    return () => window.clearTimeout(t);
+  }, [mode]);
 
   // Stable callbacks keep the memoised canvas from re-rendering when the
   // host does (hosts like the Dashboard tick every second).
@@ -105,7 +126,7 @@ export default function Body3D({
 
   return (
     <div className={`body3d ${className}`.trim()} data-mode={mode}>
-      {mode === '2d' && <div className="body3d-fallback">{fallback}</div>}
+      {(mode !== '3d' || !faded) && <div className="body3d-fallback">{fallback}</div>}
       {can3D && (
         <Suspense fallback={null}>
           <Body3DCanvas

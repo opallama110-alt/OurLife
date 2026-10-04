@@ -9277,3 +9277,6 @@ input, select, textarea {
 .body3d-canvas > canvas { display: block; width: 100%; height: 100%; touch-action: pan-y; }
 .body3d-canvas.is-ready { opacity: 1; pointer-events: auto; }
 .body3d-canvas.is-ready:active { cursor: grabbing; }
+/* Keyboard turning (arrows / Enter): an inset ring, so card edges never clip it. */
+.body3d-canvas:focus { outline: none; }
+.body3d-canvas:focus-visible { outline: 1px solid var(--cyan); outline-offset: -3px; border-radius: 10px; }

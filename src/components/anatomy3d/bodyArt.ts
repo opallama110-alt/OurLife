@@ -93,12 +93,15 @@ const cssEscape = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 const MUSCLE_CLASS: Record<Face, string> = { front: 'ba-1', back: 'ba-2' };
 
 function themeCss(face: Face, gender: BodyGender, highlighted: readonly string[]): string {
-  const groups = highlighted.map(id => `g[id^="${cssEscape(id)}"]`);
+  // Any element, not just <g>: some muscles are a bare <path> with the id
+  // (e.g. Thoracolumbar, the lower back).
+  const groups = highlighted.map(id => `[id^="${cssEscape(id)}"]`);
   // A lit muscle shows at full strength even where the female art fades
   // its fill with an inline opacity (abs, flanks, quads).
+  const muscle = MUSCLE_CLASS[face];
   const tint = groups.length
     ? `${groups.join(',')}{color:${HIGHLIGHT}}`
-      + `${groups.map(g => `${g} .${MUSCLE_CLASS[face]}`).join(',')}{opacity:.9!important}`
+      + `${groups.map(g => `${g} .${muscle},${g}.${muscle}`).join(',')}{opacity:.9!important}`
     : '';
   // Unclassed paths without a fill are the black outline art; soften them for
   // the hologram (the female overlays carry their own fill and are untouched).
@@ -110,8 +113,10 @@ function themeCss(face: Face, gender: BodyGender, highlighted: readonly string[]
 
 // Mask: every shape solid white, so alpha = "inside the body". The back art
 // carries a hidden stray Illustrator stroke (.ba-0) outside the figure.
+// The translucent female breast overlay is excluded: it reaches past the
+// chest edge and would bridge the arm/chest gap, merging arm and torso.
 const MASK_CSS: Record<Face, string> = {
-  front: '*{fill:#fff!important;stroke:none!important;opacity:1!important}',
+  front: '*{fill:#fff!important;stroke:none!important;opacity:1!important}#Pecs_female_breasts{display:none!important}',
   back: '*{fill:#fff!important;stroke:none!important;opacity:1!important}.ba-0{display:none!important}',
 };
 
