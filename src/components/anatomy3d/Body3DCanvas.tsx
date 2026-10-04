@@ -24,6 +24,8 @@ export interface Body3DCanvasProps {
   facingKey?: string | number;
   /** First frame is on screen. */
   onReady: () => void;
+  /** The canvas is shown; only then is it focusable / keyboard-operable. */
+  interactive: boolean;
   /** WebGL or asset failure — the host shows its 2D fallback instead. */
   onError: (err: unknown) => void;
   className?: string;
@@ -70,9 +72,9 @@ function loadAssets(gender: BodyGender): Promise<BodyAssets> {
 }
 
 // Rendered face textures keyed by gender + highlight set. Revisiting a page
-// (or flipping between two highlight sets) then skips the SVG raster pass,
-// the only expensive main-thread step. Small: each entry is two ~4 MB canvases.
-const FACE_CACHE_LIMIT = 4;
+// (or flipping between two highlight sets) then skips the SVG raster pass.
+// Each entry pins two ~4.5 MB canvases for the session, so keep it small.
+const FACE_CACHE_LIMIT = 2;
 const faceCache = new Map<string, Promise<[HTMLCanvasElement, HTMLCanvasElement]>>();
 
 function renderFaces(gender: BodyGender, assets: BodyAssets, lit: readonly string[]) {
@@ -99,6 +101,7 @@ function Body3DCanvas({
   reducedMotion,
   facing,
   facingKey,
+  interactive,
   onReady,
   onError,
   className = '',
@@ -135,6 +138,9 @@ function Body3DCanvas({
         autoRotate,
         reducedMotion,
         onContextLost: () => onErrorRef.current(new Error('WebGL context lost')),
+        // Ready only once pixels are on the canvas: a body that loads while
+        // scrolled off screen keeps the 2D fallback until it is really drawn.
+        onFirstFrame: () => onReadyRef.current(),
       });
     } catch (err) {
       canvas.remove();
@@ -160,6 +166,7 @@ function Body3DCanvas({
   }, []);
 
   useEffect(() => { sceneRef.current?.setAutoRotate(autoRotate); }, [autoRotate]);
+  useEffect(() => { sceneRef.current?.setReducedMotion(reducedMotion); }, [reducedMotion]);
 
   // Turn to the requested face once a body is on screen (and on each change).
   useEffect(() => {
@@ -179,7 +186,6 @@ function Body3DCanvas({
       loadedGenderRef.current = gender;
       renderedKeyRef.current = lit.join('|');
       setLoadedTick(t => t + 1);
-      onReadyRef.current();
     })().catch(err => { if (!cancelled) onErrorRef.current(err); });
     return () => { cancelled = true; };
   }, [gender]);
@@ -199,12 +205,35 @@ function Body3DCanvas({
     return () => { cancelled = true; };
   }, [gender, highlightKey, loadedTick]);
 
+  // Keyboard: arrows turn the body 45° at a time, Enter/Space flips it.
+  // Modified keys (Alt+← = back, …) and auto-repeat pass through untouched.
+  const onKeyDown = (e: {
+    key: string; repeat: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean;
+    preventDefault: () => void;
+  }) => {
+    const scene = sceneRef.current;
+    if (!scene || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+    const step = Math.PI / 4;
+    if (e.key === 'ArrowLeft') scene.turnBy(-step);
+    else if (e.key === 'ArrowRight') scene.turnBy(step);
+    else if (e.key === 'Enter' || e.key === ' ') scene.turnBy(Math.PI);
+    else return;
+    e.preventDefault();
+  };
+
   return (
     <div
       ref={hostRef}
       className={`body3d-canvas ${className}`.trim()}
       role="img"
+      aria-roledescription="model 3D"
       aria-label={label}
+      aria-hidden={!interactive}
+      tabIndex={interactive ? 0 : -1}
+      onKeyDown={onKeyDown}
+      // A mouse click shouldn't focus it (then Space would turn the body
+      // instead of scrolling); keyboard users reach it with Tab.
+      onMouseDown={(e: { preventDefault: () => void }) => e.preventDefault()}
     />
   );
 }

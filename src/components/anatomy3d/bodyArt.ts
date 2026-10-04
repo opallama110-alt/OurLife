@@ -93,12 +93,15 @@ const cssEscape = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 const MUSCLE_CLASS: Record<Face, string> = { front: 'ba-1', back: 'ba-2' };
 
 function themeCss(face: Face, gender: BodyGender, highlighted: readonly string[]): string {
-  const groups = highlighted.map(id => `g[id^="${cssEscape(id)}"]`);
+  // Any element, not just <g>: some muscles are a bare <path> with the id
+  // (e.g. Thoracolumbar, the lower back).
+  const groups = highlighted.map(id => `[id^="${cssEscape(id)}"]`);
   // A lit muscle shows at full strength even where the female art fades
   // its fill with an inline opacity (abs, flanks, quads).
+  const muscle = MUSCLE_CLASS[face];
   const tint = groups.length
     ? `${groups.join(',')}{color:${HIGHLIGHT}}`
-      + `${groups.map(g => `${g} .${MUSCLE_CLASS[face]}`).join(',')}{opacity:.9!important}`
+      + `${groups.map(g => `${g} .${muscle},${g}.${muscle}`).join(',')}{opacity:.9!important}`
     : '';
   // Unclassed paths without a fill are the black outline art; soften them for
   // the hologram (the female overlays carry their own fill and are untouched).
@@ -110,8 +113,10 @@ function themeCss(face: Face, gender: BodyGender, highlighted: readonly string[]
 
 // Mask: every shape solid white, so alpha = "inside the body". The back art
 // carries a hidden stray Illustrator stroke (.ba-0) outside the figure.
+// The translucent female breast overlay is excluded: it reaches past the
+// chest edge and would bridge the arm/chest gap, merging arm and torso.
 const MASK_CSS: Record<Face, string> = {
-  front: '*{fill:#fff!important;stroke:none!important;opacity:1!important}',
+  front: '*{fill:#fff!important;stroke:none!important;opacity:1!important}#Pecs_female_breasts{display:none!important}',
   back: '*{fill:#fff!important;stroke:none!important;opacity:1!important}.ba-0{display:none!important}',
 };
 
@@ -124,7 +129,7 @@ function withStyle(svg: string, css: string, w: number, h: number): string {
     });
 }
 
-async function rasterize(svg: string, css: string, scale: number): Promise<HTMLCanvasElement> {
+async function rasterize(svg: string, css: string, scale: number, readBack = false): Promise<HTMLCanvasElement> {
   const w = Math.round(ART_W * scale);
   const h = Math.round(ART_H * scale);
   const blob = new Blob([withStyle(svg, css, w, h)], { type: 'image/svg+xml' });
@@ -137,7 +142,9 @@ async function rasterize(svg: string, css: string, scale: number): Promise<HTMLC
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
-    const ctx = canvas.getContext('2d');
+    // A canvas we read pixels back from stays CPU-side: a GPU-backed one
+    // makes getImageData a slow, synchronous readback (~0.5 s measured).
+    const ctx = canvas.getContext('2d', readBack ? { willReadFrequently: true } : undefined);
     if (!ctx) throw new Error('2D canvas unavailable');
     ctx.drawImage(img, 0, 0, w, h);
     return canvas;
@@ -180,8 +187,8 @@ export interface Silhouette {
  */
 export async function extractSilhouette(svg: string, face: Face, step = 2, minGap = 1.5): Promise<Silhouette> {
   const SCALE = 2;
-  const canvas = await rasterize(svg, MASK_CSS[face], SCALE);
-  const ctx = canvas.getContext('2d');
+  const canvas = await rasterize(svg, MASK_CSS[face], SCALE, true);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('2D canvas unavailable');
   const { width, height } = canvas;
   const data = ctx.getImageData(0, 0, width, height).data;
