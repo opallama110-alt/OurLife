@@ -24,6 +24,7 @@ import { useAchievements } from '../context/AchievementContext';
 import { achievementService } from '../services/achievementService';
 import AnatomyViewer, { getViewForMuscle } from '../components/Anatomy/AnatomyViewer';
 import { BodyViewToggle } from '../components/hud/BodyTurntable';
+import { toBodyGender } from '../components/hud/BodyAnatomy';
 import { RankBadge, rankFromTierName } from '../components/hud';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
 import { getLocalDateString } from '../utils/dateUtils';
@@ -207,6 +208,7 @@ const ExerciseBrowser: React.FC<{
   const [debouncedSearch, setDebouncedSearch] = useState(''); // throttled — drives the filter
   const [pageByMuscle, setPageByMuscle] = useState<Record<string, number>>({});
   const fetchedRef = useRef<Set<string>>(new Set());
+  const bodyGender = toBodyGender(storageService.getUserState().gender);
 
   // ── 300ms debounce — keeps typing instantaneous and stops the heavy
   //    filter+sort+paginate work from running on every keystroke. ──
@@ -417,6 +419,7 @@ const ExerciseBrowser: React.FC<{
                           <AnatomyViewer
                             trainedMuscles={getTrainedMuscleIds(allMuscles)}
                             defaultView={bestView}
+                            gender={bodyGender}
                             minimal
                           />
                         </div>
@@ -1018,6 +1021,7 @@ export const GymTracker: React.FC = () => {
                   ])}
                   view={bodyView}
                   onViewChange={setBodyView}
+                  gender={toBodyGender(storageService.getUserState().gender)}
                   chrome={false}
                   showToggle={false}
                 />

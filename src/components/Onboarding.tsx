@@ -13,6 +13,7 @@ import {
 import { GymSchedule } from '../types';
 import { calcBMI, bmiSliderStyle } from '../utils/bmi';
 import AnatomyViewer from './Anatomy/AnatomyViewer';
+import { toBodyGender } from './hud/BodyAnatomy';
 import { DateOfBirthPicker } from './DateOfBirthPicker';
 import { getTrainedMuscleIds } from '../constants/muscleMapping';
 
@@ -452,6 +453,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                                 FOCUS_TO_MUSCLES[(formData.focusArea as FocusArea) || 'Seluruh Tubuh']
                             )}
                             defaultView="front"
+                            gender={toBodyGender(formData.gender)}
                             showToggle={false}
                             minimal
                         />

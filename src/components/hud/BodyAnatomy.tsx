@@ -18,6 +18,10 @@ import { MuscleGroup } from '../../types';
 export type BodyView = 'front' | 'back';
 export type BodyGender = 'male' | 'female';
 
+/** Profile gender ('Male' | 'Female') → body art key. Unset falls back to male. */
+export const toBodyGender = (gender?: 'Male' | 'Female'): BodyGender =>
+    gender === 'Female' ? 'female' : 'male';
+
 export interface BodyAnatomyProps {
     view: BodyView;
     exhausted: MuscleGroup[];
