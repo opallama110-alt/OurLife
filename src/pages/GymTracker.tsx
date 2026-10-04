@@ -25,6 +25,7 @@ import { achievementService } from '../services/achievementService';
 import AnatomyViewer, { getViewForMuscle } from '../components/Anatomy/AnatomyViewer';
 import { BodyViewToggle } from '../components/hud/BodyTurntable';
 import { toBodyGender } from '../components/hud/BodyAnatomy';
+import Body3D, { type Body3DMode } from '../components/anatomy3d/Body3D';
 import { RankBadge, rankFromTierName } from '../components/hud';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
 import { getLocalDateString } from '../utils/dateUtils';
@@ -515,6 +516,8 @@ export const GymTracker: React.FC = () => {
   // Body-anatomy front/back toggle for the active exercise stage. Lives on the
   // root so it survives re-renders within an exercise.
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
+  // 3D body when WebGL is available; the 2D viewer (and its toggle) is the fallback.
+  const [stageMode, setStageMode] = useState<Body3DMode>('2d');
   // Each new exercise turns the body to the side where its primary muscle is
   // visible (e.g. hamstring curl → back), so the red highlight is never hidden
   // on the far face. The user can still tap/swipe freely within an exercise.
@@ -1006,24 +1009,39 @@ export const GymTracker: React.FC = () => {
                 style={{ width: `${(currentExIndex / Math.max(1, selectedExercises.length)) * 100}%` }} />
             </div>
 
-            {/* Body highlight stage — the stage owns the frame + toggle; the
-                viewer is chromeless and controlled, so the toggle and swipe
-                both turn the same shared BodyTurntable. */}
+            {/* Body highlight stage — a rotating 3D body that turns to the
+                exercise's main muscle on each new exercise. Without WebGL the
+                chromeless 2D viewer takes over, driven by the stage toggle. */}
             <section className="ae-bodystage">
               <span className="brk-c brk-tl" /><span className="brk-c brk-tr" />
               <span className="brk-c brk-bl" /><span className="brk-c brk-br" />
-              <BodyViewToggle view={bodyView} onChange={setBodyView} className="ae-bodystage-toggle" />
+              {stageMode === '2d' && (
+                <BodyViewToggle view={bodyView} onChange={setBodyView} className="ae-bodystage-toggle" />
+              )}
               <div className="ae-bodystage-fig">
-                <AnatomyViewer
-                  trainedMuscles={getTrainedMuscleIds([
+                <Body3D
+                  gender={toBodyGender(storageService.getUserState().gender)}
+                  highlighted={getTrainedMuscleIds([
                     currentExercise.muscleGroup,
                     ...(currentExercise.secondaryMuscles || []),
                   ])}
-                  view={bodyView}
-                  onViewChange={setBodyView}
-                  gender={toBodyGender(storageService.getUserState().gender)}
-                  chrome={false}
-                  showToggle={false}
+                  facing={getViewForMuscle(currentExercise.muscleGroup || '')}
+                  facingKey={currentExIndex}
+                  onModeChange={setStageMode}
+                  label={`Model anatomi 3D: otot yang dilatih ${currentExercise.name} — geser untuk memutar`}
+                  fallback={
+                    <AnatomyViewer
+                      trainedMuscles={getTrainedMuscleIds([
+                        currentExercise.muscleGroup,
+                        ...(currentExercise.secondaryMuscles || []),
+                      ])}
+                      view={bodyView}
+                      onViewChange={setBodyView}
+                      gender={toBodyGender(storageService.getUserState().gender)}
+                      chrome={false}
+                      showToggle={false}
+                    />
+                  }
                 />
               </div>
               <div className="ae-bodystage-tag">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { UserState, ExperienceLevel, IdealDuration, FocusArea, MuscleGroup, Environment } from '../types';
 import { storageService } from '../services/storageService';
 import { doc, setDoc } from 'firebase/firestore';
@@ -14,6 +14,7 @@ import { GymSchedule } from '../types';
 import { calcBMI, bmiSliderStyle } from '../utils/bmi';
 import AnatomyViewer from './Anatomy/AnatomyViewer';
 import { toBodyGender } from './hud/BodyAnatomy';
+import Body3D from './anatomy3d/Body3D';
 import { DateOfBirthPicker } from './DateOfBirthPicker';
 import { getTrainedMuscleIds } from '../constants/muscleMapping';
 
@@ -74,6 +75,11 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         environment: 'Gym',
         userEquipment: ['Dumbbell', 'Bodyweight'],
     });
+    // Muscle ids lit by the focus-area preview (stable across keystrokes).
+    const focusIds = useMemo(
+        () => getTrainedMuscleIds(FOCUS_TO_MUSCLES[(formData.focusArea as FocusArea) || 'Seluruh Tubuh']),
+        [formData.focusArea],
+    );
     const [schedule, setSchedule] = useState<GymSchedule>({
         monday: 'Push',
         tuesday: 'Pull',
@@ -441,21 +447,27 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
                     </div>
                 </div>
 
-                {/* Fokus Area Otot — reactive AnatomyViewer preview (untouched) */}
+                {/* Fokus Area Otot — reactive anatomy preview */}
                 <div className="ob-field">
                     <label className="ob-label">Fokus Area Otot</label>
 
-                    {/* Phase 10 — Interactive anatomy preview. Selected focus area
-                        lights up the corresponding muscles in neon red in real time. */}
+                    {/* Interactive anatomy preview: a rotating 3D body (2D viewer
+                        without WebGL) — the selected focus area lights up in
+                        neon red in real time, on the gender chosen in step 1. */}
                     <div className="relative mx-auto mb-3 w-full max-w-[200px] h-[200px] sm:h-[240px] sm:max-w-[240px]">
-                        <AnatomyViewer
-                            trainedMuscles={getTrainedMuscleIds(
-                                FOCUS_TO_MUSCLES[(formData.focusArea as FocusArea) || 'Seluruh Tubuh']
-                            )}
-                            defaultView="front"
+                        <Body3D
                             gender={toBodyGender(formData.gender)}
-                            showToggle={false}
-                            minimal
+                            highlighted={focusIds}
+                            label="Pratinjau otot fokus dalam 3D — geser untuk memutar"
+                            fallback={
+                                <AnatomyViewer
+                                    trainedMuscles={focusIds}
+                                    defaultView="front"
+                                    gender={toBodyGender(formData.gender)}
+                                    showToggle={false}
+                                    minimal
+                                />
+                            }
                         />
                     </div>
 
