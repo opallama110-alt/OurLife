@@ -24,6 +24,8 @@ export interface Body3DCanvasProps {
   facingKey?: string | number;
   /** First frame is on screen. */
   onReady: () => void;
+  /** The canvas is shown; only then is it focusable / keyboard-operable. */
+  interactive: boolean;
   /** WebGL or asset failure — the host shows its 2D fallback instead. */
   onError: (err: unknown) => void;
   className?: string;
@@ -99,6 +101,7 @@ function Body3DCanvas({
   reducedMotion,
   facing,
   facingKey,
+  interactive,
   onReady,
   onError,
   className = '',
@@ -203,9 +206,13 @@ function Body3DCanvas({
   }, [gender, highlightKey, loadedTick]);
 
   // Keyboard: arrows turn the body 45° at a time, Enter/Space flips it.
-  const onKeyDown = (e: { key: string; preventDefault: () => void }) => {
+  // Modified keys (Alt+← = back, …) and auto-repeat pass through untouched.
+  const onKeyDown = (e: {
+    key: string; repeat: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean;
+    preventDefault: () => void;
+  }) => {
     const scene = sceneRef.current;
-    if (!scene) return;
+    if (!scene || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
     const step = Math.PI / 4;
     if (e.key === 'ArrowLeft') scene.turnBy(-step);
     else if (e.key === 'ArrowRight') scene.turnBy(step);
@@ -221,8 +228,12 @@ function Body3DCanvas({
       role="img"
       aria-roledescription="model 3D"
       aria-label={label}
-      tabIndex={0}
+      aria-hidden={!interactive}
+      tabIndex={interactive ? 0 : -1}
       onKeyDown={onKeyDown}
+      // A mouse click shouldn't focus it (then Space would turn the body
+      // instead of scrolling); keyboard users reach it with Tab.
+      onMouseDown={(e: { preventDefault: () => void }) => e.preventDefault()}
     />
   );
 }

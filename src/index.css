@@ -9265,6 +9265,14 @@ input, select, textarea {
    with the browser while horizontal drags turn the body. */
 .body3d { position: relative; width: 100%; height: 100%; }
 .body3d-fallback { position: absolute; inset: 0; }
+/* Crossfade: the fallback fades out while the canvas fades in (it stays
+   mounted for the fade, then unmounts). Brief opacity on the turntable's
+   ancestor only flattens it for the fade, while it is static anyway. */
+.body3d[data-mode="3d"] > .body3d-fallback {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-4) var(--ease-out-expo);
+}
 .body3d-canvas {
   position: absolute;
   inset: 0;

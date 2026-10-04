@@ -136,6 +136,7 @@ export default function Body3D({
             reducedMotion={reducedMotion}
             facing={facing}
             facingKey={facingKey}
+            interactive={ready}
             onReady={handleReady}
             onError={handleError}
             className={ready ? 'is-ready' : ''}

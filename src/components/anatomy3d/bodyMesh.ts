@@ -210,7 +210,8 @@ function splitParts(sil: Silhouette): Parts {
   let narrowest = Infinity;
   for (const r of aL) {
     const f = (r.y - armTop) / Math.max(1, armBottom - armTop);
-    if (f > 0.55 && f < 0.88 && r.r - r.l < narrowest) { narrowest = r.r - r.l; wristY = r.y; }
+    // Stop before the fingers (narrower than the wrist on the real art).
+    if (f > 0.55 && f < 0.8 && r.r - r.l < narrowest) { narrowest = r.r - r.l; wristY = r.y; }
   }
   return {
     // Raw: the shoulder hand-over needs the true chest edge; smoothed after.
@@ -312,15 +313,19 @@ export function buildBodyMesh(sil: Silhouette, gender: BodyGender): BodyMesh {
   // so there is no shelf where the arms separate. ──
   const armTop = (arm: Ring[]) => (arm.length ? arm[0] : null);
   const topL = armTop(parts.armL), topR = armTop(parts.armR);
-  const median = (v: number[]) => {
+  // Robust edge: the median, taking the OUTER middle value on both sides
+  // (lower median for the left edge, upper for the right) so the two sides
+  // match and the chest is never pulled inside the art.
+  const median = (v: number[], outer: 'low' | 'high') => {
     const a = [...v].sort((x, y) => x - y);
-    return a.length ? a[a.length >> 1] : NaN;
+    if (!a.length) return NaN;
+    return outer === 'low' ? a[(a.length - 1) >> 1] : a[a.length >> 1];
   };
   // Chest edge: median of the raw torso edge just below the armpit, so a
   // single row where the arm still touches can't pull it outwards.
   const below = (y: number) => parts.torso.filter(r => r.y >= y && r.y <= y + 10);
-  const chestL = topL ? median(below(topL.y).map(r => r.l)) : NaN;
-  const chestR = topR ? median(below(topR.y).map(r => r.r)) : NaN;
+  const chestL = topL ? median(below(topL.y).map(r => r.l), 'low') : NaN;
+  const chestR = topR ? median(below(topR.y).map(r => r.r), 'high') : NaN;
   const leadL: Ring[] = [], leadR: Ring[] = [];
   const blended = parts.torso.map(r => {
     const out = { ...r };

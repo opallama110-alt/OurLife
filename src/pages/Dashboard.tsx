@@ -361,7 +361,8 @@ export const Dashboard: React.FC = () => {
     () => new Set([...exhaustedSplit.front, ...exhaustedSplit.back]).size,
     [exhaustedSplit],
   );
-  const exhaustedCount = bodyMode !== '2d' ? drawnExhaustedCount : visibleExhausted.length;
+  // While 3D loads the 2D fallback (one face) is what's on screen.
+  const exhaustedCount = bodyMode === '3d' ? drawnExhaustedCount : visibleExhausted.length;
   const exhaustedIds = useMemo(() => muscleGroupIdPrefixes(recoveringMuscles), [recoveringMuscles]);
 
   const gender: 'male' | 'female' = (userState?.gender === 'Female' ? 'female' : 'male');
@@ -599,7 +600,7 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Keyed on the face (2D) so the count re-enters when the body turns. */}
-          <div className="d-body-active" key={bodyMode !== '2d' ? '3d' : bodyView}>
+          <div className="d-body-active" key={bodyMode === '3d' ? '3d' : bodyView}>
             <span style={{ color: 'var(--red)' }}>●</span> {exhaustedCount} LELAH
           </div>
         </CornerBracket>

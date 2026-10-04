@@ -350,9 +350,18 @@ export class BodyScene {
   };
 
   private readonly onPointerDown = (e: PointerEvent): void => {
-    if (this.dragging || this.press || (e.pointerType === 'mouse' && e.button !== 0)) return;
-    // Don't grab yet: the touch may be the start of a vertical page scroll.
-    this.press = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    if (this.dragging || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    // Touching the body holds it still (and pauses auto-rotation) so a
+    // highlighted muscle can be inspected, even if the touch turns out to
+    // be a scroll.
+    this.velocity = 0;
+    this.target = null;
+    this.lastInteraction = performance.now();
+    // A mouse has no page scroll to protect: turn right away (and capture,
+    // so a release outside the canvas still ends the drag). A touch might
+    // be the start of a vertical scroll, so wait for it to move sideways.
+    if (e.pointerType === 'mouse') this.beginDrag(e);
+    else this.press = { id: e.pointerId, x: e.clientX, y: e.clientY };
   };
 
   /** The press moved clearly sideways: it's a turn, take the pointer. */
@@ -371,6 +380,7 @@ export class BodyScene {
 
   private readonly onPointerMove = (e: PointerEvent): void => {
     if (this.press && e.pointerId === this.press.id) {
+      if (e.buttons === 0) { this.press = null; return; }          // released elsewhere
       const dx = Math.abs(e.clientX - this.press.x);
       const dy = Math.abs(e.clientY - this.press.y);
       if (dy > SCROLL_SLOP && dy > dx) this.press = null;          // a scroll
