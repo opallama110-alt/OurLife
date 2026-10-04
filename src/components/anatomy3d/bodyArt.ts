@@ -124,7 +124,7 @@ function withStyle(svg: string, css: string, w: number, h: number): string {
     });
 }
 
-async function rasterize(svg: string, css: string, scale: number): Promise<HTMLCanvasElement> {
+async function rasterize(svg: string, css: string, scale: number, readBack = false): Promise<HTMLCanvasElement> {
   const w = Math.round(ART_W * scale);
   const h = Math.round(ART_H * scale);
   const blob = new Blob([withStyle(svg, css, w, h)], { type: 'image/svg+xml' });
@@ -137,7 +137,9 @@ async function rasterize(svg: string, css: string, scale: number): Promise<HTMLC
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
-    const ctx = canvas.getContext('2d');
+    // A canvas we read pixels back from stays CPU-side: a GPU-backed one
+    // makes getImageData a slow, synchronous readback (~0.5 s measured).
+    const ctx = canvas.getContext('2d', readBack ? { willReadFrequently: true } : undefined);
     if (!ctx) throw new Error('2D canvas unavailable');
     ctx.drawImage(img, 0, 0, w, h);
     return canvas;
@@ -180,8 +182,8 @@ export interface Silhouette {
  */
 export async function extractSilhouette(svg: string, face: Face, step = 2, minGap = 1.5): Promise<Silhouette> {
   const SCALE = 2;
-  const canvas = await rasterize(svg, MASK_CSS[face], SCALE);
-  const ctx = canvas.getContext('2d');
+  const canvas = await rasterize(svg, MASK_CSS[face], SCALE, true);
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('2D canvas unavailable');
   const { width, height } = canvas;
   const data = ctx.getImageData(0, 0, width, height).data;

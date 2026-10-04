@@ -160,6 +160,7 @@ function Body3DCanvas({
   }, []);
 
   useEffect(() => { sceneRef.current?.setAutoRotate(autoRotate); }, [autoRotate]);
+  useEffect(() => { sceneRef.current?.setReducedMotion(reducedMotion); }, [reducedMotion]);
 
   // Turn to the requested face once a body is on screen (and on each change).
   useEffect(() => {

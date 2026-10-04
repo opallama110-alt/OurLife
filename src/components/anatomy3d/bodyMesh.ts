@@ -57,29 +57,50 @@ const TORSO_BACK: ReadonlyArray<readonly [number, number]> = [
   [175, 31], [205, 31], [235, 28], [262, 28], [290, 33], [318, 38], [345, 36],
 ];
 
+/** A soft-tissue mound (breast / buttock), one each side of the midline. */
+interface Mound {
+  height: number;  // peak projection in art units (≈ 2.9 per cm)
+  cxOff: number;   // centre's distance from the midline
+  halfW: number;   // half-width
+  cy: number;      // row of fullest projection
+  up: number;      // rows above cy over which it rises
+  down: number;    // rows below cy down to the fold
+  lower: number;   // lower-pole exponent: smaller = rounder, crisper fold
+}
 interface GenderShape {
-  torsoDepth: number;   // overall torso depth multiplier
-  breast: number;       // forward bump of the chest mounds
-  glute: number;        // backward bump of the buttocks
+  torsoDepth: number;  // overall torso depth multiplier
+  lumbar: number;      // inward curve of the lower back (lordosis)
+  chest: Mound;
+  glute: Mound;
 }
 const SHAPE: Record<BodyGender, GenderShape> = {
-  male:   { torsoDepth: 1,    breast: 4,  glute: 6 },
-  female: { torsoDepth: 0.94, breast: 13, glute: 12 },
+  male: {
+    torsoDepth: 1,
+    lumbar: 2,
+    chest: { height: 6, cxOff: 20, halfW: 17, cy: 196, up: 24, down: 14, lower: 0.7 },
+    glute: { height: 7, cxOff: 21, halfW: 18, cy: 338, up: 44, down: 26, lower: 0.75 },
+  },
+  female: {
+    torsoDepth: 0.94,
+    lumbar: 5,
+    chest: { height: 19, cxOff: 21, halfW: 15.5, cy: 213, up: 32, down: 16, lower: 0.6 },
+    glute: { height: 17, cxOff: 21.5, halfW: 18.5, cy: 340, up: 48, down: 30, lower: 0.75 },
+  },
 };
 
-/** Mound offsets (art units) — chest and buttocks, both sides of the midline. */
-function chestBump(dx: number, y: number): number {
-  const ax = Math.abs(dx);
-  const ux = (ax - 21.5) / 14;
-  // Fuller lower pole: tighter falloff above the centre than below.
-  const uy = (y - 208) / (y < 208 ? 15 : 13);
-  return Math.exp(-1.6 * (ux * ux + uy * uy));
-}
-function gluteBump(dx: number, y: number): number {
-  const ax = Math.abs(dx);
-  const ux = (ax - 21) / 17;
-  const uy = (y - 336) / (y < 336 ? 26 : 18);
-  return Math.exp(-1.6 * (ux * ux + uy * uy));
+/**
+ * 0‥1 mound profile. Seen from the side it rises gently from above (zero
+ * slope at the top edge, like breast tissue below the collarbone or the
+ * buttock out of the lower back) and ends in a round, sphere-like lower
+ * pole whose tangent turns vertical at the fold (inframammary / gluteal).
+ */
+function mound(m: Mound, dx: number, y: number): number {
+  const u = (Math.abs(dx) - m.cxOff) / m.halfW;
+  const v = (y - m.cy) / (y < m.cy ? m.up : m.down);
+  const r2 = u * u + v * v;
+  if (r2 >= 1) return 0;
+  const p = 1.35 + (m.lower - 1.35) * smoothstep(-0.35, 0.35, v);
+  return Math.pow(1 - r2, p);
 }
 
 /** Half-depths (front, back) of a limb ring at art row y. */
@@ -299,51 +320,53 @@ export function buildBodyMesh(sil: Silhouette, gender: BodyGender): BodyMesh {
 
   // ── Head + torso ──
   const crotchY = parts.torso.length ? parts.torso[parts.torso.length - 1].y : 340;
-  /** Torso half-depth (front if c ≥ 0, else back) at art x, row y, incl. mounds. */
-  const torsoDepth = (x: number, y: number, a: number, c: number): number => {
+  /** Torso half-depth without mounds (front if c ≥ 0, else back). */
+  const torsoBase = (y: number, a: number, c: number): number => {
     const cap = Math.max(4, a * 1.2);
-    const dx = x - cx;
-    if (c >= 0) {
-      const zf = Math.min(cap, lut(TORSO_FRONT, y) * shape.torsoDepth);
-      return zf + shape.breast * chestBump(dx, y) * Math.sqrt(c);
-    }
-    const zb = Math.min(cap, lut(TORSO_BACK, y) * shape.torsoDepth);
-    return zb + shape.glute * gluteBump(dx, y) * Math.sqrt(-c);
+    if (c >= 0) return Math.min(cap, lut(TORSO_FRONT, y) * shape.torsoDepth);
+    const lordosis = shape.lumbar * Math.exp(-(((y - 292) / 18) ** 2));
+    return Math.min(cap, lut(TORSO_BACK, y) * shape.torsoDepth) - lordosis;
   };
-  gb.tube(torsoRings, 56, (ring, s, c) => {
+  /** Breast (front) or buttock (back) projection at art x, row y. */
+  const moundAt = (x: number, y: number, c: number): number => c >= 0
+    ? shape.chest.height * mound(shape.chest, x - cx, y) * Math.sqrt(c)
+    : shape.glute.height * mound(shape.glute, x - cx, y) * Math.sqrt(-c);
+
+  gb.tube(torsoRings, 80, (ring, s, c) => {
     const a0 = (ring.r - ring.l) / 2;
     const mid = (ring.l + ring.r) / 2;
     // Tuck the bottom of the torso inside the thighs (which carry the hip
-    // surface from here down) so its rim never shows as a belt line.
+    // and buttock surface from here down) so its rim never shows.
     const tuck = smoothstep(crotchY - HIP_TUCK, crotchY, ring.y);
     const a = a0 * (1 - 0.3 * tuck);
     // Shoulders/torso read squarer than the round head and neck.
     const p = ring.y > 140 ? 2.35 : 2;
     const [ex, ez] = superE(s, c, p);
     const x = mid + a * ex;
-    return [x, Math.abs(ez) * (ez >= 0 ? 1 : -1) * torsoDepth(x, ring.y, a0, c) * (1 - 0.25 * tuck)];
+    const depth = (Math.abs(ez) * torsoBase(ring.y, a0, c) + moundAt(x, ring.y, c)) * (1 - 0.25 * tuck);
+    return [x, ez >= 0 ? depth : -depth];
   });
   const hip = parts.torso[parts.torso.length - 1];
   const hipA = hip ? (hip.r - hip.l) / 2 : 50;
 
   // ── Arms (from the deltoid down) and legs ──
   const limb = (kind: 'arm' | 'leg', rings: Ring[], lead: Ring[]) => {
-    gb.tube(smooth(smooth([...lead, ...rings])), 28, (ring, s, c) => {
+    gb.tube(smooth(smooth([...lead, ...rings])), kind === 'leg' ? 36 : 28, (ring, s, c) => {
       const a = (ring.r - ring.l) / 2;
       const mid = (ring.l + ring.r) / 2;
       const x = mid + a * s;
-      let [zf, zb] = limbDepth(kind, a, ring.y, wristY);
-      if (kind === 'leg') {
-        // Upper thighs grow out of the hips: take the torso's depth (and the
-        // buttocks) there, easing into the leg's own profile further down,
-        // so there is no ledge at the crotch.
-        const w = smoothstep(crotchY, crotchY + 46, ring.y);
-        const k = Math.sqrt(Math.max(0, 1 - ((x - cx) / (hipA * 1.04)) ** 2));
-        const y = Math.min(ring.y, crotchY);
-        zf = zf * w + torsoDepth(x, y, hipA, Math.max(c, 0.001)) * k * (1 - w);
-        zb = zb * w + torsoDepth(x, ring.y, hipA, Math.min(c, -0.001)) * k * (1 - w);
-      }
-      return [x, c >= 0 ? c * zf : c * zb];
+      const [zf, zb] = limbDepth(kind, a, ring.y, wristY);
+      if (kind === 'arm') return [x, c >= 0 ? c * zf : c * zb];
+      // Upper thighs grow out of the hips: take the torso's depth there,
+      // easing into the leg's own profile further down (no ledge at the
+      // crotch). The buttocks ride on top at full strength down to the
+      // gluteal fold, which sits below the crotch.
+      const w = smoothstep(crotchY, crotchY + 46, ring.y);
+      const k = Math.sqrt(Math.max(0, 1 - ((x - cx) / (hipA * 1.04)) ** 2));
+      const y = Math.min(ring.y, crotchY);
+      if (c >= 0) return [x, c * (zf * w + torsoBase(y, hipA, 1) * k * (1 - w))];
+      const back = zb * w + torsoBase(y, hipA, -1) * k * (1 - w);
+      return [x, c * back - moundAt(x, ring.y, c)];
     });
   };
   limb('arm', parts.armL, leadL);

@@ -27,7 +27,11 @@ import type { BodyMesh } from './bodyMesh';
 //     itself, so pages that mount/unmount the viewer never leak contexts.
 // ─────────────────────────────────────────────────────────────────────────
 
-const AUTO_SPEED = 0.42;          // rad/s → one turn ≈ 15 s
+// Auto-rotation lingers on the front and back (where the muscle art is
+// sharpest) and moves briskly through the side views: speed follows sin².
+const AUTO_SPEED_MIN = 0.26;      // rad/s, facing front/back
+const AUTO_SPEED_MAX = 0.95;      // rad/s, edge-on  → one turn ≈ 14 s
+const AUTO_FRAME_MS = 32;         // ~30 fps is plenty for a slow turn
 const RESUME_AFTER_MS = 2500;     // idle time before auto-rotation resumes
 const DRAG_GAIN = 0.011;          // rad per CSS px
 const FRICTION = 3.2;             // inertia decay (1/s)
@@ -110,6 +114,7 @@ export class BodyScene {
     canvas.addEventListener('pointermove', this.onPointerMove);
     canvas.addEventListener('pointerup', this.onPointerUp);
     canvas.addEventListener('pointercancel', this.onPointerUp);
+    canvas.addEventListener('lostpointercapture', this.onPointerUp);
     canvas.addEventListener('webglcontextlost', this.onContextLost);
     document.addEventListener('visibilitychange', this.onVisibility);
 
@@ -176,6 +181,11 @@ export class BodyScene {
     this.wake();
   }
 
+  setReducedMotion(on: boolean): void {
+    this.opts.reducedMotion = on;
+    this.wake(true);
+  }
+
   resize(width: number, height: number): void {
     if (width <= 0 || height <= 0) return;
     this.renderer.setSize(width, height, false);
@@ -194,6 +204,7 @@ export class BodyScene {
     c.removeEventListener('pointermove', this.onPointerMove);
     c.removeEventListener('pointerup', this.onPointerUp);
     c.removeEventListener('pointercancel', this.onPointerUp);
+    c.removeEventListener('lostpointercapture', this.onPointerUp);
     c.removeEventListener('webglcontextlost', this.onContextLost);
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.clearBody();
@@ -258,6 +269,13 @@ export class BodyScene {
   private readonly tick = (ts: number): void => {
     this.raf = 0;
     if (this.disposed) return;
+    // Plain auto-rotation renders at ~30 fps (high-refresh phones would
+    // otherwise burn 90–120 frames a second); drags and turns run full rate.
+    const idleSpin = !this.dragging && this.target === null && Math.abs(this.velocity) <= 0.02;
+    if (idleSpin && this.lastTs && ts - this.lastTs < AUTO_FRAME_MS - 2) {
+      this.raf = requestAnimationFrame(this.tick);
+      return;
+    }
     const dt = this.lastTs ? Math.min(0.05, (ts - this.lastTs) / 1000) : 0;
     this.lastTs = ts;
 
@@ -275,7 +293,10 @@ export class BodyScene {
       } else {
         this.velocity = 0;
         const idle = performance.now() - this.lastInteraction > RESUME_AFTER_MS;
-        if (this.opts.autoRotate && !this.opts.reducedMotion && idle) this.angle += AUTO_SPEED * dt;
+        if (this.opts.autoRotate && !this.opts.reducedMotion && idle) {
+          const edge = Math.sin(this.angle) ** 2;
+          this.angle += (AUTO_SPEED_MIN + (AUTO_SPEED_MAX - AUTO_SPEED_MIN) * edge) * dt;
+        }
       }
     }
     this.pivot.rotation.y = this.angle;

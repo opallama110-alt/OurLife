@@ -1,6 +1,7 @@
 import { lazy, ReactNode, Suspense, useCallback, useEffect, useState } from 'react';
 import type { BodyGender } from '../hud/BodyAnatomy';
 import { prefersReducedMotion } from '../../hooks/usePresence';
+import type { Body3DCanvasProps } from './Body3DCanvas';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Body3D — rotating 3D anatomy avatar (both genders) with highlighted
@@ -13,7 +14,27 @@ import { prefersReducedMotion } from '../../hooks/usePresence';
 // instead, so the card is never empty.
 // ─────────────────────────────────────────────────────────────────────────
 
-const Body3DCanvas = lazy(() => import('./Body3DCanvas'));
+// After a deploy the old chunk name can 404; without this catch React.lazy
+// would throw to the nearest error boundary (none) and take the page down.
+// Resolve to a stub that reports the failure so the 2D view stays.
+function Body3DUnavailable({ onError }: Body3DCanvasProps) {
+  useEffect(() => { onError(new Error('3D chunk failed to load')); }, [onError]);
+  return null;
+}
+const Body3DCanvas = lazy(() => import('./Body3DCanvas').catch(() => ({ default: Body3DUnavailable })));
+
+/** prefers-reduced-motion, kept live (users can flip it while the app runs). */
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(prefersReducedMotion);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onChange = () => setReduced(mq.matches);
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+  return reduced;
+}
 
 let webgl2Support: boolean | null = null;
 /** three.js r163+ requires WebGL2; probe once per session. */
@@ -68,6 +89,7 @@ export default function Body3D({
 }: Body3DProps) {
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
+  const reducedMotion = useReducedMotion();
   const can3D = !failed && supportsWebGL2();
   const mode: Body3DMode = can3D && ready ? '3d' : '2d';
 
@@ -90,7 +112,7 @@ export default function Body3D({
             gender={gender}
             highlighted={highlighted}
             autoRotate={autoRotate}
-            reducedMotion={prefersReducedMotion()}
+            reducedMotion={reducedMotion}
             facing={facing}
             facingKey={facingKey}
             onReady={handleReady}
