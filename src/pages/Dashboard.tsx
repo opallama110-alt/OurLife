@@ -7,7 +7,8 @@ import { liveWorkoutStreak } from '../utils/liveStreak';
 import { computeFatigue } from '../services/fatigueService';
 import { StatusCard } from '../components/StatusCard';
 import { SystemNotification, BodyAnatomy, splitExhaustedByView, muscleGroupIdPrefixes, CornerBracket, BodyTurntable, BodyViewToggle, HudDialog, CountUp } from '../components/hud';
-import Body3D, { initialBody3DMode, type Body3DMode } from '../components/anatomy3d/Body3D';
+import Body3D, { initialBody3DMode, supportsWebGL2, type Body3DMode } from '../components/anatomy3d/Body3D';
+import { BodyRenderToggle, useBodyRenderPref } from '../components/anatomy3d/BodyRenderToggle';
 import { RecoveryCountdown, getRecoveringMuscles } from '../components/dashboard/RecoveryCountdown';
 import { useNavigate } from 'react-router-dom';
 
@@ -188,7 +189,9 @@ export const Dashboard: React.FC = () => {
   // BodyTurntable (DOM-driven spring), so this page never re-renders per frame.
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
   // 3D body when WebGL is available; the 2D turntable (and its toggle) is the fallback.
-  const [bodyMode, setBodyMode] = useState<Body3DMode>(initialBody3DMode);
+  const [renderPref, setRenderPref] = useBodyRenderPref();
+  const [bodyMode, setBodyMode] = useState<Body3DMode>(() =>
+    renderPref === '2d' ? '2d' : initialBody3DMode());
 
   // The edit sheets keep showing the last typed value while they slide away
   // (the save handlers clear the field in the same tick they close).
@@ -579,6 +582,7 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <CornerBracket className="d-body-stage" tone="cyan" size={11} inset={6}>
+          {supportsWebGL2() && <BodyRenderToggle value={renderPref} onChange={setRenderPref} />}
           {bodyMode === '2d' && <BodyViewToggle view={bodyView} onChange={setBodyView} />}
 
           <div className="d-body-fig-wrap">
@@ -586,6 +590,7 @@ export const Dashboard: React.FC = () => {
             <Body3D
               gender={gender}
               highlighted={exhaustedIds}
+              enabled={renderPref === '3d'}
               onModeChange={setBodyMode}
               label={`Model anatomi 3D, ${drawnExhaustedCount} otot lelah — geser untuk memutar`}
               fallback={

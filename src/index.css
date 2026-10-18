@@ -2604,6 +2604,23 @@ input, select, textarea {
   color: white;
   text-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
 }
+/* 3D | 2D render switch (BodyRenderToggle): same control, cyan, mirrored to
+   the top-left so it never collides with the FRONT/BACK toggle on the right. */
+.d-render-toggle {
+  right: auto;
+  left: 12px;
+  background: rgba(34, 211, 238, 0.06);
+  border-color: rgba(34, 211, 238, 0.4);
+}
+.d-render-toggle::before {
+  background: linear-gradient(135deg, #22D3EE, #0891B2);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.d-render-toggle[data-view="2d"]::before { transform: translateX(100%); }
+/* The switch now owns the top-left corner, where the turntable's one-time
+   "GESER" hint used to sit — drop the hint just below it. */
+.d-render-toggle ~ .d-body-fig-wrap .bt-hint,
+.d-render-toggle ~ .ae-bodystage-fig .bt-hint { top: 58px; }
 
 /* ─── BodyTurntable (hud/BodyTurntable.tsx) ───
    Real 3D turntable. The stage owns the perspective; `.bt-card` is the

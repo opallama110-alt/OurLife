@@ -85,6 +85,11 @@ export interface Body3DProps {
   className?: string;
   /** Accessible description of what the body shows. */
   label?: string;
+  /**
+   * False = the user picked the 2D view: the three.js chunk isn't loaded at
+   * all and the fallback is shown as mode '2d'. Default true.
+   */
+  enabled?: boolean;
 }
 
 const NONE: readonly string[] = [];
@@ -99,6 +104,7 @@ export default function Body3D({
   onModeChange,
   className = '',
   label = 'Model anatomi 3D — geser untuk memutar',
+  enabled = true,
 }: Body3DProps) {
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
@@ -106,8 +112,13 @@ export default function Body3D({
   // so the hand-over never shows an empty frame.
   const [faded, setFaded] = useState(false);
   const reducedMotion = useReducedMotion();
-  const can3D = !failed && supportsWebGL2();
+  const can3D = enabled && !failed && supportsWebGL2();
   const mode: Body3DMode = !can3D ? '2d' : ready ? '3d' : 'loading';
+
+  // Switching to 2D unmounts the canvas; a later switch back mounts a fresh
+  // one, which must count as "loading" until its first frame — otherwise the
+  // fallback would be dropped before the new canvas has drawn anything.
+  useEffect(() => { if (!can3D) setReady(false); }, [can3D]);
 
   useEffect(() => { onModeChange?.(mode); }, [mode, onModeChange]);
   useEffect(() => {

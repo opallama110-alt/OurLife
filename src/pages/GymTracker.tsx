@@ -25,7 +25,8 @@ import { achievementService } from '../services/achievementService';
 import AnatomyViewer, { getViewForMuscle } from '../components/Anatomy/AnatomyViewer';
 import { BodyViewToggle } from '../components/hud/BodyTurntable';
 import { toBodyGender } from '../components/hud/BodyAnatomy';
-import Body3D, { initialBody3DMode, type Body3DMode } from '../components/anatomy3d/Body3D';
+import Body3D, { initialBody3DMode, supportsWebGL2, type Body3DMode } from '../components/anatomy3d/Body3D';
+import { BodyRenderToggle, useBodyRenderPref } from '../components/anatomy3d/BodyRenderToggle';
 import { RankBadge, rankFromTierName } from '../components/hud';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
 import { getLocalDateString } from '../utils/dateUtils';
@@ -516,7 +517,9 @@ export const GymTracker: React.FC = () => {
   // root so it survives re-renders within an exercise.
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
   // 3D body when WebGL is available; the 2D viewer (and its toggle) is the fallback.
-  const [stageMode, setStageMode] = useState<Body3DMode>(initialBody3DMode);
+  const [renderPref, setRenderPref] = useBodyRenderPref();
+  const [stageMode, setStageMode] = useState<Body3DMode>(() =>
+    renderPref === '2d' ? '2d' : initialBody3DMode());
   // Each new exercise turns the body to the side where its primary muscle is
   // visible (e.g. hamstring curl → back), so the red highlight is never hidden
   // on the far face. The user can still tap/swipe freely within an exercise.
@@ -1014,12 +1017,16 @@ export const GymTracker: React.FC = () => {
             <section className="ae-bodystage">
               <span className="brk-c brk-tl" /><span className="brk-c brk-tr" />
               <span className="brk-c brk-bl" /><span className="brk-c brk-br" />
+              {supportsWebGL2() && (
+                <BodyRenderToggle value={renderPref} onChange={setRenderPref} />
+              )}
               {stageMode === '2d' && (
                 <BodyViewToggle view={bodyView} onChange={setBodyView} className="ae-bodystage-toggle" />
               )}
               <div className="ae-bodystage-fig">
                 <Body3D
                   gender={toBodyGender(storageService.getUserState().gender)}
+                  enabled={renderPref === '3d'}
                   highlighted={getTrainedMuscleIds([
                     currentExercise.muscleGroup,
                     ...(currentExercise.secondaryMuscles || []),
