@@ -65,7 +65,7 @@ function mixHex(a: string, b: string, t: number): string {
  * builds with an extra layer that the 3D skin replaces with this tone.
  */
 export const bodyBaseColor = (gender: BodyGender): string =>
-  mixHex(DEEP, BODY, gender === 'female' ? 0.6 : 0.42);
+  mixHex(DEEP, BODY, gender === 'female' ? 0.5 : 0.42);
 
 const FACE_CSS: Record<Face, string> = {
   front: `
@@ -115,10 +115,16 @@ function themeCss(face: Face, gender: BodyGender, highlighted: readonly string[]
 // carries a hidden stray Illustrator stroke (.ba-0) outside the figure.
 // The translucent female breast overlay is excluded: it reaches past the
 // chest edge and would bridge the arm/chest gap, merging arm and torso.
+// The hair bun is lofted as its own round shape (extractBun), so it is left
+// out of the body mask on BOTH faces — the face mapping takes each face's top
+// from its mask, and the two must agree.
 const MASK_CSS: Record<Face, string> = {
-  front: '*{fill:#fff!important;stroke:none!important;opacity:1!important}#Pecs_female_breasts{display:none!important}',
-  back: '*{fill:#fff!important;stroke:none!important;opacity:1!important}.ba-0{display:none!important}',
+  front: '*{fill:#fff!important;stroke:none!important;opacity:1!important}#Pecs_female_breasts,#Hair_female_bun{display:none!important}',
+  back: '*{fill:#fff!important;stroke:none!important;opacity:1!important}.ba-0,#Hair_female_bun{display:none!important}',
 };
+/** Only the bun group, solid; everything else transparent. */
+const BUN_MASK_CSS = 'path,polygon{fill:#fff!important;stroke:none!important;opacity:0!important}'
+  + '#Hair_female_bun path,#Hair_female_bun polygon{opacity:1!important}';
 
 function withStyle(svg: string, css: string, w: number, h: number): string {
   return svg
@@ -185,9 +191,11 @@ export interface Silhouette {
  * Scan an SVG's silhouette into runs, one row per `step` art units.
  * Gaps narrower than `minGap` (anti-aliasing, finger slits) are bridged.
  */
-export async function extractSilhouette(svg: string, face: Face, step = 2, minGap = 1.5): Promise<Silhouette> {
+export async function extractSilhouette(
+  svg: string, face: Face, step = 2, minGap = 1.5, maskCss: string = MASK_CSS[face],
+): Promise<Silhouette> {
   const SCALE = 2;
-  const canvas = await rasterize(svg, MASK_CSS[face], SCALE, true);
+  const canvas = await rasterize(svg, maskCss, SCALE, true);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('2D canvas unavailable');
   const { width, height } = canvas;
@@ -218,4 +226,11 @@ export async function extractSilhouette(svg: string, face: Face, step = 2, minGa
     }
   }
   return { rows, minX, maxX, minY, maxY };
+}
+
+/** Front silhouette of the hair bun (#Hair_female_bun), or null when the art has none. */
+export async function extractBun(svg: string): Promise<Silhouette | null> {
+  if (!svg.includes('id="Hair_female_bun"')) return null;
+  const sil = await extractSilhouette(svg, 'front', 1, 1.5, BUN_MASK_CSS);
+  return sil.rows.length >= 4 ? sil : null;
 }

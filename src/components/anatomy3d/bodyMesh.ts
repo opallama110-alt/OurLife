@@ -25,6 +25,25 @@ const ART_PULL = 0.94;
 const SHOULDER_BLEND = 42;
 /** Rows above the crotch over which the torso tucks into the thighs. */
 const HIP_TUCK = 18;
+/** Forward reach of the toes and backward reach of the heel (art units). */
+const FOOT_REACH = 44;
+const HEEL_REACH = 13;
+/** Thinnest a hand or finger row may get front-to-back (art units). */
+const HAND_MIN_DEPTH = 3.4;
+/** Narrowest half-width a hand/finger ring may get (fingertip slivers). */
+const HAND_MIN_HALF_WIDTH = 2.6;
+/**
+ * Arms hang slightly away from the body (≈4.5°) about the shoulder, so a
+ * gap opens between hand and thigh and the arms read as separate limbs
+ * from every angle. Only the geometry moves: the art coordinates stay put,
+ * so the muscle texture stays on its muscle.
+ */
+const ARM_ABDUCTION = Math.tan((4.5 * Math.PI) / 180);
+/** The heel is narrower than the forefoot (≈0.7× across the back of the foot). */
+const HEEL_WIDTH = 0.7;
+/** A hair bun is about as deep as it is wide and sits slightly behind the crown. */
+const BUN_DEPTH = 0.95;
+const BUN_BACK = 6;
 type PartKind = 'torso' | 'arm' | 'leg';
 
 const smoothstep = (e0: number, e1: number, x: number) => {
@@ -83,8 +102,10 @@ const SHAPE: Record<BodyGender, GenderShape> = {
   female: {
     torsoDepth: 0.94,
     lumbar: 5,
-    chest: { height: 19, cxOff: 21, halfW: 15.5, cy: 213, up: 32, down: 16, lower: 0.6 },
-    glute: { height: 17, cxOff: 21.5, halfW: 18.5, cy: 340, up: 48, down: 30, lower: 0.75 },
+    // Centred under the art's breast/glute overlays (chest x≈174.75, y182–229;
+    // glute fold y≈359–365) so the projection sits under its texture.
+    chest: { height: 19, cxOff: 19, halfW: 17.5, cy: 211, up: 28.5, down: 18, lower: 0.6 },
+    glute: { height: 17, cxOff: 24.5, halfW: 24, cy: 334, up: 34, down: 30, lower: 0.75 },
   },
 };
 
@@ -113,7 +134,9 @@ const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 function limbDepth(kind: 'arm' | 'leg', a: number, y: number, wristY: number): [number, number] {
   if (kind === 'arm') {
     const k = mix(0.95, 0.85, smoothstep(268, 292, y));     // upper arm → forearm
-    const d = a * mix(k, 0.45, smoothstep(wristY - 6, wristY + 6, y)); // → flat hand
+    // A hand is about half as thick as it is wide; any thinner and it reads
+    // as a blade from the side, so keep a floor under the finger rows too.
+    const d = Math.max(HAND_MIN_DEPTH, a * mix(k, 0.6, smoothstep(wristY - 6, wristY + 6, y)));
     return [d, d];
   }
   let zf = mix(0.92, 0.88, smoothstep(408, 432, y));        // thigh → knee
@@ -122,10 +145,16 @@ function limbDepth(kind: 'arm' | 'leg', a: number, y: number, wristY: number): [
   zb = mix(zb, 1.05, smoothstep(438, 462, y));               // bulges backwards
   zf = mix(zf, 0.85, smoothstep(503, 527, y));               // calf → ankle
   zb = mix(zb, 0.85, smoothstep(503, 527, y));
-  // Ankle → foot: the front view shows the foot end-on, so stretch the
-  // lowest rings forward into a foot and keep a small heel behind.
-  const t = smoothstep(536, 562, y);
-  return [mix(a * zf, 44, t), mix(a * zb, 12, t)];
+  // Ankle → foot: the front view shows the foot end-on, so the lowest rings
+  // are stretched forward into a foot. The reach grows steadily down to the
+  // sole, giving a sloped instep rather than a standing slab, and eases off
+  // in the last rows so the toes end rounded. The heel keeps a small,
+  // rounded projection behind the ankle.
+  const toe = FOOT_REACH * (1 - 0.14 * smoothstep(570, 580, y));
+  const front = mix(a * zf, toe, smoothstep(528, 578, y));
+  const heel = HEEL_REACH * (1 - 0.2 * smoothstep(570, 580, y));
+  const back = mix(a * zb, heel, smoothstep(538, 566, y));
+  return [front, back];
 }
 
 /** Bridge noise: limit how fast a run edge may move between rows. */
@@ -230,16 +259,25 @@ class GeometryBuilder {
   art: number[] = [];
   indices: number[] = [];
 
-  /** One closed tube through the rings, capped at both ends. */
-  tube(rings: Ring[], segs: number, ringAt: (ring: Ring, s: number, c: number) => [number, number]): void {
+  /**
+   * One closed tube through the rings, capped at both ends. `shiftX` moves a
+   * ring's geometry sideways without moving where it samples the art.
+   */
+  tube(
+    rings: Ring[],
+    segs: number,
+    ringAt: (ring: Ring, s: number, c: number) => [number, number],
+    shiftX?: (ring: Ring) => number,
+  ): void {
     if (rings.length < 2) return;
     const base = this.positions.length / 3;
     for (const ring of rings) {
       const mid = (ring.l + ring.r) / 2;
+      const dx = shiftX ? shiftX(ring) : 0;
       for (let i = 0; i < segs; i++) {
         const th = (i / segs) * Math.PI * 2;
         const [x, z] = ringAt(ring, Math.sin(th), Math.cos(th));
-        this.positions.push(x, ring.y, z);
+        this.positions.push(x + dx, ring.y, z);
         // Sample the art slightly inside the outline: seen edge-on, the
         // outline pixels would otherwise smear into a dark band.
         this.art.push(mid + (x - mid) * ART_PULL, ring.y);
@@ -300,8 +338,12 @@ export interface BodyMesh {
   maxY: number;
 }
 
-/** Build the 3D body for one gender from its front silhouette. */
-export function buildBodyMesh(sil: Silhouette, gender: BodyGender): BodyMesh {
+/**
+ * Build the 3D body for one gender from its front silhouette. A hair bun,
+ * when the art has one, is passed separately and lofted as its own round
+ * shape — merged into the head rows it turned the head into a chess pawn.
+ */
+export function buildBodyMesh(sil: Silhouette, gender: BodyGender, bun: Silhouette | null = null): BodyMesh {
   const parts = splitParts(sil);
   const { cx, wristY } = parts;
   const shape = SHAPE[gender];
@@ -390,11 +432,31 @@ export function buildBodyMesh(sil: Silhouette, gender: BodyGender): BodyMesh {
   };
 
   // ── Arms (from the deltoid down) and legs ──
-  const limb = (kind: 'arm' | 'leg', rings: Ring[], lead: Ring[]) => {
-    gb.tube(smooth(smooth([...lead, ...rings])), kind === 'leg' ? 36 : 28, (ring, s, c) => {
+  /** Fingertip rows are slivers in the art; give them a minimum width. */
+  const handFloor = (rings: Ring[]) => rings.map(r => {
+    const a = (r.r - r.l) / 2;
+    if (r.y < wristY || a >= HAND_MIN_HALF_WIDTH) return r;
+    const mid = (r.l + r.r) / 2;
+    return { y: r.y, l: mid - HAND_MIN_HALF_WIDTH, r: mid + HAND_MIN_HALF_WIDTH };
+  });
+  /** Outward swing of an arm ring about its shoulder (see ARM_ABDUCTION). */
+  const abduct = (side: -1 | 1, armpitY: number) => {
+    const pivot = armpitY - 20;
+    return (ring: Ring) => side * Math.max(0, ring.y - pivot) * ARM_ABDUCTION
+      // Ease in over the deltoid so the arm doesn't tear away from the torso.
+      * smoothstep(pivot, armpitY + 24, ring.y);
+  };
+  const limb = (kind: 'arm' | 'leg', rings: Ring[], lead: Ring[], shiftX?: (ring: Ring) => number) => {
+    const all = smooth(smooth([...lead, ...rings]));
+    gb.tube(kind === 'arm' ? handFloor(all) : all, kind === 'leg' ? 36 : 28, (ring, s, c) => {
       const a = (ring.r - ring.l) / 2;
       const mid = (ring.l + ring.r) / 2;
-      const x = mid + a * s;
+      // Feet: narrow the back half towards the heel (blended around the
+      // sides, so there is no seam where front meets back).
+      const heel = kind === 'leg'
+        ? mix(1, HEEL_WIDTH, smoothstep(540, 560, ring.y) * smoothstep(0, 0.7, -c))
+        : 1;
+      const x = mid + a * s * heel;
       const [zf, zb] = limbDepth(kind, a, ring.y, wristY);
       if (kind === 'arm') return [x, c >= 0 ? c * zf : c * zb];
       // Upper thighs grow out of the hips: take the torso's depth there,
@@ -410,10 +472,10 @@ export function buildBodyMesh(sil: Silhouette, gender: BodyGender): BodyMesh {
       if (c >= 0) return [x, c * (zf * w + torsoBase(y, hipA, 1) * k * (1 - w)) * ease];
       const back = zb * w + torsoBase(y, hipA, -1) * k * (1 - w);
       return [x, (c * back - moundAt(x, ring.y, c)) * ease];
-    });
+    }, shiftX);
   };
-  limb('arm', parts.armL, leadL);
-  limb('arm', parts.armR, leadR);
+  limb('arm', parts.armL, leadL, topL ? abduct(-1, topL.y) : undefined);
+  limb('arm', parts.armR, leadR, topR ? abduct(1, topR.y) : undefined);
 
   // ── Legs: begin inside the hips, from each half of the lowest torso rows ──
   const hips = parts.torso.filter(r => r.y > crotchY - HIP_TUCK - 14);
@@ -435,5 +497,20 @@ export function buildBodyMesh(sil: Silhouette, gender: BodyGender): BodyMesh {
   limb('leg', feet(parts.legL), legLead('l'));
   limb('leg', feet(parts.legR), legLead('r'));
 
-  return { geometry: gb.build(), cx, minY: sil.minY, maxY: sil.maxY };
+  // ── Hair bun: a round, slightly backset knot on the crown ──
+  let minY = sil.minY;
+  if (bun) {
+    const rings = smooth(bun.rows.map(row => ({
+      y: row.y,
+      l: row.runs[0][0],
+      r: row.runs[row.runs.length - 1][1],
+    })));
+    gb.tube(rings, 24, (ring, s, c) => {
+      const a = (ring.r - ring.l) / 2;
+      return [(ring.l + ring.r) / 2 + a * s, -BUN_BACK + c * a * BUN_DEPTH];
+    });
+    minY = Math.min(minY, bun.minY);
+  }
+
+  return { geometry: gb.build(), cx, minY, maxY: sil.maxY };
 }

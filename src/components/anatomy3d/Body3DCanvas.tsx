@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import type { BodyGender } from '../hud/BodyAnatomy';
-import { bodyBaseColor, extractSilhouette, loadBodySvg, renderFace, type Silhouette } from './bodyArt';
+import { bodyBaseColor, extractBun, extractSilhouette, loadBodySvg, renderFace, type Silhouette } from './bodyArt';
 import { buildBodyMesh } from './bodyMesh';
 import type { FaceMapping } from './bodyMaterial';
 import { BodyScene } from './BodyScene';
@@ -50,6 +50,8 @@ interface BodyAssets {
   backSvg: string;
   front: Silhouette;
   back: Silhouette;
+  /** Hair bun, lofted as its own round shape (female art only). */
+  bun: Silhouette | null;
   mapping: FaceMapping;
 }
 const assetCache = new Map<BodyGender, Promise<BodyAssets>>();
@@ -59,11 +61,12 @@ function loadAssets(gender: BodyGender): Promise<BodyAssets> {
   if (!p) {
     p = (async () => {
       const [frontSvg, backSvg] = await Promise.all([loadBodySvg(gender, 'front'), loadBodySvg(gender, 'back')]);
-      const [front, back] = await Promise.all([
+      const [front, back, bun] = await Promise.all([
         extractSilhouette(frontSvg, 'front'),
         extractSilhouette(backSvg, 'back'),
+        extractBun(frontSvg),
       ]);
-      return { frontSvg, backSvg, front, back, mapping: faceMapping(front, back) };
+      return { frontSvg, backSvg, front, back, bun, mapping: faceMapping(front, back) };
     })();
     p.catch(() => assetCache.delete(gender));
     assetCache.set(gender, p);
@@ -182,7 +185,7 @@ function Body3DCanvas({
       const [front, back] = await renderFaces(gender, assets, lit);
       const scene = sceneRef.current;
       if (cancelled || !scene) return;
-      scene.setBody(buildBodyMesh(assets.front, gender), front, back, assets.mapping, bodyBaseColor(gender));
+      scene.setBody(buildBodyMesh(assets.front, gender, assets.bun), front, back, assets.mapping, bodyBaseColor(gender));
       loadedGenderRef.current = gender;
       renderedKeyRef.current = lit.join('|');
       setLoadedTick(t => t + 1);
