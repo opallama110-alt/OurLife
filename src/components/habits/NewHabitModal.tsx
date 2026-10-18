@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Plus, Trash2, X } from 'lucide-react';
 import { usePresence } from '../../hooks/usePresence';
@@ -57,13 +57,28 @@ export type NewHabitPayload = {
   subTasks: NewHabitSubTask[];
 };
 
+/** The fields a Habit actually persists — all that edit mode shows. */
+export type HabitEditDraft = {
+  title: string;
+  description: string;
+  subTasks: NewHabitSubTask[];
+};
+
 interface Props {
   open: boolean;
   onClose: () => void;
   onCreate: (data: NewHabitPayload) => void;
+  /** When set, the sheet edits this habit instead of creating a new one. */
+  editing?: HabitEditDraft | null;
+  onSave?: (data: HabitEditDraft) => void;
 }
 
-export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
+// No rounding: decimal targets are valid (the onboarding quest stores e.g. 2.5 km).
+const normalizeTarget = (t: number | undefined): number | undefined =>
+  t !== undefined && Number.isFinite(t) && t > 0 ? t : undefined;
+
+export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate, editing = null, onSave }) => {
+  const isEdit = editing !== null;
   const { mounted, state } = usePresence(open, EXIT_MS);
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
@@ -84,19 +99,50 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
   /** The enter slide has finished — dragging is only allowed after it. */
   const enteredRef = useRef(false);
   const dragRef = useRef<{ id: number; y0: number; t0: number; dy: number } | null>(null);
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+  /** Mode of the previous session, so an edit never carries into a create. */
+  const lastModeRef = useRef<'create' | 'edit'>('create');
+  /** Rows whose target the user typed into; only these get normalized on save,
+   *  so an edit never rewrites a stored target nobody touched. */
+  const touchedTargetsRef = useRef<Set<string>>(new Set());
 
   const reset = () => {
     setTitle(''); setDesc(''); setCat('fitness'); setFreq('daily');
     setCustomDays(new Set([0, 2, 4]));
     setSubTasks([]);
+    touchedTargetsRef.current = new Set();
   };
 
   const focusTitle = () => {
     const panel = panelRef.current;
-    if (panel && !panel.contains(document.activeElement)) {
-      titleRef.current?.focus({ preventScroll: true });
+    const input = titleRef.current;
+    if (panel && input && !panel.contains(document.activeElement)) {
+      input.focus({ preventScroll: true });
+      // Editing: caret after the existing title, not before it.
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
     }
   };
+
+  // Load the habit being edited before the enter slide's first painted frame,
+  // so the sheet never flashes the previous draft. Keyed on `open` only: the
+  // parent rebuilds `editing` every render, which must not wipe typed changes.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const draft = editingRef.current;
+    if (draft) {
+      setTitle(draft.title);
+      setDesc(draft.description);
+      setSubTasks(draft.subTasks.map(st => ({ ...st })));
+      touchedTargetsRef.current = new Set();
+      resetOnCloseRef.current = false;
+      lastModeRef.current = 'edit';
+    } else if (lastModeRef.current === 'edit') {
+      reset();
+      lastModeRef.current = 'create';
+    }
+  }, [open]);
 
   // Open: Esc closes; focus returns to the trigger on close.
   useEffect(() => {
@@ -139,10 +185,15 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
   };
 
   const addSubTask = () => {
-    setSubTasks(prev => [
-      ...prev,
-      { id: `st_${Date.now()}_${prev.length}`, label: '', target: undefined },
-    ]);
+    setSubTasks(prev => {
+      // Ids key the completion history, so a new row must never reuse one
+      // still on the habit (possible when editing: deletes shrink prev.length).
+      const taken = new Set(prev.map(st => st.id));
+      let n = prev.length;
+      let id = `st_${Date.now()}_${n}`;
+      while (taken.has(id)) id = `st_${Date.now()}_${++n}`;
+      return [...prev, { id, label: '', target: undefined }];
+    });
   };
   const updateSubTask = (id: string, patch: Partial<NewHabitSubTask>) => {
     setSubTasks(prev => prev.map(st => (st.id === id ? { ...st, ...patch } : st)));
@@ -153,6 +204,20 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
 
   const submit = () => {
     if (!title.trim()) return;
+    // Strip empty-label sub-tasks before persisting — gives the user room
+    // to add a row then abandon it without polluting the habit definition.
+    const cleanSubTasks = subTasks
+      .map(st => ({
+        ...st,
+        label: st.label.trim(),
+        target: touchedTargetsRef.current.has(st.id) ? normalizeTarget(st.target) : st.target,
+      }))
+      .filter(st => st.label.length > 0);
+    if (isEdit) {
+      onSave?.({ title: title.trim(), description: desc.trim(), subTasks: cleanSubTasks });
+      onClose();
+      return;
+    }
     let days: number[];
     if (freq === 'daily') days = [0, 1, 2, 3, 4, 5, 6];
     else if (freq === 'work') days = [0, 1, 2, 3, 4];
@@ -161,11 +226,6 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
       customDays.forEach((d) => days.push(d));
       days.sort((a, b) => a - b);
     }
-    // Strip empty-label sub-tasks before persisting — gives the user room
-    // to add a row then abandon it without polluting the habit definition.
-    const cleanSubTasks = subTasks
-      .map(st => ({ ...st, label: st.label.trim() }))
-      .filter(st => st.label.length > 0);
     onCreate({
       title: title.trim(),
       description: desc.trim(),
@@ -240,8 +300,8 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
         <div className="nh-handle" aria-hidden="true" {...dragHandlers} />
         <div className="nh-head" {...dragHandlers}>
           <div className="nh-head-info">
-            <div className="hud-label-sm fz-cyan">PROTOKOL BARU</div>
-            <h2 className="nh-title" id={titleId}>Tambah Habit</h2>
+            <div className="hud-label-sm fz-cyan">{isEdit ? 'EDIT PROTOKOL' : 'PROTOKOL BARU'}</div>
+            <h2 className="nh-title" id={titleId}>{isEdit ? 'Edit Habit' : 'Tambah Habit'}</h2>
           </div>
           <button className="nh-close" onClick={onClose} aria-label="Tutup" type="button">
             <X size={14} />
@@ -270,6 +330,9 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
             onChange={(e) => setDesc(e.target.value)} />
         </label>
 
+        {/* Category / frequency / XP aren't stored on Habit, so edit mode
+            leaves them out rather than show settings that wouldn't stick. */}
+        {!isEdit && (<>
         <div className="nh-field">
           <span className="nh-field-lbl">Kategori</span>
           <div className="nh-cat-grid">
@@ -311,6 +374,7 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
             </div>
           )}
         </div>
+        </>)}
 
         {/* Sub-tasks editor — optional. Empty list = single-toggle habit.
             When populated, the habit card shows a per-row checklist and
@@ -344,13 +408,14 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
                   />
                   <input
                     type="number"
-                    inputMode="numeric"
+                    inputMode="decimal"
+                    step="any"
                     className="nh-input nh-subtask-target"
                     placeholder="100"
-                    min={1}
                     value={st.target ?? ''}
                     onChange={(e) => {
                       const v = e.target.value;
+                      touchedTargetsRef.current.add(st.id);
                       updateSubTask(st.id, { target: v === '' ? undefined : Number(v) });
                     }}
                   />
@@ -368,21 +433,29 @@ export const NewHabitModal: React.FC<Props> = ({ open, onClose, onCreate }) => {
           )}
         </div>
 
-        <div className="nh-xp-preview">
-          <div className="nh-xp-preview-left">
-            <span className="hud-label-sm">REWARD XP</span>
-            <span className="nh-xp-preview-help">per checkmark</span>
+        {!isEdit && (
+          <div className="nh-xp-preview">
+            <div className="nh-xp-preview-left">
+              <span className="hud-label-sm">REWARD XP</span>
+              <span className="nh-xp-preview-help">per checkmark</span>
+            </div>
+            {/* Keyed so the value pops when the frequency changes it. */}
+            <div className="nh-xp-preview-val" key={xpReward}>+{xpReward} XP</div>
           </div>
-          {/* Keyed so the value pops when the frequency changes it. */}
-          <div className="nh-xp-preview-val" key={xpReward}>+{xpReward} XP</div>
-        </div>
+        )}
+
+        {isEdit && (
+          <p className="nh-subtasks-hint">
+            Riwayat centang & streak tidak berubah. Sub-task baru mulai dari kosong.
+          </p>
+        )}
 
         <div className="nh-actions">
           <button type="button" className="nh-cancel" onClick={onClose}>Batal</button>
           <button type="button" className={`nh-save ${ready ? '' : 'is-disabled'}`}
             disabled={!ready} onClick={submit}>
             <Check size={14} />
-            <span>Simpan Habit</span>
+            <span>{isEdit ? 'Simpan Perubahan' : 'Simpan Habit'}</span>
           </button>
         </div>
       </div>

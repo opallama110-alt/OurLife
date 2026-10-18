@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import {
     User,
     onAuthStateChanged,
+    onIdTokenChanged,
     signInWithPopup,
     browserLocalPersistence,
     setPersistence,
@@ -25,6 +26,8 @@ interface AuthContextType {
     loading: boolean;
     hasProfile: boolean;
     emailVerified: boolean;
+    isAdmin: boolean;
+    refreshAdminClaim: () => Promise<boolean>;
     signInWithGoogle: () => Promise<void>;
     signInWithEmail: (email: string, password: string) => Promise<void>;
     signUpWithEmail: (email: string, password: string, displayName?: string) => Promise<void>;
@@ -37,11 +40,24 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Admin is the `admin` custom claim on the current ID token — the exact check
+// firestore.rules and database.rules.json enforce on every request.
+const readAdminClaim = async (u: User, forceRefresh = false): Promise<boolean> => {
+    try {
+        const { claims } = await u.getIdTokenResult(forceRefresh);
+        return claims.admin === true;
+    } catch (error) {
+        console.warn('[AuthContext] Could not read admin claim:', error);
+        return false;
+    }
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [hasProfile, setHasProfile] = useState(false);
     const [emailVerified, setEmailVerified] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -71,6 +87,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             active = false;
             unsubscribe();
         };
+    }, []);
+
+    // onAuthStateChanged doesn't fire on token refresh, so re-read the claim on
+    // every new ID token (hourly SDK refresh, forced refresh, sign-in/out) —
+    // otherwise a revoked or granted claim would only reach the UI after a reload.
+    useEffect(() => {
+        let latest = 0;
+        const unsubscribe = onIdTokenChanged(auth, async (currentUser) => {
+            const seq = ++latest;
+            const admin = currentUser ? await readAdminClaim(currentUser) : false;
+            // Ignore results superseded by a newer token event.
+            if (seq === latest) setIsAdmin(admin);
+        });
+        return unsubscribe;
     }, []);
 
     const signInWithGoogle = async () => {
@@ -117,6 +147,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return current.emailVerified;
     };
 
+    // A session token minted before the claim was granted won't carry it for up
+    // to an hour; forcing a refresh picks it up without signing out and back in.
+    const refreshAdminClaim = useCallback(async (): Promise<boolean> => {
+        const current = auth.currentUser;
+        if (!current) {
+            setIsAdmin(false);
+            return false;
+        }
+        const admin = await readAdminClaim(current, true);
+        // Drop the result if the user signed out or switched accounts mid-refresh.
+        if (auth.currentUser?.uid !== current.uid) return false;
+        setIsAdmin(admin);
+        return admin;
+    }, []);
+
     const sendPasswordReset = async (email: string) => {
         await sendPasswordResetEmail(auth, email.trim());
     };
@@ -151,6 +196,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             loading,
             hasProfile,
             emailVerified,
+            isAdmin,
+            refreshAdminClaim,
             signInWithGoogle,
             signInWithEmail,
             signUpWithEmail,

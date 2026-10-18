@@ -3765,13 +3765,6 @@ input, select, textarea {
   box-shadow: inset 0 1px 0 rgba(251, 146, 60, 0.18), 0 0 22px -10px rgba(251, 146, 60, 0.3);
   overflow: hidden;
 }
-.g-rank-progress-bar {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #FBBF24 0%, #FB923C 50%, #EF4444 100%);
-  box-shadow: 0 0 12px rgba(251, 146, 60, 0.5);
-}
 .g-rank-body {
   display: grid;
   grid-template-columns: auto auto 1fr;
@@ -6067,7 +6060,14 @@ input, select, textarea {
   display: inline-flex; align-items: center; gap: 4px;
 }
 .h-card-cue-ico { color: var(--orange); }
-.h-card-meta { display: flex; gap: 6px; align-items: center; }
+.h-card-meta,
+.h-card-stats,
+.h-card-actions { display: flex; gap: 6px; align-items: center; }
+/* Phones: stack edit/trash under the stat chips. In one row, chips + two
+   buttons squeezed the title column to ~100px at 375px and split words. */
+@media (max-width: 420px) {
+  .h-card-meta { flex-direction: column; align-items: flex-end; }
+}
 /* Streak chip: tiered StreakFlame + rolling number. The chip itself warms up
    with the flame level (data-lvl mirrors constants/streak flameLevel). */
 .h-card-streak {
@@ -6102,7 +6102,8 @@ input, select, textarea {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
-.h-card-trash {
+.h-card-trash,
+.h-card-edit {
   position: relative;
   width: 26px; height: 26px;
   background: transparent;
@@ -6114,9 +6115,12 @@ input, select, textarea {
   transition: color var(--dur-2) ease, border-color var(--dur-2) ease, background var(--dur-2) ease, transform var(--dur-1) ease;
 }
 /* Taller hit-area (the delete itself is behind a confirm dialog). */
-.h-card-trash::after { content: ""; position: absolute; inset: -9px -3px; }
+.h-card-trash::after,
+.h-card-edit::after { content: ""; position: absolute; inset: -9px -3px; }
 .h-card-trash:hover { color: var(--red); border-color: rgba(239, 68, 68, 0.4); }
 .h-card-trash:active { transform: scale(0.9); color: var(--red); background: rgba(239, 68, 68, 0.08); }
+.h-card-edit:hover { color: var(--cyan); border-color: rgba(34, 211, 238, 0.4); }
+.h-card-edit:active { transform: scale(0.9); color: var(--cyan); background: rgba(34, 211, 238, 0.08); }
 
 /* ─── Week row (.h-week / .h-day) ──────────────────────────────────────
    7 day-cells = the trailing 7 days (today−6 … today). Ported back from
@@ -9265,6 +9269,14 @@ input, select, textarea {
    with the browser while horizontal drags turn the body. */
 .body3d { position: relative; width: 100%; height: 100%; }
 .body3d-fallback { position: absolute; inset: 0; }
+/* Crossfade: the fallback fades out while the canvas fades in (it stays
+   mounted for the fade, then unmounts). Brief opacity on the turntable's
+   ancestor only flattens it for the fade, while it is static anyway. */
+.body3d[data-mode="3d"] > .body3d-fallback {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-4) var(--ease-out-expo);
+}
 .body3d-canvas {
   position: absolute;
   inset: 0;
@@ -9277,3 +9289,6 @@ input, select, textarea {
 .body3d-canvas > canvas { display: block; width: 100%; height: 100%; touch-action: pan-y; }
 .body3d-canvas.is-ready { opacity: 1; pointer-events: auto; }
 .body3d-canvas.is-ready:active { cursor: grabbing; }
+/* Keyboard turning (arrows / Enter): an inset ring, so card edges never clip it. */
+.body3d-canvas:focus { outline: none; }
+.body3d-canvas:focus-visible { outline: 1px solid var(--cyan); outline-offset: -3px; border-radius: 10px; }

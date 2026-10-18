@@ -25,7 +25,7 @@ import { achievementService } from '../services/achievementService';
 import AnatomyViewer, { getViewForMuscle } from '../components/Anatomy/AnatomyViewer';
 import { BodyViewToggle } from '../components/hud/BodyTurntable';
 import { toBodyGender } from '../components/hud/BodyAnatomy';
-import Body3D, { type Body3DMode } from '../components/anatomy3d/Body3D';
+import Body3D, { initialBody3DMode, type Body3DMode } from '../components/anatomy3d/Body3D';
 import { RankBadge, rankFromTierName } from '../components/hud';
 import { mapDBMuscleToUIKey, getTrainedMuscleIds } from '../constants/muscleMapping';
 import { getLocalDateString } from '../utils/dateUtils';
@@ -70,7 +70,6 @@ const XPHeader: React.FC<{ profile: GymProfile }> = ({ profile }) => {
   const rank = getRankForLevel(profile.level);
   return (
     <div className="g-rank-card">
-      <div className="g-rank-progress-bar" style={{ width: `${progress.percent}%` }} />
       <div className="g-rank-body">
         <div className="g-rank-medal">
           <RankBadge rank={rankFromTierName(rank.name)} size="md" isCurrent />
@@ -517,7 +516,7 @@ export const GymTracker: React.FC = () => {
   // root so it survives re-renders within an exercise.
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
   // 3D body when WebGL is available; the 2D viewer (and its toggle) is the fallback.
-  const [stageMode, setStageMode] = useState<Body3DMode>('2d');
+  const [stageMode, setStageMode] = useState<Body3DMode>(initialBody3DMode);
   // Each new exercise turns the body to the side where its primary muscle is
   // visible (e.g. hamstring curl → back), so the red highlight is never hidden
   // on the far face. The user can still tap/swipe freely within an exercise.

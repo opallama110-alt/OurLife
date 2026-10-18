@@ -6,9 +6,9 @@ import { computeFatigue } from '../services/fatigueService';
 import { achievementService } from '../services/achievementService';
 import { useAchievements } from '../context/AchievementContext';
 import {
-  Plus, Trash2, Trophy, Zap, Target, Loader2, Clock, Shield, Check, Sparkles, ListChecks,
+  Plus, Trash2, Trophy, Zap, Target, Loader2, Clock, Shield, Check, Sparkles, ListChecks, Pencil,
 } from 'lucide-react';
-import { NewHabitModal, NewHabitPayload } from '../components/habits/NewHabitModal';
+import { HabitEditDraft, NewHabitModal, NewHabitPayload } from '../components/habits/NewHabitModal';
 import { ConfirmDialog, CountUp, SysToast, useSysToasts } from '../components/hud';
 import { StreakFlame, StreakNumber } from '../components/streak';
 import { crossedMilestone, flameLevel, hashId, MILESTONE_COPY } from '../constants/streak';
@@ -270,6 +270,17 @@ export const HabitTracker: React.FC = () => {
   const habitsRef = useRef(habits);
   habitsRef.current = habits;
   const [showAddModal, setShowAddModal] = useState(false);
+  // Habit the sheet is editing (null = create). Deliberately kept after close
+  // so the header doesn't flip to "Tambah Habit" while the sheet slides away.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const editingHabit = editingId ? habits.find(h => h.id === editingId) ?? null : null;
+  const editDraft: HabitEditDraft | null = editingHabit && {
+    title: editingHabit.name,
+    description: editingHabit.cue || '',
+    subTasks: (editingHabit.subTasks || []).map(st => ({ id: st.id, label: st.label, target: st.target })),
+  };
+  const openCreate = () => { setEditingId(null); setShowAddModal(true); };
+  const openEdit = (id: string) => { setEditingId(id); setShowAddModal(true); };
   const { current: toast, push: pushToast } = useSysToasts();
   const [pendingDelete, setPendingDelete] = useState<Habit | null>(null);
   // The confirm dialog keeps rendering the last target while it plays its
@@ -450,6 +461,27 @@ export const HabitTracker: React.FC = () => {
     setJustAddedId(newHabit.id);
   };
 
+  // Only the definition changes: completedDates, completedSubTasks and streak
+  // are left alone, so an edit never re-scores today or any past day. Ids of
+  // removed sub-tasks may linger in completedSubTasks; nothing reads them.
+  const saveEdit = (data: HabitEditDraft) => {
+    const id = editingId;
+    const current = habitsRef.current.find(h => h.id === id);
+    if (!id || !current) return;
+    const subTasks: HabitSubTask[] | undefined = data.subTasks.length > 0
+      ? data.subTasks.map(st => ({ id: st.id, label: st.label, target: st.target }))
+      : undefined;
+    const next: Habit = { ...current, name: data.title, cue: data.description || undefined, subTasks };
+    const unchanged = current.name === next.name
+      && (current.cue || '') === (next.cue || '')
+      && JSON.stringify(current.subTasks || []) === JSON.stringify(next.subTasks || []);
+    if (unchanged) return;
+    const updated = habitsRef.current.map(h => (h.id === id ? next : h));
+    setHabits(updated);
+    storageService.saveHabits(updated);
+    pushToast({ tone: 'cyan', icon: <Pencil size={14} />, title: 'Habit diperbarui', sub: next.name });
+  };
+
   // Runs ~420ms after the confirm tap (after the card's collapse), so it must
   // not use the `habits` captured by that render: a check-off made during the
   // collapse would be overwritten. Build from the latest state instead.
@@ -486,7 +518,7 @@ export const HabitTracker: React.FC = () => {
       <button type="button" className="h-newproto reveal"
         ref={ctaRef}
         style={{ ['--reveal-i' as string]: 1 }}
-        onClick={() => setShowAddModal(true)}>
+        onClick={openCreate}>
         <span className="h-newproto-glow" />
         <span className="h-newproto-ico"><Plus size={14} /></span>
         <span>Protokol Baru</span>
@@ -571,27 +603,39 @@ export const HabitTracker: React.FC = () => {
                 </h3>
 
                 <div className="h-card-meta">
-                  <span
-                    className={`h-card-streak${atRisk ? ' is-risk' : ''}`}
-                    data-lvl={flameLevel(h.streak)}
-                    title={atRisk ? 'Selesaikan hari ini untuk menjaga streak' : 'Streak saat ini'}
-                    aria-label={`Streak ${h.streak} hari`}
-                  >
-                    <StreakFlame streak={h.streak} atRisk={atRisk} phase={hashId(h.id) % 1200} />
-                    <StreakNumber value={h.streak} />
-                  </span>
-                  <span className="h-card-xp" title="Total selesai sepanjang waktu" aria-label={`${completions} kali selesai`}>
-                    <Trophy size={12} />
-                    <StreakNumber value={completions} />
-                  </span>
-                  <button
-                    type="button"
-                    className="h-card-trash"
-                    onClick={() => { if (!leavingId) setPendingDelete(h); }}
-                    aria-label={`Hapus habit ${h.name}`}
-                  >
-                    <Trash2 size={12} />
-                  </button>
+                  <div className="h-card-stats">
+                    <span
+                      className={`h-card-streak${atRisk ? ' is-risk' : ''}`}
+                      data-lvl={flameLevel(h.streak)}
+                      title={atRisk ? 'Selesaikan hari ini untuk menjaga streak' : 'Streak saat ini'}
+                      aria-label={`Streak ${h.streak} hari`}
+                    >
+                      <StreakFlame streak={h.streak} atRisk={atRisk} phase={hashId(h.id) % 1200} />
+                      <StreakNumber value={h.streak} />
+                    </span>
+                    <span className="h-card-xp" title="Total selesai sepanjang waktu" aria-label={`${completions} kali selesai`}>
+                      <Trophy size={12} />
+                      <StreakNumber value={completions} />
+                    </span>
+                  </div>
+                  <div className="h-card-actions">
+                    <button
+                      type="button"
+                      className="h-card-edit"
+                      onClick={() => { if (!leavingId) openEdit(h.id); }}
+                      aria-label={`Edit habit ${h.name}`}
+                    >
+                      <Pencil size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      className="h-card-trash"
+                      onClick={() => { if (!leavingId) setPendingDelete(h); }}
+                      aria-label={`Hapus habit ${h.name}`}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -685,7 +729,7 @@ export const HabitTracker: React.FC = () => {
             <span className="h-empty-ico"><Target size={18} /></span>
             <div className="h-empty-title">Belum ada protokol</div>
             <div className="h-empty-sub">Mulai dari satu kebiasaan kecil — konsistensi &gt; intensitas.</div>
-            <button type="button" className="h-empty-cta" onClick={() => setShowAddModal(true)}>
+            <button type="button" className="h-empty-cta" onClick={openCreate}>
               <Plus size={14} /> Buat Protokol Pertama
             </button>
           </div>
@@ -731,11 +775,13 @@ export const HabitTracker: React.FC = () => {
         onCancel={() => setPendingDelete(null)}
       />
 
-      {/* New habit modal (slide-up) */}
+      {/* Create / edit habit sheet (slide-up) */}
       <NewHabitModal
         open={showAddModal}
         onClose={() => setShowAddModal(false)}
         onCreate={addHabit}
+        editing={editDraft}
+        onSave={saveEdit}
       />
     </div>
   );
