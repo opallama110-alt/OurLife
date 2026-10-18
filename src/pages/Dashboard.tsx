@@ -6,7 +6,8 @@ import { MUSCLE_GROUP_CONFIG } from '../config/constants';
 import { liveWorkoutStreak } from '../utils/liveStreak';
 import { computeFatigue } from '../services/fatigueService';
 import { StatusCard } from '../components/StatusCard';
-import { SystemNotification, BodyAnatomy, splitExhaustedByView, CornerBracket, BodyTurntable, BodyViewToggle, HudDialog, CountUp } from '../components/hud';
+import { SystemNotification, BodyAnatomy, splitExhaustedByView, muscleGroupIdPrefixes, CornerBracket, BodyTurntable, BodyViewToggle, HudDialog, CountUp } from '../components/hud';
+import Body3D, { type Body3DMode } from '../components/anatomy3d/Body3D';
 import { RecoveryCountdown, getRecoveringMuscles } from '../components/dashboard/RecoveryCountdown';
 import { useNavigate } from 'react-router-dom';
 
@@ -186,6 +187,8 @@ export const Dashboard: React.FC = () => {
   // Muscle Recovery body view. The turn itself is animated inside
   // BodyTurntable (DOM-driven spring), so this page never re-renders per frame.
   const [bodyView, setBodyView] = useState<'front' | 'back'>('front');
+  // 3D body when WebGL is available; the 2D turntable (and its toggle) is the fallback.
+  const [bodyMode, setBodyMode] = useState<Body3DMode>('2d');
 
   // The edit sheets keep showing the last typed value while they slide away
   // (the save handlers clear the field in the same tick they close).
@@ -352,7 +355,9 @@ export const Dashboard: React.FC = () => {
   const exhaustedSplit = useMemo(() => splitExhaustedByView(recoveringMuscles), [recoveringMuscles]);
 
   const visibleExhausted = bodyView === 'front' ? exhaustedSplit.front : exhaustedSplit.back;
-  const exhaustedCount = visibleExhausted.length;
+  // The 3D body shows every side as it turns, so it counts all tired muscles.
+  const exhaustedCount = bodyMode === '3d' ? recoveringMuscles.length : visibleExhausted.length;
+  const exhaustedIds = useMemo(() => muscleGroupIdPrefixes(recoveringMuscles), [recoveringMuscles]);
 
   const gender: 'male' | 'female' = (userState?.gender === 'Female' ? 'female' : 'male');
 
@@ -568,20 +573,28 @@ export const Dashboard: React.FC = () => {
         </div>
 
         <CornerBracket className="d-body-stage" tone="cyan" size={11} inset={6}>
-          <BodyViewToggle view={bodyView} onChange={setBodyView} />
+          {bodyMode === '2d' && <BodyViewToggle view={bodyView} onChange={setBodyView} />}
 
           <div className="d-body-fig-wrap">
             <div className="d-body-scan" />
-            <BodyTurntable
-              view={bodyView}
-              onViewChange={setBodyView}
-              front={<BodyAnatomy view="front" exhausted={exhaustedSplit.front} gender={gender} />}
-              back={<BodyAnatomy view="back" exhausted={exhaustedSplit.back} gender={gender} />}
+            <Body3D
+              gender={gender}
+              highlighted={exhaustedIds}
+              onModeChange={setBodyMode}
+              label={`Model anatomi 3D, ${recoveringMuscles.length} otot lelah — geser untuk memutar`}
+              fallback={
+                <BodyTurntable
+                  view={bodyView}
+                  onViewChange={setBodyView}
+                  front={<BodyAnatomy view="front" exhausted={exhaustedSplit.front} gender={gender} />}
+                  back={<BodyAnatomy view="back" exhausted={exhaustedSplit.back} gender={gender} />}
+                />
+              }
             />
           </div>
 
-          {/* Keyed on the face so the count re-enters when the body turns. */}
-          <div className="d-body-active" key={bodyView}>
+          {/* Keyed on the face (2D) so the count re-enters when the body turns. */}
+          <div className="d-body-active" key={bodyMode === '3d' ? '3d' : bodyView}>
             <span style={{ color: 'var(--red)' }}>●</span> {exhaustedCount} LELAH
           </div>
         </CornerBracket>

@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useMemo, useState } from 'react';
 import { getTrainedMuscleIds } from '../../constants/muscleMapping';
 import BodyTurntable, { BodyViewToggle, TurntableView } from '../hud/BodyTurntable';
+import type { BodyGender } from '../hud/BodyAnatomy';
 
 /**
  * AnatomyViewer (Solo Leveling aesthetic + shared 3D turntable)
@@ -20,14 +21,26 @@ import BodyTurntable, { BodyViewToggle, TurntableView } from '../hud/BodyTurntab
  *
  * No external SVG libraries — fetch + dangerouslySetInnerHTML.
  *
- * The two SVG files live at:
- *   /assets/anatomy/front/Full_body_front_muscles.svg
- *   /assets/anatomy/back/Full_body_back_muscles.svg
+ * The SVG files live at:
+ *   /assets/anatomy/front/Full_body_front_muscles.svg        (male)
+ *   /assets/anatomy/back/Full_body_back_muscles.svg          (male)
+ *   /assets/anatomy/front/Full_body_front_muscles_female.svg (female)
+ *   /assets/anatomy/back/Full_body_back_muscles_female.svg   (female)
+ * The female files are derived from the male art and keep every muscle id,
+ * so the same id prefixes (MUSCLE_MAP) light up both bodies.
  */
 
-const SVG_URLS: Record<'front' | 'back', string> = {
-  front: '/assets/anatomy/front/Full_body_front_muscles.svg',
-  back:  '/assets/anatomy/back/Full_body_back_muscles.svg',
+type Face = 'front' | 'back';
+
+const SVG_URLS: Record<BodyGender, Record<Face, string>> = {
+  male: {
+    front: '/assets/anatomy/front/Full_body_front_muscles.svg',
+    back:  '/assets/anatomy/back/Full_body_back_muscles.svg',
+  },
+  female: {
+    front: '/assets/anatomy/front/Full_body_front_muscles_female.svg',
+    back:  '/assets/anatomy/back/Full_body_back_muscles_female.svg',
+  },
 };
 
 // ── Per-file class scoping ──
@@ -35,36 +48,45 @@ const SVG_URLS: Record<'front' | 'back', string> = {
 // (.st0 … .st8) but different meanings. Inlined into one document those
 // rules go global, so with both faces mounted the back file's
 // `.st0{display:none}` also hid the front file's `.st0` body piece. Prefixing
-// every class with the view keeps each file's rules to itself.
-const scopeSvgClasses = (text: string, view: 'front' | 'back'): string =>
+// every class with the gender + view keeps each file's rules to itself.
+const scopeSvgClasses = (text: string, prefix: string): string =>
   text
     .replace(/<style([^>]*)>([\s\S]*?)<\/style>/g, (_m, attrs: string, css: string) =>
-      `<style${attrs}>${css.replace(/\.st(\d+)/g, `.${view}-st$1`)}</style>`)
+      `<style${attrs}>${css.replace(/\.st(\d+)/g, `.${prefix}-st$1`)}</style>`)
     .replace(/class="([^"]*)"/g, (_m, cls: string) =>
-      `class="${cls.replace(/\bst(\d+)\b/g, `${view}-st$1`)}"`);
+      `class="${cls.replace(/\bst(\d+)\b/g, `${prefix}-st$1`)}"`);
 
-// ── Module-level cache so the SVG text is fetched at most once per view ──
-const svgTextCache: Record<'front' | 'back', string | null> = { front: null, back: null };
-const svgPromiseCache: Record<'front' | 'back', Promise<string> | null> = { front: null, back: null };
+// ── Module-level cache so each SVG is fetched at most once per gender+view ──
+const svgTextCache: Record<BodyGender, Record<Face, string | null>> = {
+  male:   { front: null, back: null },
+  female: { front: null, back: null },
+};
+const svgPromiseCache: Record<BodyGender, Record<Face, Promise<string> | null>> = {
+  male:   { front: null, back: null },
+  female: { front: null, back: null },
+};
 
-const loadSvg = (view: 'front' | 'back'): Promise<string> => {
-  if (svgTextCache[view]) return Promise.resolve(svgTextCache[view] as string);
-  if (svgPromiseCache[view]) return svgPromiseCache[view] as Promise<string>;
-  const p = fetch(SVG_URLS[view])
+const loadSvg = (gender: BodyGender, view: Face): Promise<string> => {
+  const cached = svgTextCache[gender][view];
+  if (cached) return Promise.resolve(cached);
+  const pending = svgPromiseCache[gender][view];
+  if (pending) return pending;
+  const url = SVG_URLS[gender][view];
+  const p = fetch(url)
     .then(r => {
-      if (!r.ok) throw new Error(`Failed to load ${SVG_URLS[view]}`);
+      if (!r.ok) throw new Error(`Failed to load ${url}`);
       return r.text();
     })
     .then(raw => {
-      const text = scopeSvgClasses(raw, view);
-      svgTextCache[view] = text;
+      const text = scopeSvgClasses(raw, `${gender}-${view}`);
+      svgTextCache[gender][view] = text;
       return text;
     })
     .catch(err => {
-      svgPromiseCache[view] = null; // allow retry
+      svgPromiseCache[gender][view] = null; // allow retry
       throw err;
     });
-  svgPromiseCache[view] = p;
+  svgPromiseCache[gender][view] = p;
   return p;
 };
 
@@ -112,6 +134,8 @@ interface AnatomyViewerProps {
   minimal?: boolean;
   /** Optional className passed to the outer wrapper */
   className?: string;
+  /** Which body to draw. Muscle id prefixes are shared, so highlights work for both. */
+  gender?: BodyGender;
 
   // ─── Legacy props — auto-translated through MUSCLE_MAP at the boundary ───
   /** @deprecated pass `trainedMuscles` directly. Auto-translated via MUSCLE_MAP. */
@@ -134,7 +158,8 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
   chrome = true,
   minimal = false,
   className = '',
-}) => {
+  gender = 'male',
+}: AnatomyViewerProps) => {
   // ── Resolve the active trained-id list ─────────────────────────────────
   // Direct `trainedMuscles` wins. Otherwise auto-translate the legacy
   // `highlightedMuscles` / `highlightedMuscle` strings via MUSCLE_MAP so
@@ -160,12 +185,12 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
     onViewChange?.(v);
   };
 
-  const [frontText, setFrontText] = useState<string | null>(svgTextCache.front);
-  const [backText,  setBackText]  = useState<string | null>(svgTextCache.back);
+  const [frontText, setFrontText] = useState<string | null>(svgTextCache[gender].front);
+  const [backText,  setBackText]  = useState<string | null>(svgTextCache[gender].back);
   const [loading, setLoading] = useState<boolean>(
     enableFlip
-      ? !(svgTextCache.front && svgTextCache.back)
-      : svgTextCache[view] === null
+      ? !(svgTextCache[gender].front && svgTextCache[gender].back)
+      : svgTextCache[gender][view] === null
   );
   const [error, setError] = useState<string | null>(null);
 
@@ -177,21 +202,27 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
   // ── Fetch SVG(s) ──
   // Single-face mode depends on `view`; flip mode loads both once and must
   // NOT refetch/re-render per turn, hence the conditional dependency.
-  const fetchKey = enableFlip ? 'both' : view;
+  // Gender is part of the key so a switch (e.g. onboarding) swaps the body.
+  const fetchKey = `${gender}:${enableFlip ? 'both' : view}`;
   useEffect(() => {
     let cancelled = false;
     setError(null);
+    const cache = svgTextCache[gender];
 
     // Single-face mode (minimal/thumbnails): only fetch the active view.
     if (!enableFlip) {
-      if (svgTextCache[view]) {
-        if (view === 'front') setFrontText(svgTextCache.front);
-        else                  setBackText(svgTextCache.back);
+      if (cache[view]) {
+        if (view === 'front') setFrontText(cache.front);
+        else                  setBackText(cache.back);
         setLoading(false);
         return;
       }
+      // Clear the face while loading so a gender switch never shows the
+      // previous body under the spinner.
+      if (view === 'front') setFrontText(null);
+      else                  setBackText(null);
       setLoading(true);
-      loadSvg(view)
+      loadSvg(gender, view)
         .then(text => {
           if (cancelled) return;
           if (view === 'front') setFrontText(text);
@@ -207,14 +238,16 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
     }
 
     // Dual-face turntable mode: load BOTH up-front so the turn is instant.
-    if (svgTextCache.front && svgTextCache.back) {
-      setFrontText(svgTextCache.front);
-      setBackText(svgTextCache.back);
+    if (cache.front && cache.back) {
+      setFrontText(cache.front);
+      setBackText(cache.back);
       setLoading(false);
       return;
     }
+    setFrontText(null);
+    setBackText(null);
     setLoading(true);
-    Promise.all([loadSvg('front'), loadSvg('back')])
+    Promise.all([loadSvg(gender, 'front'), loadSvg(gender, 'back')])
       .then(([f, b]) => {
         if (cancelled) return;
         setFrontText(f);
@@ -227,7 +260,7 @@ const AnatomyViewer: React.FC<AnatomyViewerProps> = ({
         setLoading(false);
       });
     return () => { cancelled = true; };
-    // `view` is folded into `fetchKey` for single-face mode only.
+    // `gender` + `view` are folded into `fetchKey` (view for single-face only).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enableFlip, fetchKey]);
 

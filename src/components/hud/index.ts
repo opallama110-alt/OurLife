@@ -21,7 +21,7 @@ export type { SystemNotificationProps, SystemNotificationTone, SystemNotificatio
 
 export { default as SystemFrameDefs } from './SystemFrameDefs';
 
-export { default as BodyAnatomy, splitExhaustedByView } from './BodyAnatomy';
+export { default as BodyAnatomy, splitExhaustedByView, muscleGroupIdPrefixes, toBodyGender } from './BodyAnatomy';
 export type { BodyAnatomyProps, BodyView, BodyGender } from './BodyAnatomy';
 
 export { default as BodyTurntable, BodyViewToggle } from './BodyTurntable';

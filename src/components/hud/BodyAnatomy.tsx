@@ -18,6 +18,10 @@ import { MuscleGroup } from '../../types';
 export type BodyView = 'front' | 'back';
 export type BodyGender = 'male' | 'female';
 
+/** Profile gender ('Male' | 'Female') → body art key. Unset falls back to male. */
+export const toBodyGender = (gender?: 'Male' | 'Female'): BodyGender =>
+    gender === 'Female' ? 'female' : 'male';
+
 export interface BodyAnatomyProps {
     view: BodyView;
     exhausted: MuscleGroup[];
@@ -49,6 +53,16 @@ const BACK_MUSCLE_IDS: Partial<Record<MuscleGroup, string[]>> = {
     hamstrings: ['Biceps_Femoris', 'Semi_Tendinosis', 'Semimembranosis', 'Upper_inner_hamstring'],
     calves:     ['Claves', 'Soleus'],
 };
+
+/** SVG id prefixes of muscle groups on both faces (for the 3D body / viewers). */
+export function muscleGroupIdPrefixes(groups: readonly MuscleGroup[]): string[] {
+    const ids = new Set<string>();
+    for (const m of groups) {
+        FRONT_MUSCLE_IDS[m]?.forEach(id => ids.add(id));
+        BACK_MUSCLE_IDS[m]?.forEach(id => ids.add(id));
+    }
+    return [...ids];
+}
 
 // Helper for callers — returns which exhausted muscles are visible on each view.
 // Muscles with both-side visibility (traps, triceps, forearms, etc.) appear in both buckets.
