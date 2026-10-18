@@ -57,45 +57,75 @@ const TORSO_BACK: ReadonlyArray<readonly [number, number]> = [
   [175, 31], [205, 31], [235, 28], [262, 28], [290, 33], [318, 38], [345, 36],
 ];
 
+/** A soft-tissue mound (breast / buttock), one each side of the midline. */
+interface Mound {
+  height: number;  // peak projection in art units (≈ 2.9 per cm)
+  cxOff: number;   // centre's distance from the midline
+  halfW: number;   // half-width
+  cy: number;      // row of fullest projection
+  up: number;      // rows above cy over which it rises
+  down: number;    // rows below cy down to the fold
+  lower: number;   // lower-pole exponent: smaller = rounder, crisper fold
+}
 interface GenderShape {
-  torsoDepth: number;   // overall torso depth multiplier
-  breast: number;       // forward bump of the chest mounds
-  glute: number;        // backward bump of the buttocks
+  torsoDepth: number;  // overall torso depth multiplier
+  lumbar: number;      // inward curve of the lower back (lordosis)
+  chest: Mound;
+  glute: Mound;
 }
 const SHAPE: Record<BodyGender, GenderShape> = {
-  male:   { torsoDepth: 1,    breast: 4,  glute: 6 },
-  female: { torsoDepth: 0.94, breast: 13, glute: 12 },
+  male: {
+    torsoDepth: 1,
+    lumbar: 2,
+    chest: { height: 6, cxOff: 20, halfW: 17, cy: 196, up: 24, down: 14, lower: 0.7 },
+    glute: { height: 7, cxOff: 21, halfW: 18, cy: 338, up: 44, down: 26, lower: 0.75 },
+  },
+  female: {
+    torsoDepth: 0.94,
+    lumbar: 5,
+    chest: { height: 19, cxOff: 21, halfW: 15.5, cy: 213, up: 32, down: 16, lower: 0.6 },
+    glute: { height: 17, cxOff: 21.5, halfW: 18.5, cy: 340, up: 48, down: 30, lower: 0.75 },
+  },
 };
 
-/** Mound offsets (art units) — chest and buttocks, both sides of the midline. */
-function chestBump(dx: number, y: number): number {
-  const ax = Math.abs(dx);
-  const ux = (ax - 21.5) / 14;
-  // Fuller lower pole: tighter falloff above the centre than below.
-  const uy = (y - 208) / (y < 208 ? 15 : 13);
-  return Math.exp(-1.6 * (ux * ux + uy * uy));
-}
-function gluteBump(dx: number, y: number): number {
-  const ax = Math.abs(dx);
-  const ux = (ax - 21) / 17;
-  const uy = (y - 336) / (y < 336 ? 26 : 18);
-  return Math.exp(-1.6 * (ux * ux + uy * uy));
+/**
+ * 0‥1 mound profile. Seen from the side it rises gently from above (zero
+ * slope at the top edge, like breast tissue below the collarbone or the
+ * buttock out of the lower back) and ends in a round, sphere-like lower
+ * pole whose tangent turns vertical at the fold (inframammary / gluteal).
+ */
+function mound(m: Mound, dx: number, y: number): number {
+  const u = (Math.abs(dx) - m.cxOff) / m.halfW;
+  const v = (y - m.cy) / (y < m.cy ? m.up : m.down);
+  const r2 = u * u + v * v;
+  if (r2 >= 1) return 0;
+  const p = 1.35 + (m.lower - 1.35) * smoothstep(-0.35, 0.35, v);
+  return Math.pow(1 - r2, p);
 }
 
-/** Half-depths (front, back) of a limb ring at art row y. */
+const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+
+/**
+ * Half-depths (front, back) of a limb ring at art row y. Every change of
+ * profile is blended over a few rows — a hard switch would show as a ring
+ * around the wrist, elbow, knee or ankle.
+ */
 function limbDepth(kind: 'arm' | 'leg', a: number, y: number, wristY: number): [number, number] {
   if (kind === 'arm') {
-    if (y > wristY) return [a * 0.45, a * 0.45];            // flat hand
-    const k = y < 280 ? 0.95 : 0.85;                        // upper arm / forearm
-    return [a * k, a * k];
+    const k = mix(0.95, 0.85, smoothstep(268, 292, y));     // upper arm → forearm
+    const d = a * mix(k, 0.45, smoothstep(wristY - 6, wristY + 6, y)); // → flat hand
+    return [d, d];
   }
-  if (y < 420) return [a * 0.92, a * 0.98];                 // thigh
-  if (y < 450) return [a * 0.88, a * 0.85];                 // knee
-  if (y < 515) return [a * 0.78, a * 1.05];                 // calf bulges backwards
+  let zf = mix(0.92, 0.88, smoothstep(408, 432, y));        // thigh → knee
+  let zb = mix(0.98, 0.85, smoothstep(408, 432, y));
+  zf = mix(zf, 0.78, smoothstep(438, 462, y));               // knee → calf, which
+  zb = mix(zb, 1.05, smoothstep(438, 462, y));               // bulges backwards
+  zf = mix(zf, 0.85, smoothstep(503, 527, y));               // calf → ankle
+  zb = mix(zb, 0.85, smoothstep(503, 527, y));
   // Ankle → foot: the front view shows the foot end-on, so stretch the
   // lowest rings forward into a foot and keep a small heel behind.
   const t = smoothstep(536, 562, y);
-  return [a * 0.85 + (44 - a * 0.85) * t, a * 0.85 + (12 - a * 0.85) * t];
+  return [mix(a * zf, 44, t), mix(a * zb, 12, t)];
 }
 
 /** Bridge noise: limit how fast a run edge may move between rows. */
@@ -173,12 +203,19 @@ function splitParts(sil: Silhouette): Parts {
     return rings.slice(start);
   };
   const aL = contiguous(armL), aR = contiguous(armR);
-  // Wrist ≈ where the hand starts: two thirds of the way down the hanging arm.
+  // Wrist = the narrowest point between mid-forearm and the hand.
   const armTop = aL.length ? aL[0].y : 216;
   const armBottom = aL.length ? aL[aL.length - 1].y : 370;
-  const wristY = armTop + (armBottom - armTop) * 0.76;
+  let wristY = armTop + (armBottom - armTop) * 0.76;
+  let narrowest = Infinity;
+  for (const r of aL) {
+    const f = (r.y - armTop) / Math.max(1, armBottom - armTop);
+    // Stop before the fingers (narrower than the wrist on the real art).
+    if (f > 0.55 && f < 0.8 && r.r - r.l < narrowest) { narrowest = r.r - r.l; wristY = r.y; }
+  }
   return {
-    torso: smooth(torso),
+    // Raw: the shoulder hand-over needs the true chest edge; smoothed after.
+    torso,
     armL: smooth(stabilise(aL, 3)),
     armR: smooth(stabilise(aR.map(r => ({ y: r.y, l: -r.r, r: -r.l })), 3).map(r => ({ y: r.y, l: -r.r, r: -r.l }))),
     legL: smooth(stabilise(legL, 4)),
@@ -276,74 +313,103 @@ export function buildBodyMesh(sil: Silhouette, gender: BodyGender): BodyMesh {
   // so there is no shelf where the arms separate. ──
   const armTop = (arm: Ring[]) => (arm.length ? arm[0] : null);
   const topL = armTop(parts.armL), topR = armTop(parts.armR);
-  const torsoAt = (y: number) => parts.torso.find(r => r.y >= y);
-  const chestL = topL ? torsoAt(topL.y)?.l ?? null : null;
-  const chestR = topR ? torsoAt(topR.y)?.r ?? null : null;
+  // Robust edge: the median, taking the OUTER middle value on both sides
+  // (lower median for the left edge, upper for the right) so the two sides
+  // match and the chest is never pulled inside the art.
+  const median = (v: number[], outer: 'low' | 'high') => {
+    const a = [...v].sort((x, y) => x - y);
+    if (!a.length) return NaN;
+    return outer === 'low' ? a[(a.length - 1) >> 1] : a[a.length >> 1];
+  };
+  // Chest edge: median of the raw torso edge just below the armpit, so a
+  // single row where the arm still touches can't pull it outwards.
+  const below = (y: number) => parts.torso.filter(r => r.y >= y && r.y <= y + 10);
+  const chestL = topL ? median(below(topL.y).map(r => r.l), 'low') : NaN;
+  const chestR = topR ? median(below(topR.y).map(r => r.r), 'high') : NaN;
   const leadL: Ring[] = [], leadR: Ring[] = [];
-  const torsoRings = parts.torso.map(r => {
+  const blended = parts.torso.map(r => {
     const out = { ...r };
-    if (topL && chestL !== null && r.y < topL.y && r.y >= topL.y - SHOULDER_BLEND) {
-      const t = smoothstep(topL.y - SHOULDER_BLEND, topL.y, r.y);
-      const w = (topL.r - topL.l) * (0.8 + 0.2 * t);
-      leadL.push({ y: r.y, l: r.l, r: r.l + w });
-      out.l = r.l + (chestL - r.l) * t;
+    if (topL && Number.isFinite(chestL)) {
+      if (r.y < topL.y && r.y >= topL.y - SHOULDER_BLEND) {
+        const t = smoothstep(topL.y - SHOULDER_BLEND, topL.y, r.y);
+        const w = (topL.r - topL.l) * (0.8 + 0.2 * t);
+        leadL.push({ y: r.y, l: r.l, r: r.l + w });
+        out.l = r.l + (chestL - r.l) * t;
+      } else if (r.y >= topL.y && r.y <= topL.y + 10) {
+        out.l = Math.max(out.l, chestL);
+      }
     }
-    if (topR && chestR !== null && r.y < topR.y && r.y >= topR.y - SHOULDER_BLEND) {
-      const t = smoothstep(topR.y - SHOULDER_BLEND, topR.y, r.y);
-      const w = (topR.r - topR.l) * (0.8 + 0.2 * t);
-      leadR.push({ y: r.y, l: r.r - w, r: r.r });
-      out.r = r.r + (chestR - r.r) * t;
+    if (topR && Number.isFinite(chestR)) {
+      if (r.y < topR.y && r.y >= topR.y - SHOULDER_BLEND) {
+        const t = smoothstep(topR.y - SHOULDER_BLEND, topR.y, r.y);
+        const w = (topR.r - topR.l) * (0.8 + 0.2 * t);
+        leadR.push({ y: r.y, l: r.r - w, r: r.r });
+        out.r = r.r + (chestR - r.r) * t;
+      } else if (r.y >= topR.y && r.y <= topR.y + 10) {
+        out.r = Math.min(out.r, chestR);
+      }
     }
     return out;
   });
+  const torsoRings = smooth(smooth(blended));
 
   // ── Head + torso ──
   const crotchY = parts.torso.length ? parts.torso[parts.torso.length - 1].y : 340;
-  /** Torso half-depth (front if c ≥ 0, else back) at art x, row y, incl. mounds. */
-  const torsoDepth = (x: number, y: number, a: number, c: number): number => {
+  /** Torso half-depth without mounds (front if c ≥ 0, else back). */
+  const torsoBase = (y: number, a: number, c: number): number => {
     const cap = Math.max(4, a * 1.2);
-    const dx = x - cx;
-    if (c >= 0) {
-      const zf = Math.min(cap, lut(TORSO_FRONT, y) * shape.torsoDepth);
-      return zf + shape.breast * chestBump(dx, y) * Math.sqrt(c);
-    }
-    const zb = Math.min(cap, lut(TORSO_BACK, y) * shape.torsoDepth);
-    return zb + shape.glute * gluteBump(dx, y) * Math.sqrt(-c);
+    if (c >= 0) return Math.min(cap, lut(TORSO_FRONT, y) * shape.torsoDepth);
+    const lordosis = shape.lumbar * Math.exp(-(((y - 292) / 18) ** 2));
+    return Math.min(cap, lut(TORSO_BACK, y) * shape.torsoDepth) - lordosis;
   };
-  gb.tube(torsoRings, 56, (ring, s, c) => {
+  /** Breast (front) or buttock (back) projection at art x, row y. */
+  const moundAt = (x: number, y: number, c: number): number => c >= 0
+    ? shape.chest.height * mound(shape.chest, x - cx, y) * Math.sqrt(c)
+    : shape.glute.height * mound(shape.glute, x - cx, y) * Math.sqrt(-c);
+
+  gb.tube(torsoRings, 80, (ring, s, c) => {
     const a0 = (ring.r - ring.l) / 2;
     const mid = (ring.l + ring.r) / 2;
     // Tuck the bottom of the torso inside the thighs (which carry the hip
-    // surface from here down) so its rim never shows as a belt line.
+    // and buttock surface from here down) so its rim never shows.
     const tuck = smoothstep(crotchY - HIP_TUCK, crotchY, ring.y);
     const a = a0 * (1 - 0.3 * tuck);
     // Shoulders/torso read squarer than the round head and neck.
-    const p = ring.y > 140 ? 2.35 : 2;
+    const p = mix(2, 2.35, smoothstep(128, 152, ring.y));
     const [ex, ez] = superE(s, c, p);
     const x = mid + a * ex;
-    return [x, Math.abs(ez) * (ez >= 0 ? 1 : -1) * torsoDepth(x, ring.y, a0, c) * (1 - 0.25 * tuck)];
+    const depth = (Math.abs(ez) * torsoBase(ring.y, a0, c) + moundAt(x, ring.y, c)) * (1 - 0.25 * tuck);
+    return [x, ez >= 0 ? depth : -depth];
   });
-  const hip = parts.torso[parts.torso.length - 1];
+  const hip = torsoRings[torsoRings.length - 1];
   const hipA = hip ? (hip.r - hip.l) / 2 : 50;
+  /** Torso half-width at row y (the hip width below the torso). */
+  const torsoA = (y: number) => {
+    const r = torsoRings.find(t => t.y >= y);
+    return r ? (r.r - r.l) / 2 : hipA;
+  };
 
   // ── Arms (from the deltoid down) and legs ──
   const limb = (kind: 'arm' | 'leg', rings: Ring[], lead: Ring[]) => {
-    gb.tube(smooth(smooth([...lead, ...rings])), 28, (ring, s, c) => {
+    gb.tube(smooth(smooth([...lead, ...rings])), kind === 'leg' ? 36 : 28, (ring, s, c) => {
       const a = (ring.r - ring.l) / 2;
       const mid = (ring.l + ring.r) / 2;
       const x = mid + a * s;
-      let [zf, zb] = limbDepth(kind, a, ring.y, wristY);
-      if (kind === 'leg') {
-        // Upper thighs grow out of the hips: take the torso's depth (and the
-        // buttocks) there, easing into the leg's own profile further down,
-        // so there is no ledge at the crotch.
-        const w = smoothstep(crotchY, crotchY + 46, ring.y);
-        const k = Math.sqrt(Math.max(0, 1 - ((x - cx) / (hipA * 1.04)) ** 2));
-        const y = Math.min(ring.y, crotchY);
-        zf = zf * w + torsoDepth(x, y, hipA, Math.max(c, 0.001)) * k * (1 - w);
-        zb = zb * w + torsoDepth(x, ring.y, hipA, Math.min(c, -0.001)) * k * (1 - w);
-      }
-      return [x, c >= 0 ? c * zf : c * zb];
+      const [zf, zb] = limbDepth(kind, a, ring.y, wristY);
+      if (kind === 'arm') return [x, c >= 0 ? c * zf : c * zb];
+      // Upper thighs grow out of the hips: take the torso's depth there,
+      // easing into the leg's own profile further down (no ledge at the
+      // crotch). The buttocks ride on top at full strength down to the
+      // gluteal fold, which sits below the crotch.
+      const w = smoothstep(crotchY, crotchY + 46, ring.y);
+      const k = Math.sqrt(Math.max(0, 1 - ((x - cx) / (torsoA(ring.y) * 1.04)) ** 2));
+      const y = Math.min(ring.y, crotchY);
+      // The lead rings start inside the hips; keep their tops a little
+      // shallower so the flat caps never poke through the lower back.
+      const ease = 0.85 + 0.15 * smoothstep(crotchY - HIP_TUCK - 14, crotchY - HIP_TUCK, ring.y);
+      if (c >= 0) return [x, c * (zf * w + torsoBase(y, hipA, 1) * k * (1 - w)) * ease];
+      const back = zb * w + torsoBase(y, hipA, -1) * k * (1 - w);
+      return [x, (c * back - moundAt(x, ring.y, c)) * ease];
     });
   };
   limb('arm', parts.armL, leadL);
@@ -354,8 +420,20 @@ export function buildBodyMesh(sil: Silhouette, gender: BodyGender): BodyMesh {
   const legLead = (side: 'l' | 'r') => hips.map(r => side === 'l'
     ? { y: r.y, l: r.l + 0.5, r: cx - 0.5 }
     : { y: r.y, l: cx + 0.5, r: r.r - 0.5 });
-  limb('leg', parts.legL, legLead('l'));
-  limb('leg', parts.legR, legLead('r'));
+  // Feet: the toe rows of the silhouette are narrow; stretched forward they
+  // would form a blade. Keep the forefoot's width down to the sole.
+  const feet = (rings: Ring[]) => {
+    const footA = Math.max(0, ...rings.filter(r => r.y >= 540 && r.y <= 568).map(r => (r.r - r.l) / 2));
+    return rings.map(r => {
+      const a = (r.r - r.l) / 2;
+      const want = footA * 0.85 * smoothstep(548, 560, r.y);
+      if (a >= want) return r;
+      const mid = (r.l + r.r) / 2;
+      return { y: r.y, l: mid - want, r: mid + want };
+    });
+  };
+  limb('leg', feet(parts.legL), legLead('l'));
+  limb('leg', feet(parts.legR), legLead('r'));
 
   return { geometry: gb.build(), cx, minY: sil.minY, maxY: sil.maxY };
 }
