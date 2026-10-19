@@ -88,6 +88,8 @@ interface Mound {
 }
 interface GenderShape {
   torsoDepth: number;  // overall torso depth multiplier
+  /** Extra per-row depth factor [y, factor] on top of torsoDepth (optional). */
+  depthRows?: ReadonlyArray<readonly [number, number]>;
   lumbar: number;      // inward curve of the lower back (lordosis)
   chest: Mound;
   glute: Mound;
@@ -101,6 +103,10 @@ const SHAPE: Record<BodyGender, GenderShape> = {
   },
   female: {
     torsoDepth: 0.94,
+    // The depth tables are male; on the narrower female neck and waist they
+    // gave depth/width ≈ 1.13 and 0.87 (a tube from the side). Real women sit
+    // nearer 0.9 and 0.7–0.75, so thin those two bands.
+    depthRows: [[110, 1], [124, 0.86], [140, 0.86], [160, 1], [225, 1], [245, 0.86], [285, 0.88], [310, 1]],
     lumbar: 5,
     // Centred under the art's breast/glute overlays (chest x≈174.75, y182–229;
     // glute fold y≈359–365) so the projection sits under its texture.
@@ -174,6 +180,27 @@ function smooth(rings: Ring[]): Ring[] {
     if (i === 0 || i === rings.length - 1) return r;
     const a = rings[i - 1], b = rings[i + 1];
     return { y: r.y, l: (a.l + r.l + b.l) / 3, r: (a.r + r.r + b.r) / 3 };
+  });
+}
+
+/**
+ * The ears widen the head rows by ~20% in the front art; lofted round, they
+ * made the head read as a helmet. Clamp the rows between the skull and the
+ * neck to the skull's own width (measured just above the ears).
+ */
+function clampEars(rings: Ring[]): Ring[] {
+  if (rings.length < 10) return rings;
+  const top = rings[0].y;
+  const half = (r: Ring) => (r.r - r.l) / 2;
+  const skull = rings.filter(r => r.y >= top + 12 && r.y <= top + 26);
+  const neckBand = rings.filter(r => r.y >= top + 40 && r.y <= top + 64);
+  if (!skull.length || !neckBand.length) return rings;
+  const skullHalf = Math.max(...skull.map(half));
+  const neckY = neckBand.reduce((a, b) => (half(b) < half(a) ? b : a)).y;
+  return rings.map(r => {
+    if (r.y <= top + 26 || r.y >= neckY || half(r) <= skullHalf) return r;
+    const mid = (r.l + r.r) / 2;
+    return { y: r.y, l: mid - skullHalf, r: mid + skullHalf };
   });
 }
 
@@ -393,16 +420,17 @@ export function buildBodyMesh(sil: Silhouette, gender: BodyGender, bun: Silhouet
     }
     return out;
   });
-  const torsoRings = smooth(smooth(blended));
+  const torsoRings = clampEars(smooth(smooth(blended)));
 
   // ── Head + torso ──
   const crotchY = parts.torso.length ? parts.torso[parts.torso.length - 1].y : 340;
   /** Torso half-depth without mounds (front if c ≥ 0, else back). */
   const torsoBase = (y: number, a: number, c: number): number => {
     const cap = Math.max(4, a * 1.2);
-    if (c >= 0) return Math.min(cap, lut(TORSO_FRONT, y) * shape.torsoDepth);
+    const k = shape.torsoDepth * (shape.depthRows ? lut(shape.depthRows, y) : 1);
+    if (c >= 0) return Math.min(cap, lut(TORSO_FRONT, y) * k);
     const lordosis = shape.lumbar * Math.exp(-(((y - 292) / 18) ** 2));
-    return Math.min(cap, lut(TORSO_BACK, y) * shape.torsoDepth) - lordosis;
+    return Math.min(cap, lut(TORSO_BACK, y) * k) - lordosis;
   };
   /** Breast (front) or buttock (back) projection at art x, row y. */
   const moundAt = (x: number, y: number, c: number): number => c >= 0
