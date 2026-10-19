@@ -29,6 +29,7 @@ const SCHEDULE_KEYWORD_MAP: { keyword: RegExp; muscle: MuscleGroup }[] = [
   { keyword: /hamstring/i, muscle: 'hamstrings' },
   { keyword: /glute|bokong/i, muscle: 'glutes' },
   { keyword: /calf|calves|betis/i, muscle: 'calves' },
+  { keyword: /adductor|paha\s*dalam|inner\s*thigh/i, muscle: 'adductors' },
 ];
 
 const parseScheduleMuscles = (label: string): MuscleGroup[] => {

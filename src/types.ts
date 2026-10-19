@@ -15,7 +15,7 @@ export type MuscleGroup =
   | 'biceps' | 'forearms'
   | 'lats' | 'traps' | 'lower_back'
   | 'abs' | 'obliques'
-  | 'quads' | 'hamstrings' | 'glutes' | 'calves';
+  | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'adductors';
 
 export interface FirestoreExercise {
   id: string;
@@ -211,6 +211,7 @@ export const MUSCLE_RECOVERY_HOURS: Record<MuscleGroup, number> = {
   hamstrings: 60,
   glutes: 60,
   calves: 36,
+  adductors: 48,
 };
 
 // ── Phase 9: Gender-based recovery modifier ────────────────────────────

@@ -42,6 +42,9 @@ const FRONT_MUSCLE_IDS: Partial<Record<MuscleGroup, string[]>> = {
     // anterior are lower-leg muscles but not calf (triceps surae) muscles.
     calves:   ['Calves', 'Soleus'],
     traps:    ['Front_traps'],
+    glutes:   ['Gluteus_medius'],
+    // Pectineus, the adductor that shows at the front groin.
+    adductors:['Pectinius'],
 };
 
 const BACK_MUSCLE_IDS: Partial<Record<MuscleGroup, string[]>> = {
@@ -55,6 +58,9 @@ const BACK_MUSCLE_IDS: Partial<Record<MuscleGroup, string[]>> = {
     hamstrings: ['Biceps_Femoris', 'Semi_Tendinosis', 'Semimembranosis', 'Upper_inner_hamstring'],
     calves:     ['Claves', 'Soleus'],
     lower_back: ['Thoracolumbar'],
+    // Upper inner thigh = adductor magnus. Its ischial head also extends the
+    // hip with the hamstrings, so the region is shared with them.
+    adductors:  ['Upper_inner_hamstring'],
 };
 
 /** SVG id prefixes of muscle groups on both faces (for the 3D body / viewers). */

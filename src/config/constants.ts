@@ -1,4 +1,4 @@
-export type MuscleGroup = 'chest' | 'shoulders' | 'triceps' | 'biceps' | 'forearms' | 'lats' | 'traps' | 'lower_back' | 'abs' | 'obliques' | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'neck';
+export type MuscleGroup = 'chest' | 'shoulders' | 'triceps' | 'biceps' | 'forearms' | 'lats' | 'traps' | 'lower_back' | 'abs' | 'obliques' | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'adductors' | 'neck';
 
 export const MUSCLE_GROUP_CONFIG: Record<MuscleGroup, { label: string; category: string }> = {
   chest: { label: 'Chest', category: 'Push' },
@@ -15,6 +15,7 @@ export const MUSCLE_GROUP_CONFIG: Record<MuscleGroup, { label: string; category:
   hamstrings: { label: 'Hamstrings', category: 'Legs' },
   glutes: { label: 'Glutes', category: 'Legs' },
   calves: { label: 'Calves', category: 'Legs' },
+  adductors: { label: 'Adductors', category: 'Legs' },
   neck: { label: 'Neck', category: 'Other' }
 };
 
@@ -37,6 +38,7 @@ export const MUSCLE_ICON_MAP: Record<string, string> = {
   hamstrings: '/assets/muscles/hamstrings.webp',
   glutes: '/assets/muscles/glutes.webp',
   calves: '/assets/muscles/calves.webp',
+  adductors: '/assets/muscles/adductors.webp',
   neck: '/assets/muscles/neck.webp',
   default: '/assets/muscles/default.webp' // Gambar cadangan (misal icon dumbbell)
 };

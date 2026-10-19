@@ -6,7 +6,7 @@ import { FirestoreExercise } from '../types';
 // These must match the EXACT strings stored in Firestore (including trailing commas/spaces
 // that some entries have — the normalize() function strips them before comparison).
 const MUSCLE_VARIANTS: Record<string, string[]> = {
-  chest:      ['pectorals', 'pectoralis major, sternal,', 'pectoralis major', 'chest'],
+  chest:      ['pectorals', 'pectoralis major, sternal,', 'pectoralis major', 'chest', 'serratus anterior'],
   shoulders:  ['delts', 'deltoids', 'deltoid', 'deltoid, anterior,', 'deltoid, lateral,', 'deltoid, posterior,', 'shoulders'],
   triceps:    ['triceps', 'triceps brachii', 'triceps, long head,'],
   biceps:     ['biceps', 'biceps brachii,', 'brachialis'],
@@ -19,7 +19,8 @@ const MUSCLE_VARIANTS: Record<string, string[]> = {
   quads:      ['quads', 'quadriceps', 'rectus femoris', 'rectus femoris,', 'vastus lateralis', 'vastus medialis', 'vastus intermedius'],
   hamstrings: ['hamstrings', 'hamstrings,', 'biceps femoris', 'semitendinosus', 'semimembranosus'],
   glutes:     ['glutes', 'gluteus maximus,', 'gluteus medius, gluteus minimus,', 'gluteus medius, gluteus minimus, anterior fibers,', 'piriformis, quadratus femoris,', 'external hip rotators,', 'hip abductors'],
-  calves:     ['calves', 'gastrocnemius,', 'gastrocnemius (hands further away from feet),', 'soleus,', 'tibialis anterior,', 'calf'],
+  calves:     ['calves', 'gastrocnemius,', 'gastrocnemius (hands further away from feet),', 'soleus,', 'tibialis anterior,', 'tibialis anterior, ', 'calf'],
+  adductors:  ['adductors', 'adductors, hip', 'adductor magnus, ischial fibers'],
 };
 
 // bodyPart fallback mapping — used when MUSCLE_VARIANTS query returns empty
@@ -38,6 +39,7 @@ const BODYPART_FALLBACK: Record<string, string> = {
   hamstrings: 'upper legs',
   glutes: 'upper legs',
   calves: 'lower legs',
+  adductors: 'upper legs',
 };
 
 const normalize = (s: string): string => s.toLowerCase().replace(/_/g, ' ').trim();
@@ -98,6 +100,7 @@ export const exerciseService = {
         const CLIENT_FILTERS: Record<string, RegExp> = {
           obliques:    /oblique/,
           lower_back:  /lower\s*back|spine|erector\s*spinae|thoracolumbar|lumbar/,
+          adductors:   /adductor|inner\s*thigh|groin|gracilis/,
         };
         const filter = CLIENT_FILTERS[key];
 

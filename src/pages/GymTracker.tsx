@@ -165,12 +165,16 @@ export const mapDBToMuscleGroup = (raw: string | undefined, fallback: MuscleGrou
   if (lower.includes('glute') || lower.includes('gluteus') || lower.includes('hip abductor') || lower.includes('piriformis') || lower.includes('hip rotator')) return 'glutes';
   if (lower.includes('calf') || lower.includes('calv') || lower.includes('gastrocnemius') || lower.includes('soleus') || lower.includes('tibialis') || lower.includes('peroneus')) return 'calves';
   if (lower.includes('forearm') || lower.includes('brachioradialis') || lower.includes('wrist') || lower.includes('grip')) return 'forearms';
-  // Adductors → quads (closest UI category)
-  if (lower.includes('adductor') || lower.includes('inner thigh') || lower.includes('groin') || lower.includes('gracilis') || lower.includes('iliopsoas') || lower.includes('hip flexor')) return 'quads';
+  if (lower.includes('adductor') || lower.includes('inner thigh') || lower.includes('groin') || lower.includes('gracilis')) return 'adductors';
+  // Hip flexors → quads (rectus femoris is the quad that flexes the hip)
+  if (lower.includes('iliopsoas') || lower.includes('hip flexor')) return 'quads';
   // Abductors → glutes
   if (lower.includes('abductor') || lower.includes('tensor fasciae')) return 'glutes';
+  // Serratus anterior sits on the front of the ribcage and works in pushing,
+  // so it folds into chest rather than the upper-back traps.
+  if (lower.includes('serratus')) return 'chest';
   // Infraspinatus, teres minor, rotator cuff → traps (back/upper back group)
-  if (lower.includes('infraspinatus') || lower.includes('teres minor') || lower.includes('rotator cuff') || lower.includes('serratus')) return 'traps';
+  if (lower.includes('infraspinatus') || lower.includes('teres minor') || lower.includes('rotator cuff')) return 'traps';
   // Neck
   if (lower.includes('longus colli') || lower.includes('sternocleidomastoid')) return 'traps';
   // Cardiovascular
@@ -474,9 +478,9 @@ const ExerciseBrowser: React.FC<{
 // ═══════════ FOCUS AREA → MUSCLE MAPPING (Phase 11c) ═══════════
 const FOCUS_TO_MUSCLES: Record<FocusArea, MuscleGroup[]> = {
   'Dada & Lengan':  ['chest', 'shoulders', 'triceps', 'biceps', 'forearms'],
-  'Kaki & Bokong':  ['quads', 'hamstrings', 'glutes', 'calves'],
+  'Kaki & Bokong':  ['quads', 'hamstrings', 'glutes', 'calves', 'adductors'],
   'Core':           ['abs', 'obliques', 'lower_back'],
-  'Seluruh Tubuh':  ['chest', 'shoulders', 'triceps', 'biceps', 'forearms', 'lats', 'traps', 'lower_back', 'abs', 'obliques', 'quads', 'hamstrings', 'glutes', 'calves'],
+  'Seluruh Tubuh':  ['chest', 'shoulders', 'triceps', 'biceps', 'forearms', 'lats', 'traps', 'lower_back', 'abs', 'obliques', 'quads', 'hamstrings', 'glutes', 'calves', 'adductors'],
 };
 
 /** Sorts routines so packages overlapping the user's focus area bubble to the top. */

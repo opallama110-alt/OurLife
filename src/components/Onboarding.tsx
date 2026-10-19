@@ -46,11 +46,11 @@ const ACTIVITY_SCHEDULES: Record<NonNullable<UserState['activityLevel']>, GymSch
 // ── Phase 10: Focus area → muscle groups (for AnatomyViewer preview) ───
 const FOCUS_TO_MUSCLES: Record<FocusArea, MuscleGroup[]> = {
     'Dada & Lengan':   ['chest', 'shoulders', 'biceps', 'triceps', 'forearms'],
-    'Kaki & Bokong':   ['quads', 'hamstrings', 'glutes', 'calves'],
+    'Kaki & Bokong':   ['quads', 'hamstrings', 'glutes', 'calves', 'adductors'],
     'Core':            ['abs', 'obliques', 'lower_back'],
     'Seluruh Tubuh':   ['chest', 'shoulders', 'biceps', 'triceps', 'forearms',
                         'lats', 'traps', 'lower_back', 'abs', 'obliques',
-                        'quads', 'hamstrings', 'glutes', 'calves'],
+                        'quads', 'hamstrings', 'glutes', 'calves', 'adductors'],
 };
 
 interface OnboardingProps {

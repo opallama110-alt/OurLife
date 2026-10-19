@@ -227,9 +227,9 @@ export const ACHIEVEMENTS: Achievement[] = [
         rarity: 'silver',
         category: 'workout',
         requirement: 10,
-        getProgress: (logs) => countWorkoutsHittingMuscles(logs, ['quads', 'hamstrings', 'glutes', 'calves']),
+        getProgress: (logs) => countWorkoutsHittingMuscles(logs, ['quads', 'hamstrings', 'glutes', 'calves', 'adductors']),
         isUnlocked: (logs) =>
-            countWorkoutsHittingMuscles(logs, ['quads', 'hamstrings', 'glutes', 'calves']) >= 10,
+            countWorkoutsHittingMuscles(logs, ['quads', 'hamstrings', 'glutes', 'calves', 'adductors']) >= 10,
     },
     {
         id: 'push_phenom',
@@ -539,7 +539,7 @@ export const DEFAULT_GYM_PROFILE: GymProfile = {
         biceps: 0, forearms: 0,
         lats: 0, traps: 0, lower_back: 0,
         abs: 0, obliques: 0,
-        quads: 0, hamstrings: 0, glutes: 0, calves: 0,
+        quads: 0, hamstrings: 0, glutes: 0, calves: 0, adductors: 0,
     },
     monthlyXP: 0,
     monthlyWorkouts: 0,

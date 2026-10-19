@@ -34,7 +34,7 @@ type PPL = 'push' | 'pull' | 'legs';
 const PPL_MAP: Partial<Record<MuscleGroup, PPL>> = {
   chest: 'push', shoulders: 'push', triceps: 'push',
   lats: 'pull', traps: 'pull', lower_back: 'pull', biceps: 'pull', forearms: 'pull',
-  quads: 'legs', hamstrings: 'legs', glutes: 'legs', calves: 'legs',
+  quads: 'legs', hamstrings: 'legs', glutes: 'legs', calves: 'legs', adductors: 'legs',
   // abs / obliques intentionally omitted — they're core, not part of the
   // push/pull/legs split that this signal measures.
 };
