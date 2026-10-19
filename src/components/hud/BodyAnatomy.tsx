@@ -34,11 +34,13 @@ const FRONT_MUSCLE_IDS: Partial<Record<MuscleGroup, string[]>> = {
     shoulders:['Deltoids_front'],
     biceps:   ['Biceps_brachii', 'Biceps_Brachialis'],
     triceps:  ['Triceps_long_head', 'triceps_lateral_head'],
-    abs:      ['Upper_abs', 'Lower_abs', 'Serratus_Anterior'],
+    abs:      ['Upper_abs', 'Lower_abs'],
     obliques: ['Obliques_external'],
-    forearms: ['fore_arm_upper', 'Flexor_digitorium', 'Extensor_x', 'Brachioradialis'],
-    quads:    ['Outer_quads', 'Inner_quads', 'Mid_quad', 'Sartorius'],
-    calves:   ['Soleus', 'Peroneus_longus'],
+    forearms: ['fore_arm_upper', 'Flexor_digitorium', 'Extensor__x28_fore_arm_lower', 'Brachioradialis'],
+    quads:    ['Outer_quads', 'Inner_quads', 'Mid_quad'],
+    // Gastrocnemius medial head + soleus. Peroneus longus and tibialis
+    // anterior are lower-leg muscles but not calf (triceps surae) muscles.
+    calves:   ['Calves', 'Soleus'],
     traps:    ['Front_traps'],
 };
 
@@ -52,6 +54,7 @@ const BACK_MUSCLE_IDS: Partial<Record<MuscleGroup, string[]>> = {
     glutes:     ['Gluteus_maximus', 'Gluteus_medius'],
     hamstrings: ['Biceps_Femoris', 'Semi_Tendinosis', 'Semimembranosis', 'Upper_inner_hamstring'],
     calves:     ['Claves', 'Soleus'],
+    lower_back: ['Thoracolumbar'],
 };
 
 /** SVG id prefixes of muscle groups on both faces (for the 3D body / viewers). */
@@ -163,22 +166,28 @@ export default function BodyAnatomy({
 
     // Per-instance scoped CSS — tint exhausted muscle groups red.
     // The SVG generator emits randomized id suffixes per export, so we use
-    // [id^="..."] prefix selectors. The .ba-1/.ba-3/.ba-5/.ba-8 classes are
-    // the SVG's currentColor-bound fill classes (the prototype convention).
+    // [id^="..."] prefix selectors — on any element, since some muscles are
+    // a bare <path> carrying the id (e.g. Thoracolumbar, the lower back).
+    // The fill classes are the muscle layers of each face: the two exports
+    // reuse class names for different roles, and the back's main muscle
+    // fill is .ba-2 (on the front, .ba-2 is only fibre detail).
     const scopedCSS = useMemo(() => {
         const dict = view === 'front' ? FRONT_MUSCLE_IDS : BACK_MUSCLE_IDS;
+        const fillClasses = view === 'front'
+            ? ['ba-1', 'ba-3', 'ba-5', 'ba-8']
+            : ['ba-1', 'ba-2', 'ba-3', 'ba-5', 'ba-8'];
         const selectors: string[] = [];
         for (const muscle of exhausted) {
             const ids = dict[muscle];
             if (!ids) continue;
             for (const prefix of ids) {
-                selectors.push(`.body-anatomy[data-view="${view}"] g[id^="${prefix}"]`);
+                selectors.push(`.body-anatomy[data-view="${view}"] [id^="${prefix}"]`);
             }
         }
         if (!selectors.length) return '';
         const groupSel = selectors.join(',');
         const fillSel = selectors
-            .map(s => `${s} .ba-1, ${s} .ba-3, ${s} .ba-5, ${s} .ba-8`)
+            .flatMap(s => fillClasses.flatMap(c => [`${s} .${c}`, `${s}.${c}`]))
             .join(',');
         return `
             ${groupSel} { color: #EF4444; }

@@ -127,7 +127,7 @@ export const MUSCLE_MAP: Record<string, string[]> = {
   calf:                               ['Calves', 'Soleus', 'Claves'],
   gastrocnemius:                      ['Calves', 'Claves'],
   soleus:                             ['Soleus'],
-  'tibialis anterior':                ['Peroneus_longus'],
+  'tibialis anterior':                ['Tibialis_anterior'],
   'peroneus longus':                  ['Peroneus_longus'],
   'gastrocnemius (hands further away from feet)': ['Calves', 'Claves'],
 
@@ -150,14 +150,15 @@ export const MUSCLE_MAP: Record<string, string[]> = {
   'lower fibers':                     ['Middle_and_lower_trapz'],
 
   // ─── Lower Back / Spine — FIX (previously empty in the library) ───────
-  // Maps to Thoracolumbar (the lumbar fascia path on the back SVG) +
-  // Middle_and_lower_trapz (which extends down the mid-spine).
-  'lower back':                       ['Thoracolumbar', 'Middle_and_lower_trapz'],
-  lower_back:                         ['Thoracolumbar', 'Middle_and_lower_trapz'],
-  'erector spinae':                   ['Thoracolumbar', 'Middle_and_lower_trapz'],
+  // Maps to Thoracolumbar — the lumbar region over the erector spinae on the
+  // back SVG. The lower trapezius sits higher (mid back) and is not a
+  // lower-back muscle, so it is left to the trap / upper-back entries.
+  'lower back':                       ['Thoracolumbar'],
+  lower_back:                         ['Thoracolumbar'],
+  'erector spinae':                   ['Thoracolumbar'],
   'thoracolumbar fascia':             ['Thoracolumbar'],
   thoracolumbar:                      ['Thoracolumbar'],
-  spine:                              ['Thoracolumbar', 'Middle_and_lower_trapz'],
+  spine:                              ['Thoracolumbar'],
 
   // ─── Triceps ──────────────────────────────────────────────────────────
   triceps:                            ['Triceps', 'Triceps_long_head', 'triceps_lateral_head'],
@@ -184,12 +185,14 @@ export const MUSCLE_MAP: Record<string, string[]> = {
   'hamstrings (hands closer to feet)': ['Biceps_Femoris', 'Semi_Tendinosis', 'Semimembranosis', 'Upper_inner_hamstring'],
 
   // ─── Adductors / Inner Thighs ────────────────────────────────────────
-  adductors:                          ['Sartorius', 'Pectinius'],
-  'adductors, hip':                   ['Sartorius', 'Pectinius'],
-  'adductor magnus':                  ['Sartorius', 'Pectinius'],
-  'adductor magnus, ischial fibers':  ['Sartorius', 'Pectinius'],
-  'inner thighs':                     ['Sartorius', 'Pectinius'],
-  groin:                              ['Pectinius', 'Sartorius'],
+  // Pectineus (front groin) + the upper inner thigh on the back view, where
+  // the adductor magnus shows. Sartorius is a hip flexor, not an adductor.
+  adductors:                          ['Pectinius', 'Upper_inner_hamstring'],
+  'adductors, hip':                   ['Pectinius', 'Upper_inner_hamstring'],
+  'adductor magnus':                  ['Pectinius', 'Upper_inner_hamstring'],
+  'adductor magnus, ischial fibers':  ['Pectinius', 'Upper_inner_hamstring'],
+  'inner thighs':                     ['Pectinius', 'Upper_inner_hamstring'],
+  groin:                              ['Pectinius', 'Upper_inner_hamstring'],
 
   // ─── Hip Flexors ──────────────────────────────────────────────────────
   'hip flexors':                      ['Sartorius'],
